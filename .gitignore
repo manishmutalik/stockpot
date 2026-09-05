@@ -1,0 +1,13 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Scratch files / archives that shouldn't be committed
+*.zip
+tmp*.txt
+temp_zip/

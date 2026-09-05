@@ -1,0 +1,136 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "RawMaterial": {
+      "title": "Raw Material",
+      "description": "A raw material used in the bakery",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "unit": { "type": "string", "enum": ["g", "kg", "ml", "l", "pcs"] },
+        "initialStock": { "type": "number" },
+        "costPerUnit": { "type": "number" },
+        "category": { "type": "string" },
+        "threshold": { "type": "number" },
+        "dateAdded": { "type": "string", "format": "date" }
+      },
+      "required": ["id", "name", "unit", "initialStock", "costPerUnit", "category", "dateAdded"]
+    },
+    "MenuItem": {
+      "title": "Menu Item",
+      "description": "A product sold by the bakery",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sellingPrice": { "type": "number" },
+        "recipe": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "materialId": { "type": "string" },
+              "amount": { "type": "number" },
+              "unit": { "type": "string" }
+            }
+          }
+        }
+      },
+      "required": ["id", "name", "sellingPrice", "recipe"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "menuItemId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "date": { "type": "string", "format": "date" }
+      },
+      "required": ["id", "menuItemId", "quantity", "date"]
+    },
+    "BakerySettings": {
+      "title": "Bakery Settings",
+      "description": "General settings for the bakery",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "primaryColor": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "categories": { "type": "array", "items": { "type": "string" } },
+        "currency": {
+          "type": "object",
+          "properties": {
+            "code": { "type": "string" },
+            "symbol": { "type": "string" }
+          }
+        }
+      }
+    },
+    "RecipeExperiment": {
+      "title": "Recipe Experiment",
+      "description": "A recipe experiment made on a specific day",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "materials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "materialId": { "type": "string" },
+              "amount": { "type": "number" },
+              "unit": { "type": "string" }
+            }
+          }
+        },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "name", "date", "materials"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile"
+    },
+    "users/{userId}/materials/{materialId}": {
+      "schema": "RawMaterial",
+      "description": "Collection of raw materials for a user"
+    },
+    "users/{userId}/menu/{menuItemId}": {
+      "schema": "MenuItem",
+      "description": "Collection of menu items for a user"
+    },
+    "users/{userId}/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Collection of orders for a user"
+    },
+    "users/{userId}/experiments/{experimentId}": {
+      "schema": "RecipeExperiment",
+      "description": "Collection of recipe experiments for a user"
+    },
+    "users/{userId}/settings/bakery": {
+      "schema": "BakerySettings",
+      "description": "Bakery settings for a user"
+    }
+  }
+}

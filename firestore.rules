@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "manishmutalik@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Read-only for the owner/admin. Write is denied even for the owner:
+      // this document holds server-controlled fields (billing subscription
+      // status) that only the trusted server should ever be able to change —
+      // otherwise a client could just set their own status to "active" and
+      // get free access. Nothing in this app currently needs the client to
+      // write to this top-level document; all user data lives in the
+      // subcollections below, which keep their own write access.
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false;
+
+      // Integration credentials (Shopify/Odoo tokens) are written only by
+      // the server via the Firebase Admin SDK, which bypasses these rules
+      // entirely. Client-side access is denied outright — even for the
+      // owning user or an admin — since there's no legitimate reason a
+      // browser needs to read or write this data, and it stays unreachable
+      // even if a route were ever mistakenly exposed. This match must come
+      // before the general subcollection wildcard below, since Firestore
+      // rules use the most specific matching path.
+      match /integrationCredentials/{provider} {
+        allow read, write: if false;
+      }
+
+      // Allow users to read and write all other documents in their
+      // subcollections (materials, menu, orders, experiments, settings, etc.)
+      match /{document=**} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

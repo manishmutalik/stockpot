@@ -1,0 +1,5 @@
+{
+  "name": "BakeryApp",
+  "description": "A comprehensive app for bakeries to track their inventory, recipe experiments, sales, P&L and much more in one place.",
+  "requestFramePermissions": ["microphone"]
+}

@@ -1,0 +1,44 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Cormorant Garamond", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-primary: #8B5E3C; /* Warm Bread Brown */
+  --color-primary-light: #A67B5B;
+  --color-primary-dark: #6F4E37;
+  --color-accent: #E6CCB2; /* Flour/Cream */
+  --color-surface: #FDFCFB; /* Warm Paper */
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-stone-900 font-sans antialiased;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-stone-200 rounded-full hover:bg-stone-300 transition-colors;
+}
+
+/* Glass Morphism Utility */
+.glass {
+  @apply bg-white/80 backdrop-blur-md border border-white/20;
+}
+
+/* Bento Grid Item Hover */
+.bento-item {
+  @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-1;
+}
