@@ -31,7 +31,7 @@ export function hasActiveAccess(status: SubscriptionStatus): boolean {
   return status === 'active' || status === 'trialing';
 }
 
-export function useBilling(authReady: boolean) {
+export function useBilling(authReady: boolean, showAlert: (title: string, message: string) => void) {
   const [billing, setBilling] = useState<BillingInfo>(DEFAULT_BILLING);
   const [isLoadingBilling, setIsLoadingBilling] = useState(true);
   const [isStartingCheckout, setIsStartingCheckout] = useState(false);
@@ -65,11 +65,12 @@ export function useBilling(authReady: boolean) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to start checkout');
       if (data.url) window.location.href = data.url;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to start checkout', err);
+      showAlert('Couldn\'t Start Checkout', err.message || 'Something went wrong starting checkout. Please try again, or contact support if this keeps happening.');
       setIsStartingCheckout(false);
     }
-  }, []);
+  }, [showAlert]);
 
   /** Redirects to the Stripe Billing Portal to manage/cancel the subscription. */
   const openBillingPortal = useCallback(async () => {
@@ -79,11 +80,12 @@ export function useBilling(authReady: boolean) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to open billing portal');
       if (data.url) window.location.href = data.url;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to open billing portal', err);
+      showAlert('Couldn\'t Open Billing', err.message || 'Something went wrong opening billing management. Please try again, or contact support if this keeps happening.');
       setIsOpeningPortal(false);
     }
-  }, []);
+  }, [showAlert]);
 
   return {
     billing,

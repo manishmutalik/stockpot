@@ -467,7 +467,6 @@ function BakeryApp() {
     'wastageLogs', isAuthReady, user, (id, data) => ({ id, ...data } as WastageLog), undefined, INITIAL_WASTAGE_LOGS
   );
   const { settings, setSettings, categories, setCategories, currency, setCurrency } = useSettingsListener(isAuthReady, user);
-  const { billing, isLoadingBilling, hasAccess, startCheckout, isStartingCheckout, openBillingPortal, isOpeningPortal } = useBilling(isAuthReady && !!user);
 
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'google'>('google');
   const [email, setEmail] = useState('');
@@ -510,6 +509,8 @@ function BakeryApp() {
     isConnectingOdoo, connectOdoo, disconnectOdoo,
     isImportingOdoo, importOdooOrders,
   } = useIntegrations(menu, orderDate, showAlert, isAuthReady && !!user);
+
+  const { billing, isLoadingBilling, hasAccess, startCheckout, isStartingCheckout, openBillingPortal, isOpeningPortal } = useBilling(isAuthReady && !!user, showAlert);
 
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
   const [isExpiredAlertDismissed, setIsExpiredAlertDismissed] = useState(false);

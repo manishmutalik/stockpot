@@ -127,7 +127,26 @@ async function startServer() {
 
   // --- Billing Routes ---
 
+  /**
+   * Temporary testing toggle: when BILLING_DISABLED=true, every signed-in
+   * user is treated as having an active subscription, and the checkout/
+   * portal routes below are never actually reached (the client-side paywall
+   * never triggers). This is meant to be short-lived — remove the env var
+   * (or set it to anything other than "true") to re-enable real billing.
+   * No other code changes needed either way.
+   */
+  const isBillingDisabled = () => process.env.BILLING_DISABLED === "true";
+
   api.get("/billing/status", async (req: AuthedRequest, res) => {
+    if (isBillingDisabled()) {
+      return res.json({
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        status: "active",
+        currentPeriodEnd: null,
+        updatedAt: Date.now(),
+      });
+    }
     const info = await getBillingInfo(req.uid!);
     res.json(info);
   });
@@ -152,6 +171,9 @@ async function startServer() {
    * cancellation does not grant a second trial.
    */
   api.post("/billing/create-checkout-session", requireCsrf, async (req: AuthedRequest, res) => {
+    if (isBillingDisabled()) {
+      return res.status(400).json({ error: "Billing is temporarily disabled for testing." });
+    }
     const priceId = process.env.STRIPE_PRICE_ID;
     const appUrl = (process.env.APP_URL || "").replace(/\/$/, "");
     if (!priceId || !appUrl) {
@@ -187,6 +209,9 @@ async function startServer() {
    * needing to build any of that UI itself.
    */
   api.post("/billing/create-portal-session", requireCsrf, async (req: AuthedRequest, res) => {
+    if (isBillingDisabled()) {
+      return res.status(400).json({ error: "Billing is temporarily disabled for testing." });
+    }
     const appUrl = (process.env.APP_URL || "").replace(/\/$/, "");
     const info = await getBillingInfo(req.uid!);
 
