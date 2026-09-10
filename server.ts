@@ -13,6 +13,20 @@ import { setBillingInfo, getBillingInfo, findUidByStripeCustomerId, Subscription
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/**
+ * Defense-in-depth: an unhandled promise rejection anywhere in the process
+ * (e.g. a Firestore/Stripe/axios call that slipped through without a
+ * try/catch) would otherwise crash the entire server for every user — one
+ * bad request taking down the whole app until Render restarts it, which
+ * then immediately crashes again on the next request that hits the same
+ * code path. Every route handler in this file has its own try/catch as the
+ * real fix, but this is a safety net in case a future route is added
+ * without one. Logs and keeps the process alive rather than exiting.
+ */
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled promise rejection (server stayed alive):", reason);
+});
+
 interface ShopifyCreds {
   accessToken: string;
   shop: string;
@@ -147,8 +161,13 @@ async function startServer() {
         updatedAt: Date.now(),
       });
     }
-    const info = await getBillingInfo(req.uid!);
-    res.json(info);
+    try {
+      const info = await getBillingInfo(req.uid!);
+      res.json(info);
+    } catch (err: any) {
+      console.error("Failed to fetch billing status:", err.message);
+      res.status(500).json({ error: "Failed to fetch billing status" });
+    }
   });
 
   /**
@@ -213,13 +232,14 @@ async function startServer() {
       return res.status(400).json({ error: "Billing is temporarily disabled for testing." });
     }
     const appUrl = (process.env.APP_URL || "").replace(/\/$/, "");
-    const info = await getBillingInfo(req.uid!);
-
-    if (!info.stripeCustomerId) {
-      return res.status(400).json({ error: "No billing account found. Subscribe first." });
-    }
 
     try {
+      const info = await getBillingInfo(req.uid!);
+
+      if (!info.stripeCustomerId) {
+        return res.status(400).json({ error: "No billing account found. Subscribe first." });
+      }
+
       const session = await getStripe().billingPortal.sessions.create({
         customer: info.stripeCustomerId,
         return_url: `${appUrl}/app`,
@@ -336,19 +356,24 @@ async function startServer() {
   });
 
   api.get("/shopify/status", async (req: AuthedRequest, res) => {
-    const creds = await getCredentials<ShopifyCreds>(req.uid!, "shopify");
-    res.json({ connected: !!creds, shop: creds?.shop || null });
+    try {
+      const creds = await getCredentials<ShopifyCreds>(req.uid!, "shopify");
+      res.json({ connected: !!creds, shop: creds?.shop || null });
+    } catch (err: any) {
+      console.error("Failed to fetch Shopify status:", err.message);
+      res.status(500).json({ error: "Failed to fetch Shopify status" });
+    }
   });
 
   api.get("/shopify/orders", async (req: AuthedRequest, res) => {
-    const creds = await getCredentials<ShopifyCreds>(req.uid!, "shopify");
     const date = req.query.date as string; // YYYY-MM-DD
 
-    if (!creds) {
-      return res.status(401).json({ error: "Shopify not connected" });
-    }
-
     try {
+      const creds = await getCredentials<ShopifyCreds>(req.uid!, "shopify");
+      if (!creds) {
+        return res.status(401).json({ error: "Shopify not connected" });
+      }
+
       const startTime = `${date}T00:00:00Z`;
       const endTime = `${date}T23:59:59Z`;
 
@@ -365,15 +390,25 @@ async function startServer() {
   });
 
   api.post("/shopify/disconnect", requireCsrf, async (req: AuthedRequest, res) => {
-    await deleteCredentials(req.uid!, "shopify");
-    res.json({ success: true });
+    try {
+      await deleteCredentials(req.uid!, "shopify");
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Failed to disconnect Shopify:", err.message);
+      res.status(500).json({ error: "Failed to disconnect Shopify" });
+    }
   });
 
   // --- Odoo Integration Routes ---
 
   api.get("/odoo/status", async (req: AuthedRequest, res) => {
-    const creds = await getCredentials<OdooCreds>(req.uid!, "odoo");
-    res.json({ connected: !!creds, url: creds?.url || null });
+    try {
+      const creds = await getCredentials<OdooCreds>(req.uid!, "odoo");
+      res.json({ connected: !!creds, url: creds?.url || null });
+    } catch (err: any) {
+      console.error("Failed to fetch Odoo status:", err.message);
+      res.status(500).json({ error: "Failed to fetch Odoo status" });
+    }
   });
 
   api.post("/odoo/connect", requireCsrf, async (req: AuthedRequest, res) => {
@@ -409,14 +444,14 @@ async function startServer() {
   });
 
   api.get("/odoo/orders", async (req: AuthedRequest, res) => {
-    const creds = await getCredentials<OdooCreds>(req.uid!, "odoo");
     const date = req.query.date as string; // YYYY-MM-DD
 
-    if (!creds) {
-      return res.status(401).json({ error: "Odoo not connected" });
-    }
-
     try {
+      const creds = await getCredentials<OdooCreds>(req.uid!, "odoo");
+      if (!creds) {
+        return res.status(401).json({ error: "Odoo not connected" });
+      }
+
       const { url, db, username, password } = creds;
 
       const authResponse = await axios.post(`${url}/jsonrpc`, {
@@ -480,8 +515,13 @@ async function startServer() {
   });
 
   api.post("/odoo/disconnect", requireCsrf, async (req: AuthedRequest, res) => {
-    await deleteCredentials(req.uid!, "odoo");
-    res.json({ success: true });
+    try {
+      await deleteCredentials(req.uid!, "odoo");
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("Failed to disconnect Odoo:", err.message);
+      res.status(500).json({ error: "Failed to disconnect Odoo" });
+    }
   });
 
   app.use("/api", api);

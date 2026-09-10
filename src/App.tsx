@@ -147,6 +147,29 @@ class ErrorBoundary extends React.Component<any, any> {
     return { hasError: true, errorInfo: error.message };
   }
 
+  componentDidMount() {
+    // A successful, error-free mount means we're not in a stale-chunk loop
+    // right now — clear the guard so a *future* deploy's stale-chunk error
+    // can also trigger one auto-reload, rather than the guard staying set
+    // for the rest of this browser tab's session.
+    sessionStorage.removeItem('stockpot_chunk_reload_attempted');
+  }
+
+  componentDidCatch(error: any) {
+    // A "failed to fetch dynamically imported module" error means the
+    // browser has an older page loaded (referencing old, content-hashed
+    // chunk filenames) and a newer deploy has since replaced those files.
+    // This isn't a real bug — reloading once fetches the current index.html
+    // and current chunks and silently fixes it. Guarded with sessionStorage
+    // so a *genuinely* broken deploy doesn't reload forever.
+    const message = String(error?.message || '');
+    const isStaleChunkError = /dynamically imported module|Importing a module script failed|error loading dynamically imported module/i.test(message);
+    if (isStaleChunkError && !sessionStorage.getItem('stockpot_chunk_reload_attempted')) {
+      sessionStorage.setItem('stockpot_chunk_reload_attempted', '1');
+      window.location.reload();
+    }
+  }
+
   render() {
     if (this.state.hasError) {
       let displayMessage = "Something went wrong.";
@@ -166,7 +189,7 @@ class ErrorBoundary extends React.Component<any, any> {
             <h2 className="text-xl font-bold text-stone-800 mb-2">Application Error</h2>
             <p className="text-stone-600 mb-6">{displayMessage}</p>
             <button 
-              onClick={() => window.location.reload()}
+              onClick={() => { sessionStorage.removeItem('stockpot_chunk_reload_attempted'); window.location.reload(); }}
               className="w-full bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-primary/20"
             >
               Reload Application
