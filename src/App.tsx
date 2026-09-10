@@ -384,6 +384,14 @@ function BottomNavButton({ id, label, icon: Icon, activeTab, setActiveTab, hasLo
   );
 }
 
+// ─── TEMPORARY: Testing-Period Billing Bypass ──────────────────────────────────
+// Set to `false` to re-enable the real paywall. While `true`, every signed-in
+// user skips straight to the app regardless of subscription status — this is
+// independent of (and doesn't depend on) the server-side BILLING_DISABLED env
+// var, so it works even if that env var isn't propagating correctly.
+// REMEMBER TO SET THIS BACK TO `false` BEFORE CHARGING REAL CUSTOMERS.
+const SKIP_BILLING_GATE_FOR_TESTING = true;
+
 // ─── BakeryApp — Main Application Component ────────────────────────────────────
 // All application state, Firestore listeners, business logic, and JSX live here.
 function BakeryApp() {
@@ -1453,7 +1461,7 @@ function BakeryApp() {
   // Signed in but no active/trialing subscription: show a paywall instead of the app.
   // Waits for isLoadingBilling to resolve first, so we don't flash the paywall before
   // we actually know the user's real status.
-  if (isLoadingBilling) {
+  if (!SKIP_BILLING_GATE_FOR_TESTING && isLoadingBilling) {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
         <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
@@ -1461,7 +1469,7 @@ function BakeryApp() {
     );
   }
 
-  if (!hasAccess) {
+  if (!SKIP_BILLING_GATE_FOR_TESTING && !hasAccess) {
     const isPastDueOrCanceled = billing.status === 'past_due' || billing.status === 'canceled';
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
