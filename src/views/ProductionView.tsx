@@ -42,7 +42,8 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, handleDiscardBatch, addOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    deleteProductionRun, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
+    addOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, restockMaterial, setRestockMaterial,
     showSaveFeedback, saveDay,
     updateCurrency, handleLogout, isListening, transcript, convertAmount
@@ -62,13 +63,29 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                   <h2 className="text-3xl font-sans font-bold text-stone-800">Production Log</h2>
                   <p className="text-stone-500 text-sm italic font-sans">Record production runs and manage finished goods stock.</p>
                 </div>
-                <button
-                  onClick={() => setIsProductionRunModalOpen(true)}
-                  className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-amber-200 active:scale-95"
-                >
-                  <Factory size={16} />
-                  Log Production Run
-                </button>
+                <div className="flex items-center gap-3">
+                  {runsNeedingOrderBackfill.length > 0 && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Add ${runsNeedingOrderBackfill.length} missing order(s) to the Orders tab for customer-order production runs logged before this feature existed?`)) {
+                          backfillMissingOrders();
+                        }
+                      }}
+                      title="Add missing orders for older Customer Order production runs"
+                      className="flex items-center gap-2 bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 px-4 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all active:scale-95"
+                    >
+                      <RefreshCw size={14} />
+                      Backfill {runsNeedingOrderBackfill.length} Missing Order{runsNeedingOrderBackfill.length === 1 ? '' : 's'}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setIsProductionRunModalOpen(true)}
+                    className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-amber-200 active:scale-95"
+                  >
+                    <Factory size={16} />
+                    Log Production Run
+                  </button>
+                </div>
               </div>
 
               {/* Summary Cards */}

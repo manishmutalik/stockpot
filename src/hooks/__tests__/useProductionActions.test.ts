@@ -123,6 +123,60 @@ describe('logProductionRun — linking a "customer order" run to an Order', () =
   });
 });
 
+describe('backfillMissingOrders — catching up runs logged before the linking feature existed', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('identifies customer-order runs with no linked order, and only those', () => {
+    const linkedRun: ProductionRun = { id: 'run-a', recipeId: 'cake', quantityProduced: 2, date: '2026-01-01', purpose: 'customer_order', costTotal: 10 } as ProductionRun;
+    const unlinkedRun: ProductionRun = { id: 'run-b', recipeId: 'cake', quantityProduced: 4, date: '2026-01-02', purpose: 'customer_order', costTotal: 20 } as ProductionRun;
+    const marketRun: ProductionRun = { id: 'run-c', recipeId: 'cake', quantityProduced: 1, date: '2026-01-03', purpose: 'market_stock', costTotal: 5 } as ProductionRun;
+    const existingOrder: Order = { id: 'order-a', menuItemId: 'cake', quantity: 2, date: '2026-01-01', fulfilled: true, productionRunId: 'run-a' };
+
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, [linkedRun, unlinkedRun, marketRun], [existingOrder], showAlert)
+    );
+
+    expect(result.current.runsNeedingOrderBackfill).toHaveLength(1);
+    expect(result.current.runsNeedingOrderBackfill[0].id).toBe('run-b');
+  });
+
+  it('creates orders for all missing runs in one batch, without touching inventory', async () => {
+    const unlinkedRun1: ProductionRun = { id: 'run-x', recipeId: 'cake', quantityProduced: 2, date: '2026-01-01', purpose: 'customer_order', costTotal: 10 } as ProductionRun;
+    const unlinkedRun2: ProductionRun = { id: 'run-y', recipeId: 'cake', quantityProduced: 5, date: '2026-01-05', purpose: 'customer_order', costTotal: 25 } as ProductionRun;
+
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, [unlinkedRun1, unlinkedRun2], [], showAlert)
+    );
+
+    await result.current.backfillMissingOrders();
+
+    // Only order writes — no materials/menu writes, since inventory was
+    // already correctly adjusted when each run was originally logged.
+    expect(batchSet).toHaveBeenCalledTimes(2);
+    for (const [, payload] of batchSet.mock.calls) {
+      expect(payload.fulfilled).toBe(true);
+      expect(['run-x', 'run-y']).toContain(payload.productionRunId);
+    }
+    expect(batchCommit).toHaveBeenCalledTimes(1);
+    expect(showAlert).toHaveBeenCalledWith('Backfill Complete', expect.stringContaining('2'));
+  });
+
+  it('does nothing when there is nothing to backfill', async () => {
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, [], [], showAlert)
+    );
+
+    await result.current.backfillMissingOrders();
+
+    expect(batchCommit).not.toHaveBeenCalled();
+  });
+});
+
 describe('deleteProductionRun — cleaning up the linked Order', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -874,6 +874,7 @@ function BakeryApp() {
   // Extracted to src/hooks/useProductionActions.ts as part of the Phase 4 breakup.
   const {
     logProductionRun, deleteProductionRun, handleDiscardBatch,
+    runsNeedingOrderBackfill, backfillMissingOrders,
   } = useProductionActions(menu, materials, productionRuns, orders, showAlert);
 
   // ── Experiment Actions ───────────────────────────────────────────────────────
@@ -1591,7 +1592,8 @@ function BakeryApp() {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, handleDiscardBatch, addOrder, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    deleteProductionRun, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
+    addOrder, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,
     billing, openBillingPortal, isOpeningPortal, startCheckout, isStartingCheckout,

@@ -14,6 +14,7 @@
  * by the shared Firestore listener in App.tsx and passed in as read-only
  * parameters (same pattern as the other extracted hooks).
  */
+import { useMemo } from 'react';
 import { auth, db, doc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { deductIngredients } from '../utils/inventoryDeduction';
@@ -220,9 +221,58 @@ export function useProductionActions(
     }
   };
 
+  /**
+   * Production runs tagged "Customer Order" that don't yet have a linked
+   * Order — i.e. runs logged before the auto-linking in logProductionRun()
+   * existed. Used to show/hide the one-time "Backfill Missing Orders"
+   * button: once the list is empty, there's nothing left to backfill and
+   * the button naturally disappears.
+   */
+  const runsNeedingOrderBackfill = useMemo(
+    () => productionRuns.filter(
+      r => r.purpose === 'customer_order' && !orders.some(o => o.productionRunId === r.id)
+    ),
+    [productionRuns, orders]
+  );
+
+  /**
+   * One-time catch-up action: creates the missing linked Order for every
+   * existing "Customer Order" production run that predates the auto-linking
+   * feature. Unlike logProductionRun, this does NOT touch inventory —
+   * materials/finished-goods stock were already correctly adjusted when
+   * each run was originally logged, so this only creates the missing Order
+   * records, marked pre-fulfilled for the same reason as the live path.
+   */
+  const backfillMissingOrders = async () => {
+    if (!auth.currentUser || runsNeedingOrderBackfill.length === 0) return;
+    const userId = auth.currentUser.uid;
+
+    try {
+      const batch = writeBatch(db);
+      for (const run of runsNeedingOrderBackfill) {
+        const orderId = Math.random().toString(36).substr(2, 9);
+        batch.set(doc(db, 'users', userId, 'orders', orderId), {
+          id: orderId,
+          menuItemId: run.recipeId,
+          quantity: run.quantityProduced,
+          date: run.date,
+          fulfilled: true,
+          productionRunId: run.id,
+        } as Order);
+      }
+      await batch.commit();
+      showAlert('Backfill Complete', `Added ${runsNeedingOrderBackfill.length} missing order(s) to the Orders tab.`);
+    } catch (err: any) {
+      console.error('backfillMissingOrders error:', err);
+      showAlert('Error', `Failed to backfill orders: ${err?.message || 'Unknown error'}`);
+    }
+  };
+
   return {
     logProductionRun,
     deleteProductionRun,
     handleDiscardBatch,
+    runsNeedingOrderBackfill,
+    backfillMissingOrders,
   };
 }
