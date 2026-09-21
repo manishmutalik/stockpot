@@ -914,8 +914,12 @@ function BakeryApp() {
   // Used to compute remaining inventory displayed on the Inventory tab.
   const inventoryUsage = useMemo(() => {
     const usage: Record<string, number> = {};
-    
-    orders.forEach(order => {
+
+    // Only unfulfilled orders count here. A fulfilled order's ingredients
+    // were already deducted for real from `initialStock` (see fulfillOrder /
+    // logProductionRun), so counting them again here would double-subtract
+    // the same usage — once for real, once as a phantom projection.
+    orders.filter(order => !order.fulfilled).forEach(order => {
       const item = menu.find(m => m.id === order.menuItemId);
       if (item) {
         item.recipe.forEach(req => {
@@ -945,8 +949,10 @@ function BakeryApp() {
   // Used by the inventory usage table in the Summary tab.
   const summaryInventoryUsage = useMemo(() => {
     const usage: Record<string, number> = {};
-    
-    filteredOrders.forEach(order => {
+
+    // Same fix as inventoryUsage above: only unfulfilled orders represent
+    // pending, not-yet-deducted usage.
+    filteredOrders.filter(order => !order.fulfilled).forEach(order => {
       const item = menu.find(m => m.id === order.menuItemId);
       if (item) {
         item.recipe.forEach(req => {
