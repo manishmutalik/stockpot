@@ -85,6 +85,11 @@ export interface Order {
    * this order, so it can't be fulfilled a second time (which would deduct
    * inventory twice for the same order). */
   fulfilled?: boolean;
+  /** Set when this order was auto-created from a Production Log entry logged
+   * with purpose 'customer_order' — links back to that ProductionRun's id,
+   * so deleting the production run also removes its linked order instead of
+   * leaving an orphaned, already-fulfilled order behind. */
+  productionRunId?: string;
 }
 
 /**

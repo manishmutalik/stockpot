@@ -27,9 +27,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
     productionFilterPurpose, setProductionFilterPurpose, activeTab, setActiveTab, activeSettingsTab,
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
-    setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
-    modalOrderDate, setModalOrderDate, modalCustomerName, setModalCustomerName, modalCustomerPhone,
-    setModalCustomerPhone, modalLineItems, setModalLineItems, isSavingOrder, setIsSavingOrder,
+    setOrderFilterStart, orderFilterEnd, setOrderFilterEnd,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
@@ -107,13 +105,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
 
                   {/* Add Order Button */}
                   <button
-                    onClick={() => {
-                      setModalOrderDate(new Date().toISOString().split('T')[0]);
-                      setModalCustomerName('');
-                      setModalCustomerPhone('');
-                      setModalLineItems([{ menuItemId: menu[0]?.id || '', quantity: 1 }]);
-                      setIsAddOrderModalOpen(true);
-                    }}
+                    onClick={addOrder}
                     disabled={menu.length === 0}
                     className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-primary/20 transform active:scale-95 disabled:opacity-50"
                   >
@@ -188,13 +180,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                         <h3 className="text-xl font-sans font-bold text-stone-800 mb-2">No orders in this range</h3>
                         <p className="text-stone-500 text-sm mb-8 italic font-sans">Try changing the date range or add a new order.</p>
                         <button
-                          onClick={() => {
-                            setModalOrderDate(new Date().toISOString().split('T')[0]);
-                            setModalCustomerName('');
-                            setModalCustomerPhone('');
-                            setModalLineItems([{ menuItemId: menu[0]?.id || '', quantity: 1 }]);
-                            setIsAddOrderModalOpen(true);
-                          }}
+                          onClick={addOrder}
                           disabled={menu.length === 0}
                           className="inline-flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-8 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-primary/20 transform active:scale-95 disabled:opacity-50"
                         >

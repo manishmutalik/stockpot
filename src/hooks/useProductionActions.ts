@@ -17,13 +17,14 @@
 import { auth, db, doc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { deductIngredients } from '../utils/inventoryDeduction';
-import { MenuItem, RawMaterial } from '../types';
+import { MenuItem, RawMaterial, Order } from '../types';
 import { ProductionRun, ProductionPurpose } from '../components/ProductionRunModal';
 
 export function useProductionActions(
   menu: MenuItem[],
   materials: RawMaterial[],
   productionRuns: ProductionRun[],
+  orders: Order[],
   showAlert: (title: string, message: string) => void
 ) {
   /**
@@ -84,12 +85,30 @@ export function useProductionActions(
         );
       }
 
+      // 2.5. If this run was made for a specific customer order, also create
+      // a linked Order so it shows up in the Orders tab. Marked `fulfilled`
+      // immediately, since the inventory/stock effects above already cover
+      // it — otherwise a later "Fulfill" click on this same order would
+      // deduct inventory a second time for the same units.
+      if (runData.purpose === 'customer_order') {
+        const orderId = Math.random().toString(36).substr(2, 9);
+        batch.set(doc(db, 'users', userId, 'orders', orderId), {
+          id: orderId,
+          menuItemId: runData.recipeId,
+          quantity: runData.quantityProduced,
+          date: runData.date,
+          fulfilled: true,
+          productionRunId: id,
+        } as Order);
+      }
+
       // 3. Persist the run record
       batch.set(doc(db, 'users', userId, 'productionRuns', id), run);
 
       await batch.commit();
 
-      showAlert('Production Run Logged', `Recorded ${runData.quantityProduced} unit(s) of ${item?.name || 'recipe'}. Raw materials deducted.`);
+      const orderNote = runData.purpose === 'customer_order' ? ' A matching order was added to the Orders tab.' : '';
+      showAlert('Production Run Logged', `Recorded ${runData.quantityProduced} unit(s) of ${item?.name || 'recipe'}. Raw materials deducted.${orderNote}`);
     } catch (err: any) {
       console.error('logProductionRun error:', err);
       showAlert('Error', `Failed to log production run: ${err?.message || 'Unknown error'}`);
@@ -103,6 +122,10 @@ export function useProductionActions(
    *  1. Restores raw materials using `deductIngredients` with a negative multiplier.
    *  2. Decrements `finishedGoodsStock` (clamped to 0) on the menu item.
    *  3. Deletes the run document from Firestore.
+   *  4. Deletes the linked Order too, if this run was logged as a customer
+   *     order (see logProductionRun) — otherwise deleting the run would
+   *     leave an orphaned, already-fulfilled order behind with nothing
+   *     backing it.
    */
   const deleteProductionRun = async (runId: string) => {
     if (!auth.currentUser) return;
@@ -131,6 +154,11 @@ export function useProductionActions(
         }
 
         batch.delete(doc(db, 'users', userId, 'productionRuns', runId));
+
+        const linkedOrder = orders.find(o => o.productionRunId === runId);
+        if (linkedOrder) {
+          batch.delete(doc(db, 'users', userId, 'orders', linkedOrder.id));
+        }
 
         await batch.commit();
 

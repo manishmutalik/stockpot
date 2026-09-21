@@ -874,7 +874,7 @@ function BakeryApp() {
   // Extracted to src/hooks/useProductionActions.ts as part of the Phase 4 breakup.
   const {
     logProductionRun, deleteProductionRun, handleDiscardBatch,
-  } = useProductionActions(menu, materials, productionRuns, showAlert);
+  } = useProductionActions(menu, materials, productionRuns, orders, showAlert);
 
   // ── Experiment Actions ───────────────────────────────────────────────────────
   // Extracted to src/hooks/useExperimentActions.ts as part of the Phase 4 breakup.
