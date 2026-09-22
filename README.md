@@ -73,6 +73,7 @@ enabled), a Stripe account.
 | `STRIPE_WEBHOOK_SECRET` | For billing | Signing secret for the Stripe webhook endpoint (see below). |
 | `COOKIE_SECRET` | No | Reserved for future cookie signing; currently only the CSRF token cookie is set, and it isn't signed. |
 | `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` | No | Only needed if you want to enable the Shopify order-import integration. |
+| `USDA_API_KEY` | No | Free key from [fdc.nal.usda.gov](https://fdc.nal.usda.gov/api-key-signup.html), used by the Inventory tab's nutrition "Look up" feature. Without it, that one search source returns a clear "not configured" error — Open Food Facts (queried alongside it) needs no key. |
 
 ### Billing setup
 

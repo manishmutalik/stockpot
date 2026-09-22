@@ -1,5 +1,155 @@
 # Changelog
 
+## Shareable nutrition card (step 5 — final step of the feature)
+
+Last step of the Nutrition & Allergen Info feature: a "Share Nutrition
+Card" button (Salad icon, next to Duplicate/Delete) on each menu item,
+generating a PNG the owner can send a customer via WhatsApp, Instagram, or
+anywhere else.
+
+- New `html2canvas` dependency (checked it wasn't already present first),
+  dynamically imported only when a card is actually generated — it's a
+  sizeable library and ends up in its own ~200KB chunk rather than
+  inflating every page load.
+- New `src/components/NutritionCard.tsx`: a plain presentational
+  nutrition-facts-style card (business name/logo, item name, per-serving
+  calories/macros, allergen badges, a "Partial estimate" note when
+  `hasIncompleteData`, and the required disclaimer verbatim on every
+  card — imported from `nutritionCalculations.ts`'s `NUTRITION_DISCLAIMER`
+  rather than duplicated as a string). Rendered off-screen (`position:
+  fixed` with a large negative offset — not `display: none`, which
+  html2canvas can't capture) purely to be captured, never shown directly.
+- Clicking the button before an item's Servings field is set shows a
+  clear prompt instead of exporting a misleading "0 calories" card, since
+  the rollup can't do anything meaningful without a yield to divide by.
+
+---
+
+## Menu item nutrition rollup view (step 3 of the feature)
+
+Fourth step built (numbered per the feature's original build order — step
+4, nutrition lookup, was built first; see below) of the Nutrition &
+Allergen Info feature: the per-recipe nutrition estimate shown on the Menu
+tab, next to the existing Recipe Cost card.
+
+- Added an editable "Servings" field to each menu item (`MenuItem.servings`
+  already existed on the type but had no UI anywhere to set it — needed
+  here since it's the yield `calculateRecipeNutrition()` divides by).
+- The expanded recipe editor now shows a "Nutrition (Est.) / Serving" card
+  alongside Recipe Cost: calories/protein/carbs/fat per serving, allergen
+  tag badges, and a "Partial" badge when `hasIncompleteData` is true. When
+  servings hasn't been set yet, it shows "Set servings above to estimate"
+  instead of a confidently-wrong zeroed number.
+- Computed on the fly from the current recipe on every render (matching
+  how Recipe Cost is already computed inline, no memoization) — nothing
+  is stored, so it can't go stale when a material's nutrition data or the
+  recipe itself changes.
+
+---
+
+## USDA + Open Food Facts nutrition lookup (step 4 of the feature)
+
+Third step built (step 3, the menu item detail rollup view, is still
+pending) of the Nutrition & Allergen Info feature: a "Look up" search in
+the Nutrition & Allergens modal that queries both free data sources and
+lets the owner pick a result to pre-fill the form from.
+
+- New `lib/nutritionSearch.ts`: `searchUsda()` and `searchOpenFoodFacts()`,
+  each normalizing its source's response into a shared
+  `NutritionSearchResult` shape. USDA is restricted to Foundation/SR Legacy
+  data types (generic ingredients, matching its intended use here) and
+  never carries allergen data; Open Food Facts is the primary allergen
+  source, with its `en:`-prefixed tags mapped onto this app's fixed
+  `ALLERGEN_TAGS` (documented as a deliberate, non-exhaustive best-effort
+  mapping — e.g. `en:gluten` -> `wheat`). Covered by
+  `lib/__tests__/nutritionSearch.test.ts` (the pure normalization logic;
+  the actual HTTP calls aren't mocked/tested).
+- Two new authenticated routes in `server.ts`:
+  `GET /api/nutrition/search-usda` and `GET /api/nutrition/search-openfoodfacts`,
+  each wrapped in its own try/catch per this codebase's established
+  "one unguarded external call crashed the whole server" lesson. The USDA
+  route requires `USDA_API_KEY` (new env var, documented in `.env.example`
+  and the README) and fails with a clear "not configured" error without it;
+  Open Food Facts needs no key.
+- **The client queries both routes in parallel for every lookup, never one
+  as a fallback for the other** — USDA has no allergen data at all, so a
+  fallback chain that only tried Open Food Facts when USDA came up empty
+  would rarely actually reach the app's one allergen source in practice.
+  Both result lists (and either source's own failure) are shown side by
+  side in the modal, so the owner can pick from either.
+- Picking a result pre-fills the form (still fully editable afterward,
+  since no database perfectly matches a specific brand/supplier) and
+  records which source it came from, shown in the modal as the visible
+  `nutritionSource` the data model already had a field for.
+
+**Known limitation:** this environment's outbound network policy blocks
+both `api.nal.usda.gov` and `world.openfoodfacts.org`, so the API
+integration could not be exercised against live traffic while writing it.
+The request/response shapes match each API's stable, documented contract,
+but treat this as unverified against real responses until it's been
+smoke-tested from an environment that can actually reach them.
+
+---
+
+## Nutrition & allergen manual entry UI (step 2 of the feature)
+
+Second step of the Nutrition & Allergen Info feature (step 1 added the data
+model and calculation module — see below): a "Nutrition & Allergens" modal
+on the Inventory tab, so a business owner can manually enter this data per
+material with no external API dependency yet.
+
+- `useInventoryActions.ts` gained the modal's state (mirroring the existing
+  Restock modal's pattern exactly) and two handlers: `openNutritionEditor`
+  pre-fills the form from whatever a material already has, and
+  `saveNutritionInfo` writes it back via the existing `patchMaterial`.
+  Nutrition is only written when at least one macro field was filled in —
+  leaving all four blank means "no data" (so recipe rollups correctly flag
+  it incomplete), not "zero calories". Allergens save exactly as selected,
+  including an empty selection.
+- New icon-only "Nutrition & allergens" button next to Restock/Discard on
+  each Inventory row, opening the modal with calorie/protein/carb/fat
+  inputs (labeled per the material's actual basis unit — g, ml, or pcs)
+  and an `ALLERGEN_TAGS` multi-select.
+
+Not yet built: the menu item detail rollup view, USDA/Open Food Facts
+lookup-and-fill, and the shareable nutrition card.
+
+---
+
+## Nutrition & allergen data model + calculation module (step 1 of the feature)
+
+First step of the planned Nutrition & Allergen Info feature (full spec
+handed off separately): the data model and pure calculation module, with
+no UI yet.
+
+- `RawMaterial` (`types/index.ts`) gained `nutrition` (calories/protein/
+  carbs/fat per 100g/ml), `nutritionSource` ('usda' | 'openfoodfacts' |
+  'manual', display-only), and `allergens` (free-form string array,
+  validated against `ALLERGEN_TAGS` at rollup time rather than at the type
+  level, since it may hold values from an external API before cleanup).
+  All optional — existing materials are unaffected.
+- New `src/utils/nutritionCalculations.ts`: `ALLERGEN_TAGS` (the fixed,
+  India-and-US-covering allergen tag list) and `calculateRecipeNutrition()`,
+  a pure per-serving nutrition + allergen-union rollup for a recipe, mirroring
+  the existing recipe-cost rollup pattern (reuses `convertAmount()`, never
+  reimplements unit conversion). Handles a material stocked in a different
+  unit than its nutrition basis (e.g. stocked in kg, nutrition per 100g),
+  missing/zero yield without dividing by zero, and flags `hasIncompleteData`
+  whenever any ingredient lacks nutrition data so the UI never presents a
+  partial estimate as a complete one. `MenuItem` itself stores no nutrition
+  field — it's always computed on the fly from the current recipe, so it
+  can't go stale.
+- Covered by `src/utils/__tests__/nutritionCalculations.test.ts` (16 cases:
+  zero/negative/missing yield, unit-family conversion for kg/l/pcs-stocked
+  materials, missing materials, missing nutrition data, allergen
+  union/dedup, and an end-to-end multi-ingredient recipe).
+
+Not yet built (later steps of the same feature): material edit UI for
+nutrition/allergen entry, the menu item detail rollup view, USDA/Open Food
+Facts lookup-and-fill, and the shareable nutrition card.
+
+---
+
 ## Removed the Summary tab's Inventory Status table
 
 A previous fix made this table actually render (it had been dead code —

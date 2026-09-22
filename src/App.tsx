@@ -53,7 +53,10 @@ import {
   Factory,
   Download,
   Upload,
-  X
+  X,
+  Salad,
+  Search,
+  Loader2
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { apiFetch } from './utils/apiClient';
@@ -303,6 +306,7 @@ const INITIAL_MENU: MenuItem[] = [
 // `from '../App'` imports in view files keep working.
 import { UNIT_CONVERSIONS, convertAmount, CURRENCIES } from './utils/conversions';
 import { splitSaleForGst, calculateMaterialGstPaid } from './utils/gstCalculations';
+import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
 
 /** Supported display currencies. The first entry (USD) is the default. */
@@ -855,6 +859,13 @@ function BakeryApp() {
     restockMaterial, setRestockMaterial, restockQty, setRestockQty,
     restockBaseTotal, setRestockBaseTotal, restockExpiryDate, setRestockExpiryDate,
     handleRestock,
+    nutritionEditMaterial, setNutritionEditMaterial, openNutritionEditor,
+    nutritionCalories, setNutritionCalories, nutritionProtein, setNutritionProtein,
+    nutritionCarbs, setNutritionCarbs, nutritionFat, setNutritionFat,
+    nutritionAllergens, toggleNutritionAllergen, saveNutritionInfo, nutritionSourceUsed,
+    nutritionSearchQuery, setNutritionSearchQuery, isSearchingNutrition,
+    usdaSearchResults, usdaSearchError, offSearchResults, offSearchError,
+    searchNutritionSources, applyNutritionSearchResult,
   } = useInventoryActions(materials, categories, menu, showAlert, showConfirm);
 
   // ── Menu / Recipe Actions ────────────────────────────────────────────────────
@@ -1597,7 +1608,7 @@ function BakeryApp() {
   
   const appProps: any = {
     patchMaterial, setRestockExpiryDate, restockMaterial, setRestockMaterial,
-    setDiscardTarget,
+    setDiscardTarget, openNutritionEditor,
     shopifyStatus, shopifyConfig, shopifyShopInput, setShopifyShopInput, isConnectingShopify, connectShopify, disconnectShopify,
     importShopifyOrders, isImportingShopify,
     odooStatus, odooUrlInput, setOdooUrlInput, odooDbInput, setOdooDbInput, odooUsernameInput, setOdooUsernameInput,
@@ -2213,6 +2224,226 @@ function BakeryApp() {
                       className="flex-1 px-6 py-4 rounded-xl text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 transition-colors uppercase tracking-widest disabled:opacity-50"
                     >
                       Confirm Restock
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {nutritionEditMaterial && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm"
+              onClick={() => setNutritionEditMaterial(null)}
+            />
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-xl bg-white rounded-[10px] sm:rounded-[15px] shadow-2xl overflow-y-auto max-h-[90vh] border border-stone-200/50"
+            >
+              <div className="p-8">
+                <div className="w-16 h-16 bg-emerald-50 rounded-xl flex items-center justify-center mb-6">
+                  <Salad size={32} className="text-emerald-500" />
+                </div>
+                <h3 className="text-2xl font-bold text-stone-800 mb-2">Nutrition & Allergens</h3>
+                <p className="text-stone-500 text-sm font-sans italic mb-6">
+                  Per 100{
+                    nutritionEditMaterial.unit === 'kg' ? 'g'
+                    : nutritionEditMaterial.unit === 'l' ? 'ml'
+                    : nutritionEditMaterial.unit === 'pcs' ? ' pcs'
+                    : nutritionEditMaterial.unit
+                  } of {nutritionEditMaterial.name}
+                </p>
+
+                <div className="mb-6 p-4 bg-stone-50 rounded-xl border border-stone-100">
+                  <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Look Up</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={nutritionSearchQuery}
+                      onChange={(e) => setNutritionSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          searchNutritionSources();
+                        }
+                      }}
+                      placeholder="e.g. all-purpose flour"
+                      className="flex-1 bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={searchNutritionSources}
+                      disabled={!nutritionSearchQuery.trim() || isSearchingNutrition}
+                      className="flex items-center gap-1.5 bg-stone-800 hover:bg-stone-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-40 transition-colors"
+                    >
+                      {isSearchingNutrition ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                      Search
+                    </button>
+                  </div>
+
+                  {(usdaSearchResults.length > 0 || offSearchResults.length > 0 || usdaSearchError || offSearchError) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                      <div>
+                        <div className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-2">USDA FoodData Central</div>
+                        {usdaSearchError && <p className="text-[11px] text-rose-500 italic">{usdaSearchError}</p>}
+                        {!usdaSearchError && usdaSearchResults.length === 0 && <p className="text-[11px] text-stone-400 italic">No results</p>}
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {usdaSearchResults.map((result) => (
+                            <button
+                              key={result.id}
+                              type="button"
+                              onClick={() => applyNutritionSearchResult(result)}
+                              className="w-full text-left p-2.5 bg-white border border-stone-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors"
+                            >
+                              <div className="text-xs font-bold text-stone-700">{result.name}</div>
+                              {result.nutrition && (
+                                <div className="text-[10px] text-stone-400 font-mono mt-0.5">
+                                  {result.nutrition.calories.toFixed(0)} kcal · P {result.nutrition.protein.toFixed(1)}g · C {result.nutrition.carbs.toFixed(1)}g · F {result.nutrition.fat.toFixed(1)}g
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-2">Open Food Facts</div>
+                        {offSearchError && <p className="text-[11px] text-rose-500 italic">{offSearchError}</p>}
+                        {!offSearchError && offSearchResults.length === 0 && <p className="text-[11px] text-stone-400 italic">No results</p>}
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {offSearchResults.map((result) => (
+                            <button
+                              key={result.id}
+                              type="button"
+                              onClick={() => applyNutritionSearchResult(result)}
+                              className="w-full text-left p-2.5 bg-white border border-stone-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors"
+                            >
+                              <div className="text-xs font-bold text-stone-700">{result.name}</div>
+                              {result.brand && <div className="text-[10px] text-stone-400 italic">{result.brand}</div>}
+                              {result.nutrition && (
+                                <div className="text-[10px] text-stone-400 font-mono mt-0.5">
+                                  {result.nutrition.calories.toFixed(0)} kcal · P {result.nutrition.protein.toFixed(1)}g · C {result.nutrition.carbs.toFixed(1)}g · F {result.nutrition.fat.toFixed(1)}g
+                                </div>
+                              )}
+                              {result.allergens.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {result.allergens.map(tag => (
+                                    <span key={tag} className="text-[8px] font-bold uppercase tracking-wide bg-rose-50 text-rose-500 px-1.5 py-0.5 rounded-full">{tag.replace(/_/g, ' ')}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <form onSubmit={saveNutritionInfo}>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Nutrition</span>
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-stone-400">
+                      Source: {
+                        nutritionSourceUsed === 'usda' ? 'USDA FoodData Central'
+                        : nutritionSourceUsed === 'openfoodfacts' ? 'Open Food Facts'
+                        : 'Manual'
+                      }
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Calories</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={nutritionCalories}
+                        onChange={(e) => setNutritionCalories(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 font-mono font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Protein (g)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={nutritionProtein}
+                        onChange={(e) => setNutritionProtein(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 font-mono font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Carbs (g)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={nutritionCarbs}
+                        onChange={(e) => setNutritionCarbs(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 font-mono font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Fat (g)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={nutritionFat}
+                        onChange={(e) => setNutritionFat(e.target.value)}
+                        placeholder="0"
+                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mb-8">
+                    <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">Allergens</label>
+                    <div className="flex flex-wrap gap-2">
+                      {ALLERGEN_TAGS.map((tag) => {
+                        const isSelected = nutritionAllergens.includes(tag);
+                        return (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => toggleNutritionAllergen(tag)}
+                            className={`px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-colors ${
+                              isSelected
+                                ? 'bg-rose-500 text-white border-rose-500'
+                                : 'bg-stone-50 text-stone-500 border-stone-200 hover:border-rose-200'
+                            }`}
+                          >
+                            {tag.replace(/_/g, ' ')}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setNutritionEditMaterial(null)}
+                      className="flex-1 px-6 py-4 rounded-xl text-xs font-bold text-stone-500 hover:bg-stone-50 transition-colors uppercase tracking-widest border border-stone-200"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 px-6 py-4 rounded-xl text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 transition-colors uppercase tracking-widest"
+                    >
+                      Save
                     </button>
                   </div>
                 </form>
