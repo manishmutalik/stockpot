@@ -1,5 +1,30 @@
 # Changelog
 
+## Shareable nutrition card (step 5 — final step of the feature)
+
+Last step of the Nutrition & Allergen Info feature: a "Share Nutrition
+Card" button (Salad icon, next to Duplicate/Delete) on each menu item,
+generating a PNG the owner can send a customer via WhatsApp, Instagram, or
+anywhere else.
+
+- New `html2canvas` dependency (checked it wasn't already present first),
+  dynamically imported only when a card is actually generated — it's a
+  sizeable library and ends up in its own ~200KB chunk rather than
+  inflating every page load.
+- New `src/components/NutritionCard.tsx`: a plain presentational
+  nutrition-facts-style card (business name/logo, item name, per-serving
+  calories/macros, allergen badges, a "Partial estimate" note when
+  `hasIncompleteData`, and the required disclaimer verbatim on every
+  card — imported from `nutritionCalculations.ts`'s `NUTRITION_DISCLAIMER`
+  rather than duplicated as a string). Rendered off-screen (`position:
+  fixed` with a large negative offset — not `display: none`, which
+  html2canvas can't capture) purely to be captured, never shown directly.
+- Clicking the button before an item's Servings field is set shows a
+  clear prompt instead of exporting a misleading "0 calories" card, since
+  the rollup can't do anything meaningful without a yield to divide by.
+
+---
+
 ## Menu item nutrition rollup view (step 3 of the feature)
 
 Fourth step built (numbered per the feature's original build order — step
