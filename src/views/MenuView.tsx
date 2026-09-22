@@ -9,13 +9,14 @@ import {
   DollarSign, Globe, Calendar, Filter, ArrowLeft, ArrowRight, Clock, Settings, Settings2,
   Layers, UserCog, Puzzle, User as UserIcon, LogOut, Image, Palette, Store, Mail, Phone,
   MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
-  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X
+  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X, Salad
 } from 'lucide-react';
 import { AppViewProps } from '../types';
 import { IngredientSelectorModal } from '../components/IngredientSelectorModal';
 import { ProductionRunModal } from '../components/ProductionRunModal';
 import { CURRENCIES, INITIAL_MATERIALS } from '../App';
 import { UNIT_CONVERSIONS } from '../App';
+import { calculateRecipeNutrition } from '../utils/nutritionCalculations';
 
 
 export const MenuView: React.FC<AppViewProps> = (props) => {
@@ -130,14 +131,25 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                               <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Sale</span>
                             </div>
                             <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-3 py-2 shadow-sm" title="Shelf Life (Days)">
-                              <input 
-                                type="number" 
+                              <input
+                                type="number"
                                 value={item.shelfLifeDays || ''}
                                 onChange={(e) => updateMenuItemField(item.id, 'shelfLifeDays', parseInt(e.target.value) || undefined)}
                                 className="w-8 bg-transparent border-none focus:ring-0 text-lg font-bold text-stone-700 p-0 text-center"
                                 placeholder="-"
                               />
                               <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Days</span>
+                            </div>
+                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-3 py-2 shadow-sm" title="Servings this recipe yields — needed to estimate per-serving nutrition">
+                              <input
+                                type="number"
+                                min="0"
+                                value={item.servings || ''}
+                                onChange={(e) => updateMenuItemField(item.id, 'servings', parseInt(e.target.value) || undefined)}
+                                className="w-8 bg-transparent border-none focus:ring-0 text-lg font-bold text-stone-700 p-0 text-center"
+                                placeholder="-"
+                              />
+                              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Servings</span>
                             </div>
                           </div>
                           {(() => {
@@ -200,7 +212,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                         >
                           <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 border-t border-stone-100">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                              <div className="flex items-center gap-4">
+                              <div className="flex flex-wrap items-stretch gap-4">
                                 <div className="p-3 bg-white rounded-xl shadow-sm border border-stone-100">
                                   <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Recipe Cost</h4>
                                   <div className="flex items-center gap-1.5 text-primary">
@@ -215,6 +227,41 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                                     </span>
                                   </div>
                                 </div>
+                                {(() => {
+                                  const rollup = calculateRecipeNutrition(item.recipe, materials, item.servings || 0);
+                                  const noServings = !item.servings || item.servings <= 0;
+
+                                  return (
+                                    <div className="p-3 bg-white rounded-xl shadow-sm border border-stone-100 min-w-[200px]">
+                                      <div className="flex items-center gap-1.5 mb-1">
+                                        <Salad size={12} className="text-emerald-500" />
+                                        <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Nutrition (Est.) / Serving</h4>
+                                        {!noServings && rollup.hasIncompleteData && (
+                                          <span className="text-[8px] font-bold uppercase tracking-wide bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full">Partial</span>
+                                        )}
+                                      </div>
+                                      {noServings ? (
+                                        <p className="text-[10px] text-stone-400 italic">Set servings above to estimate</p>
+                                      ) : (
+                                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs font-mono font-bold text-stone-700">
+                                          <span>{rollup.perServing.calories.toFixed(0)} kcal</span>
+                                          <span className="text-stone-400 font-normal">P {rollup.perServing.protein.toFixed(1)}g</span>
+                                          <span className="text-stone-400 font-normal">C {rollup.perServing.carbs.toFixed(1)}g</span>
+                                          <span className="text-stone-400 font-normal">F {rollup.perServing.fat.toFixed(1)}g</span>
+                                        </div>
+                                      )}
+                                      {rollup.allergens.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                          {rollup.allergens.map(tag => (
+                                            <span key={tag} className="text-[8px] font-bold uppercase tracking-wide bg-rose-50 text-rose-500 px-1.5 py-0.5 rounded-full">
+                                              {tag.replace(/_/g, ' ')}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                               <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
                                 <button

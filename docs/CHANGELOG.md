@@ -1,5 +1,27 @@
 # Changelog
 
+## Menu item nutrition rollup view (step 3 of the feature)
+
+Fourth step built (numbered per the feature's original build order — step
+4, nutrition lookup, was built first; see below) of the Nutrition &
+Allergen Info feature: the per-recipe nutrition estimate shown on the Menu
+tab, next to the existing Recipe Cost card.
+
+- Added an editable "Servings" field to each menu item (`MenuItem.servings`
+  already existed on the type but had no UI anywhere to set it — needed
+  here since it's the yield `calculateRecipeNutrition()` divides by).
+- The expanded recipe editor now shows a "Nutrition (Est.) / Serving" card
+  alongside Recipe Cost: calories/protein/carbs/fat per serving, allergen
+  tag badges, and a "Partial" badge when `hasIncompleteData` is true. When
+  servings hasn't been set yet, it shows "Set servings above to estimate"
+  instead of a confidently-wrong zeroed number.
+- Computed on the fly from the current recipe on every render (matching
+  how Recipe Cost is already computed inline, no memoization) — nothing
+  is stored, so it can't go stale when a material's nutrition data or the
+  recipe itself changes.
+
+---
+
 ## USDA + Open Food Facts nutrition lookup (step 4 of the feature)
 
 Third step built (step 3, the menu item detail rollup view, is still
