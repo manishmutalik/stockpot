@@ -1092,7 +1092,8 @@ function BakeryApp() {
 
     const income = rangeOrders.reduce((acc, order) => {
       const item = menu.find(m => m.id === order.menuItemId);
-      return acc + (item ? (item.sellingPrice || 0) * order.quantity : 0);
+      const itemRevenue = item ? (item.sellingPrice || 0) * order.quantity : 0;
+      return acc + itemRevenue + (order.deliveryCharge || 0);
     }, 0);
 
     const orderExpenses = materials.reduce((acc, mat) => {
@@ -1105,9 +1106,13 @@ function BakeryApp() {
       return acc + (used * (mat.costPerUnit || 0));
     }, 0);
 
-    const expenses = orderExpenses + experimentExpenses;
+    // Fees paid to third-party couriers (Uber, Porter, etc.) for orders in
+    // this range. Self-delivery/pickup orders have no fee tracked here.
+    const deliveryExpenses = rangeOrders.reduce((acc, order) => acc + (order.deliveryFee || 0), 0);
 
-    return { income, expenses, orderExpenses, experimentExpenses, profit: income - orderExpenses };
+    const expenses = orderExpenses + experimentExpenses + deliveryExpenses;
+
+    return { income, expenses, orderExpenses, experimentExpenses, deliveryExpenses, profit: income - orderExpenses - deliveryExpenses };
   };
 
   // Round-to-2-decimal wrapper around `getFinancialsForRange` for the summary period.

@@ -321,7 +321,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                 <div className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm group hover:shadow-md transition-all">
                   <div className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-3">Total Income</div>
                   <div className="text-4xl font-sans font-bold text-emerald-600">{currency.symbol}{financials.income}</div>
@@ -341,6 +341,15 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                   <div className="text-4xl font-sans font-bold text-amber-700">{currency.symbol}{totalProductionCost.toFixed(2)}</div>
                   <div className="text-[10px] text-amber-500 mt-2 uppercase font-bold tracking-wider">
                     {filteredProductionRuns.length} run{filteredProductionRuns.length !== 1 ? 's' : ''} in period
+                  </div>
+                </div>
+                <div className="bg-sky-50 p-8 rounded-[10px] sm:rounded-[15px] border border-sky-100 shadow-sm group hover:shadow-md transition-all">
+                  <div className="text-sky-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <MapPin size={11} /> Delivery Expenses
+                  </div>
+                  <div className="text-4xl font-sans font-bold text-sky-700">{currency.symbol}{financials.deliveryExpenses.toFixed(2)}</div>
+                  <div className="text-[10px] text-sky-500 mt-2 uppercase font-bold tracking-wider">
+                    Paid to third-party couriers
                   </div>
                 </div>
                 <div className="bg-primary/5 p-8 rounded-[10px] sm:rounded-[15px] border border-primary/20 shadow-lg shadow-primary/5 group hover:shadow-primary/10 transition-all">

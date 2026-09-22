@@ -90,6 +90,18 @@ export interface Order {
    * so deleting the production run also removes its linked order instead of
    * leaving an orphaned, already-fulfilled order behind. */
   productionRunId?: string;
+  /** Delivery address, free text. Optional — most orders may be pickup. */
+  deliveryAddress?: string;
+  /** How the order gets to the customer. 'third_party' is the only method
+   * that involves a deliveryFee (a cost paid to a courier); 'self_delivery'
+   * means the business handles delivery itself with no separate line-item
+   * cost tracked here. */
+  deliveryMethod?: 'pickup' | 'self_delivery' | 'third_party';
+  /** What the customer is charged for delivery — counted as revenue. */
+  deliveryCharge?: number;
+  /** What's paid to a third-party courier (Uber, Porter, etc.) — counted as
+   * an expense. Only meaningful when deliveryMethod is 'third_party'. */
+  deliveryFee?: number;
 }
 
 /**

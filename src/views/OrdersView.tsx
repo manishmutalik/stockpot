@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -18,7 +18,92 @@ import { CURRENCIES, INITIAL_MATERIALS } from '../App';
 import { UNIT_CONVERSIONS } from '../App';
 
 
+/**
+ * Expandable delivery details for one order: method, address, what the
+ * customer is charged, and (only for third-party couriers) what's paid out
+ * to the courier. Shared between the mobile and desktop layouts below.
+ */
+const DeliveryDetailsSection: React.FC<{
+  order: Order;
+  updateOrder: (id: string, field: keyof Order, value: any) => void;
+  currencySymbol: string;
+}> = ({ order, updateOrder, currencySymbol }) => {
+  const method = order.deliveryMethod || 'pickup';
+  return (
+    <div className="mt-2 p-3 bg-white border border-stone-100 rounded-xl space-y-2.5">
+      <div>
+        <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-1">Delivery Method</label>
+        <select
+          value={method}
+          onChange={(e) => updateOrder(order.id, 'deliveryMethod', e.target.value)}
+          className="w-full bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none"
+        >
+          <option value="pickup">Pickup (no delivery)</option>
+          <option value="self_delivery">Self-Delivery</option>
+          <option value="third_party">Third-Party Courier (Uber, Porter, etc.)</option>
+        </select>
+      </div>
+      {method !== 'pickup' && (
+        <>
+          <div>
+            <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-1">Delivery Address</label>
+            <input
+              type="text"
+              value={order.deliveryAddress || ''}
+              onChange={(e) => updateOrder(order.id, 'deliveryAddress', e.target.value)}
+              placeholder="Where is this being delivered?"
+              className="w-full bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-1">Charged to Customer</label>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-stone-400">{currencySymbol}</span>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={order.deliveryCharge ?? ''}
+                  onChange={(e) => updateOrder(order.id, 'deliveryCharge', parseFloat(e.target.value) || 0)}
+                  placeholder="0.00"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none"
+                />
+              </div>
+            </div>
+            {method === 'third_party' && (
+              <div>
+                <label className="block text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-1">Paid to Courier</label>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-stone-400">{currencySymbol}</span>
+                  <input
+                    type="number" min="0" step="0.01"
+                    value={order.deliveryFee ?? ''}
+                    onChange={(e) => updateOrder(order.id, 'deliveryFee', parseFloat(e.target.value) || 0)}
+                    placeholder="0.00"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 export const OrdersView: React.FC<AppViewProps> = (props) => {
+  // Which orders currently have their "Delivery Details" section expanded.
+  // Purely local, ephemeral UI state — not persisted, so it doesn't need to
+  // go through the app-wide props like the actual order data does.
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(new Set());
+  const toggleDeliveryDetails = (orderId: string) => {
+    setExpandedOrderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId); else next.add(orderId);
+      return next;
+    });
+  };
+
   // Destructure all props to make variables available in the scope
   const { patchMaterial, setRestockExpiryDate, shopifyStatus, importShopifyOrders, isImportingShopify, odooStatus, importOdooOrders, isImportingOdoo,
     materials, setMaterials, categories, setCategories, menu, setMenu, orders, setOrders,
@@ -242,10 +327,13 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                                       onChange={(e) => updateOrder(order.id, 'quantity', parseInt(e.target.value) || 0)}
                                       className="w-20 bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none shadow-sm text-center"
                                     />
-                                    <div className="flex-1 bg-stone-50 border border-stone-100 rounded-xl px-3 py-2.5 text-sm font-medium text-stone-500 overflow-hidden text-ellipsis whitespace-nowrap flex items-center justify-between">
-                                      <span>{order.customerName || <span className="text-stone-300 italic">No name</span>}</span>
-                                      {order.customerPhone && <span className="text-stone-400 text-xs font-normal shrink-0">({order.customerPhone})</span>}
-                                    </div>
+                                    <button
+                                      onClick={() => toggleDeliveryDetails(order.id)}
+                                      className="p-2.5 text-stone-400 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors shrink-0"
+                                      title="Delivery details"
+                                    >
+                                      <MapPin size={18} fill={order.deliveryMethod && order.deliveryMethod !== 'pickup' ? 'currentColor' : 'none'} />
+                                    </button>
                                     {!order.fulfilled ? (
                                       <button
                                         onClick={() => fulfillOrder(order)}
@@ -267,6 +355,25 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                                       <Trash2 size={18} />
                                     </button>
                                   </div>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="text"
+                                      value={order.customerName || ''}
+                                      onChange={(e) => updateOrder(order.id, 'customerName', e.target.value)}
+                                      placeholder="Customer name"
+                                      className="flex-1 bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none shadow-sm"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={order.customerPhone || ''}
+                                      onChange={(e) => updateOrder(order.id, 'customerPhone', e.target.value)}
+                                      placeholder="Phone"
+                                      className="w-28 bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none shadow-sm"
+                                    />
+                                  </div>
+                                  {expandedOrderIds.has(order.id) && (
+                                    <DeliveryDetailsSection order={order} updateOrder={updateOrder} currencySymbol={currency.symbol} />
+                                  )}
                                 </div>
                                 {/* Desktop: grid row layout */}
                                 <div className="hidden sm:grid grid-cols-12 items-center gap-4">
@@ -289,16 +396,31 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                                     />
                                   </div>
                                   <div className="col-span-2">
-                                    <div className="w-full bg-stone-50 border border-stone-100 rounded-xl px-3 py-2 text-sm font-medium text-stone-500 overflow-hidden text-ellipsis whitespace-nowrap">
-                                      {order.customerName || <span className="text-stone-300 italic">No name</span>}
-                                    </div>
+                                    <input
+                                      type="text"
+                                      value={order.customerName || ''}
+                                      onChange={(e) => updateOrder(order.id, 'customerName', e.target.value)}
+                                      placeholder="No name"
+                                      className="w-full bg-stone-50 border border-stone-100 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all"
+                                    />
                                   </div>
                                   <div className="col-span-2">
-                                    <div className="w-full bg-stone-50 border border-stone-100 rounded-xl px-3 py-2 text-sm font-medium text-stone-500 overflow-hidden text-ellipsis whitespace-nowrap">
-                                      {order.customerPhone || <span className="text-stone-300 italic">No phone</span>}
-                                    </div>
+                                    <input
+                                      type="text"
+                                      value={order.customerPhone || ''}
+                                      onChange={(e) => updateOrder(order.id, 'customerPhone', e.target.value)}
+                                      placeholder="No phone"
+                                      className="w-full bg-stone-50 border border-stone-100 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all"
+                                    />
                                   </div>
                                   <div className="col-span-2 flex justify-end gap-1">
+                                    <button
+                                      onClick={() => toggleDeliveryDetails(order.id)}
+                                      className={`transition-colors p-2 rounded-xl ${order.deliveryMethod && order.deliveryMethod !== 'pickup' ? 'text-primary bg-primary/5' : 'text-stone-300 hover:text-primary hover:bg-primary/5 opacity-0 group-hover:opacity-100'}`}
+                                      title="Delivery details"
+                                    >
+                                      <MapPin size={18} fill={order.deliveryMethod && order.deliveryMethod !== 'pickup' ? 'currentColor' : 'none'} />
+                                    </button>
                                     {!order.fulfilled ? (
                                       <button
                                         onClick={() => fulfillOrder(order)}
@@ -321,6 +443,11 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                                     </button>
                                   </div>
                                 </div>
+                                {expandedOrderIds.has(order.id) && (
+                                  <div className="hidden sm:block">
+                                    <DeliveryDetailsSection order={order} updateOrder={updateOrder} currencySymbol={currency.symbol} />
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
