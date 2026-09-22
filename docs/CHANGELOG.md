@@ -1,5 +1,31 @@
 # Changelog
 
+## GST tracking added
+
+Added optional GST (Goods & Services Tax) tracking, off by default:
+
+- `src/utils/gstCalculations.ts` — new pure module: `splitSaleForGst()` (splits
+  a sale amount into base + GST, for either GST-inclusive or GST-exclusive
+  menu pricing) and `calculateMaterialGstPaid()` (sums input tax paid on
+  consumed materials, from each material's own `gstRate`). Covered by
+  `src/utils/__tests__/gstCalculations.test.ts`.
+- `BakerySettings` gained `gstApplicable`, `gstRate`, `gstPricingMode` — wired
+  through `useSettingsListener.ts`'s default/Firestore mapping so they
+  actually load, not just `useSettings.ts`'s save path.
+- `getFinancialsForRange` in `App.tsx` now also returns `gstCollected`
+  (output tax on sales, using the module above) and `gstPaid` (input tax on
+  materials used), additively — the existing `income`/`expenses`/`profit`
+  numbers are unchanged.
+- Settings → Business Settings: a new GST card (toggle, rate, inclusive/
+  exclusive pricing mode), right after Business Profile.
+- Inventory: a per-material editable "GST %" column, replacing what used to
+  be a write-only field (`RawMaterial.gstRate` existed but had no UI
+  anywhere — only a hardcoded 5% fallback in the restock modal's display).
+- Summary: "GST Collected" and "GST Paid" cards, shown only when GST is
+  switched on.
+
+---
+
 ## Rebranded to Stockpot; broadened target market beyond bakeries
 
 Renamed the product from "Bakery Manager" to **Stockpot**, and broadened

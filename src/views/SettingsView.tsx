@@ -9,7 +9,7 @@ import {
   DollarSign, Globe, Calendar, Filter, ArrowLeft, ArrowRight, Clock, Settings, Settings2,
   Layers, UserCog, Puzzle, User as UserIcon, LogOut, Image, Palette, Store, Mail, Phone,
   MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
-  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X
+  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X, Percent
 } from 'lucide-react';
 import { AppViewProps } from '../types';
 import { IngredientSelectorModal } from '../components/IngredientSelectorModal';
@@ -150,6 +150,65 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
                         />
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* GST Settings Section */}
+                {activeSettingsTab === 'bakery' && (
+                  <div className="bg-white p-4 sm:p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm space-y-8">
+                    <div className="flex items-center gap-3 border-b border-stone-100 pb-4">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                        <Percent size={20} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-stone-800 uppercase tracking-widest text-[10px]">GST</h3>
+                        <p className="text-[10px] text-stone-400 font-sans italic">Tax settings for sales and reporting</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="block text-sm font-bold text-stone-700">GST Applicable</label>
+                        <p className="text-[11px] text-stone-400 font-sans italic mt-0.5">Turn on to track GST collected on sales and GST paid on materials</p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!!settings.gstApplicable}
+                        onClick={() => updateSettingsField('gstApplicable', !settings.gstApplicable)}
+                        className={`relative w-14 h-8 rounded-full transition-colors flex-shrink-0 ${settings.gstApplicable ? 'bg-primary' : 'bg-stone-200'}`}
+                      >
+                        <span className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-sm transition-transform ${settings.gstApplicable ? 'translate-x-6' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+
+                    {settings.gstApplicable && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest ml-1">GST Rate (%)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={settings.gstRate ?? 0}
+                            onChange={(e) => updateSettingsField('gstRate', parseFloat(e.target.value) || 0)}
+                            className="w-full bg-stone-50/50 border border-stone-200 rounded-xl px-5 py-3 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-sans text-lg"
+                            placeholder="18"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest ml-1">Pricing Mode</label>
+                          <select
+                            value={settings.gstPricingMode || 'exclusive'}
+                            onChange={(e) => updateSettingsField('gstPricingMode', e.target.value)}
+                            className="w-full bg-stone-50/50 border border-stone-200 rounded-xl px-5 py-3 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all font-sans text-lg"
+                          >
+                            <option value="exclusive">Exclusive (GST added on top of menu prices)</option>
+                            <option value="inclusive">Inclusive (menu prices already include GST)</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
