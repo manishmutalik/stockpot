@@ -1,5 +1,14 @@
 # Changelog
 
+## Hide GST % column in Inventory when GST is off
+
+The Inventory table's "GST %" column (and its per-material input) showed
+unconditionally, even for businesses with GST switched off in Settings —
+a stray, meaningless field for the common case. It now only renders when
+`settings.gstApplicable` is true, matching the Summary tab's GST cards.
+
+---
+
 ## GST tracking added
 
 Added optional GST (Goods & Services Tax) tracking, off by default:
