@@ -9,7 +9,7 @@ import {
   DollarSign, Globe, Calendar, Filter, ArrowLeft, ArrowRight, Clock, Settings, Settings2,
   Layers, UserCog, Puzzle, User as UserIcon, LogOut, Image, Palette, Store, Mail, Phone,
   MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
-  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X
+  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X, Salad
 } from 'lucide-react';
 import { AppViewProps } from '../types';
 import { IngredientSelectorModal } from '../components/IngredientSelectorModal';
@@ -42,7 +42,7 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
     removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
     deleteProductionRun, handleDiscardBatch, addOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
-    handleRestock, restockMaterial, setRestockMaterial, setDiscardTarget,
+    handleRestock, restockMaterial, setRestockMaterial, setDiscardTarget, openNutritionEditor,
     showSaveFeedback, saveDay,
     updateCurrency, handleLogout, isListening, transcript, convertAmount
   } = props;
@@ -318,7 +318,14 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
                               </td>
                               <td className="px-6 py-4 text-right">
                                 <div className="flex items-center justify-end gap-2">
-                                  <button 
+                                  <button
+                                    onClick={() => openNutritionEditor(mat)}
+                                    className="text-sky-500 hover:text-sky-600 transition-colors p-2 hover:bg-sky-50 rounded-xl"
+                                    title="Nutrition & allergens"
+                                  >
+                                    <Salad size={16} />
+                                  </button>
+                                  <button
                                     onClick={() => { setRestockMaterial(mat); setRestockExpiryDate(mat.expiryDate || ''); }}
                                     className="flex items-center gap-1 text-emerald-500 hover:text-emerald-600 transition-colors px-2 py-1.5 hover:bg-emerald-50 rounded-xl text-[10px] font-bold uppercase tracking-wider"
                                     title="Restock this item"

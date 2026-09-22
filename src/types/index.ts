@@ -322,6 +322,7 @@ export interface AppViewProps {
   restockMaterial: RawMaterial | null;
   setDiscardTarget: (t: { id: string; name: string; type: 'material' | 'recipe'; batchId?: string; maxQty: number; unit: string; costPerUnit: number } | null) => void;
   setRestockMaterial: (m: RawMaterial | null) => void;
+  openNutritionEditor: (m: RawMaterial) => void;
 
   showSaveFeedback: boolean;
   saveDay: () => void;

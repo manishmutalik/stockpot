@@ -30,6 +30,14 @@ export function useInventoryActions(
   const [restockBaseTotal, setRestockBaseTotal] = useState('');
   const [restockExpiryDate, setRestockExpiryDate] = useState('');
 
+  // ── Nutrition & Allergens Modal State ────────────────────────────────────
+  const [nutritionEditMaterial, setNutritionEditMaterial] = useState<RawMaterial | null>(null);
+  const [nutritionCalories, setNutritionCalories] = useState('');
+  const [nutritionProtein, setNutritionProtein] = useState('');
+  const [nutritionCarbs, setNutritionCarbs] = useState('');
+  const [nutritionFat, setNutritionFat] = useState('');
+  const [nutritionAllergens, setNutritionAllergens] = useState<string[]>([]);
+
   /**
    * Creates a blank material in the given category. The user edits it inline
    * afterwards (name, unit, stock, etc. all start at defaults/zero).
@@ -241,6 +249,58 @@ export function useInventoryActions(
   };
 
   /**
+   * Opens the Nutrition & Allergens modal for a material, pre-filling the
+   * form from whatever nutrition/allergen data it already has (blank
+   * fields, no tags selected, if it has none) so editing an existing entry
+   * doesn't start from scratch.
+   */
+  const openNutritionEditor = (mat: RawMaterial) => {
+    setNutritionEditMaterial(mat);
+    setNutritionCalories(mat.nutrition?.calories?.toString() ?? '');
+    setNutritionProtein(mat.nutrition?.protein?.toString() ?? '');
+    setNutritionCarbs(mat.nutrition?.carbs?.toString() ?? '');
+    setNutritionFat(mat.nutrition?.fat?.toString() ?? '');
+    setNutritionAllergens(mat.allergens ?? []);
+  };
+
+  const toggleNutritionAllergen = (tag: string) => {
+    setNutritionAllergens(prev => (
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    ));
+  };
+
+  /**
+   * Saves the Nutrition & Allergens modal. Nutrition is only written when
+   * at least one macro field was filled in — leaving all four blank means
+   * "no nutrition data for this material" (so recipe rollups correctly
+   * flag it as incomplete), not "zero calories". Allergens are always
+   * saved exactly as selected, including an empty selection, since
+   * clearing every tag is a valid, deliberate edit.
+   */
+  const saveNutritionInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nutritionEditMaterial) return;
+
+    const hasNutritionInput = [nutritionCalories, nutritionProtein, nutritionCarbs, nutritionFat]
+      .some(v => v.trim() !== '');
+
+    await patchMaterial(nutritionEditMaterial.id, {
+      ...(hasNutritionInput ? {
+        nutrition: {
+          calories: parseFloat(nutritionCalories) || 0,
+          protein: parseFloat(nutritionProtein) || 0,
+          carbs: parseFloat(nutritionCarbs) || 0,
+          fat: parseFloat(nutritionFat) || 0,
+        },
+        nutritionSource: 'manual' as const,
+      } : {}),
+      allergens: nutritionAllergens,
+    });
+
+    setNutritionEditMaterial(null);
+  };
+
+  /**
    * Deletes a material document from Firestore, then removes it from any
    * recipes that reference it.
    */
@@ -280,5 +340,19 @@ export function useInventoryActions(
     restockExpiryDate,
     setRestockExpiryDate,
     handleRestock,
+    nutritionEditMaterial,
+    setNutritionEditMaterial,
+    openNutritionEditor,
+    nutritionCalories,
+    setNutritionCalories,
+    nutritionProtein,
+    setNutritionProtein,
+    nutritionCarbs,
+    setNutritionCarbs,
+    nutritionFat,
+    setNutritionFat,
+    nutritionAllergens,
+    toggleNutritionAllergen,
+    saveNutritionInfo,
   };
 }

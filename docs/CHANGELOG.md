@@ -1,5 +1,30 @@
 # Changelog
 
+## Nutrition & allergen manual entry UI (step 2 of the feature)
+
+Second step of the Nutrition & Allergen Info feature (step 1 added the data
+model and calculation module — see below): a "Nutrition & Allergens" modal
+on the Inventory tab, so a business owner can manually enter this data per
+material with no external API dependency yet.
+
+- `useInventoryActions.ts` gained the modal's state (mirroring the existing
+  Restock modal's pattern exactly) and two handlers: `openNutritionEditor`
+  pre-fills the form from whatever a material already has, and
+  `saveNutritionInfo` writes it back via the existing `patchMaterial`.
+  Nutrition is only written when at least one macro field was filled in —
+  leaving all four blank means "no data" (so recipe rollups correctly flag
+  it incomplete), not "zero calories". Allergens save exactly as selected,
+  including an empty selection.
+- New icon-only "Nutrition & allergens" button next to Restock/Discard on
+  each Inventory row, opening the modal with calorie/protein/carb/fat
+  inputs (labeled per the material's actual basis unit — g, ml, or pcs)
+  and an `ALLERGEN_TAGS` multi-select.
+
+Not yet built: the menu item detail rollup view, USDA/Open Food Facts
+lookup-and-fill, and the shareable nutrition card.
+
+---
+
 ## Nutrition & allergen data model + calculation module (step 1 of the feature)
 
 First step of the planned Nutrition & Allergen Info feature (full spec
