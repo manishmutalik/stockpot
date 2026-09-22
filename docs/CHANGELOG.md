@@ -1,5 +1,31 @@
 # Changelog
 
+## Fixed the Summary tab's Inventory Status table (was always empty)
+
+The table at the bottom of the Summary/dashboard tab (`SummaryView.tsx`),
+meant to list every material's stock status for the selected period, was
+dead code that never rendered a single row:
+
+- It grouped materials by comparing `category` against the hardcoded
+  literals `'raw'`/`'packaging'`, but materials actually store category as
+  `'Raw Materials'`/`'Packaging Materials'` (or any custom category a user
+  adds) — so the filter always matched zero items, for every business.
+- Even had that matched, the row JSX read `item.currentStock`,
+  `item.usedInPeriod`, and `item.minStock`, none of which exist on
+  `remainingInventory` entries (which expose `remaining`, `used`, and
+  `threshold`) — it would have crashed immediately.
+
+Fixed by grouping over the real `categories` list (plus an "Uncategorized"
+fallback for orphaned materials, matching `InventoryView.tsx`'s own
+pattern), and using the correct fields: `item.remaining` for current stock
+and the low-stock check (matching `InventoryView.tsx`'s
+`(threshold ?? 0) > 0 && remaining <= threshold` logic), and
+`summaryInventoryUsage[item.id]` — a period-filtered usage figure that was
+already computed in `App.tsx` but, like this table, never actually wired
+up anywhere — for "Used in Period".
+
+---
+
 ## Hide GST % column in Inventory when GST is off
 
 The Inventory table's "GST %" column (and its per-material input) showed
