@@ -1,5 +1,39 @@
 # Changelog
 
+## Nutrition & allergen data model + calculation module (step 1 of the feature)
+
+First step of the planned Nutrition & Allergen Info feature (full spec
+handed off separately): the data model and pure calculation module, with
+no UI yet.
+
+- `RawMaterial` (`types/index.ts`) gained `nutrition` (calories/protein/
+  carbs/fat per 100g/ml), `nutritionSource` ('usda' | 'openfoodfacts' |
+  'manual', display-only), and `allergens` (free-form string array,
+  validated against `ALLERGEN_TAGS` at rollup time rather than at the type
+  level, since it may hold values from an external API before cleanup).
+  All optional — existing materials are unaffected.
+- New `src/utils/nutritionCalculations.ts`: `ALLERGEN_TAGS` (the fixed,
+  India-and-US-covering allergen tag list) and `calculateRecipeNutrition()`,
+  a pure per-serving nutrition + allergen-union rollup for a recipe, mirroring
+  the existing recipe-cost rollup pattern (reuses `convertAmount()`, never
+  reimplements unit conversion). Handles a material stocked in a different
+  unit than its nutrition basis (e.g. stocked in kg, nutrition per 100g),
+  missing/zero yield without dividing by zero, and flags `hasIncompleteData`
+  whenever any ingredient lacks nutrition data so the UI never presents a
+  partial estimate as a complete one. `MenuItem` itself stores no nutrition
+  field — it's always computed on the fly from the current recipe, so it
+  can't go stale.
+- Covered by `src/utils/__tests__/nutritionCalculations.test.ts` (16 cases:
+  zero/negative/missing yield, unit-family conversion for kg/l/pcs-stocked
+  materials, missing materials, missing nutrition data, allergen
+  union/dedup, and an end-to-end multi-ingredient recipe).
+
+Not yet built (later steps of the same feature): material edit UI for
+nutrition/allergen entry, the menu item detail rollup view, USDA/Open Food
+Facts lookup-and-fill, and the shareable nutrition card.
+
+---
+
 ## Removed the Summary tab's Inventory Status table
 
 A previous fix made this table actually render (it had been dead code —

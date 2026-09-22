@@ -31,6 +31,26 @@ export interface RawMaterial {
   dateAdded: string;
   expiryDate?: string; // YYYY-MM-DD — expiry of the current/latest stock batch
   gstRate?: number; // Input GST %, applied to this material's own cost/unit — drives the "GST Paid" figure in getFinancialsForRange, not the restock modal's display-only fallback.
+  /** Estimated nutrition per 100g/ml of this material, however it's actually
+   * purchased/stocked (see `unit`). Used to roll up per-serving nutrition for
+   * any menu item using this material. Optional — a material with no
+   * nutrition data simply contributes nothing to a recipe's rollup (see
+   * `hasIncompleteData` in the rollup result). */
+  nutrition?: {
+    calories: number;
+    protein: number; // grams
+    carbs: number;   // grams
+    fat: number;     // grams
+  };
+  /** Where `nutrition` came from — shown in the UI so the business owner
+   * knows whether a value was looked up or hand-entered. Doesn't affect
+   * calculations. */
+  nutritionSource?: 'usda' | 'openfoodfacts' | 'manual';
+  /** Standardized allergen tags this material carries. Use the fixed
+   * ALLERGEN_TAGS list (nutritionCalculations.ts) — not free text — so
+   * recipe-level rollup can reliably check tag membership across
+   * ingredients rather than parsing inconsistent strings. */
+  allergens?: string[];
 }
 
 export interface WastageLog {
