@@ -54,7 +54,9 @@ import {
   Download,
   Upload,
   X,
-  Salad
+  Salad,
+  Search,
+  Loader2
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { apiFetch } from './utils/apiClient';
@@ -860,7 +862,10 @@ function BakeryApp() {
     nutritionEditMaterial, setNutritionEditMaterial, openNutritionEditor,
     nutritionCalories, setNutritionCalories, nutritionProtein, setNutritionProtein,
     nutritionCarbs, setNutritionCarbs, nutritionFat, setNutritionFat,
-    nutritionAllergens, toggleNutritionAllergen, saveNutritionInfo,
+    nutritionAllergens, toggleNutritionAllergen, saveNutritionInfo, nutritionSourceUsed,
+    nutritionSearchQuery, setNutritionSearchQuery, isSearchingNutrition,
+    usdaSearchResults, usdaSearchError, offSearchResults, offSearchError,
+    searchNutritionSources, applyNutritionSearchResult,
   } = useInventoryActions(materials, categories, menu, showAlert, showConfirm);
 
   // ── Menu / Recipe Actions ────────────────────────────────────────────────────
@@ -2240,7 +2245,7 @@ function BakeryApp() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md bg-white rounded-[10px] sm:rounded-[15px] shadow-2xl overflow-y-auto max-h-[90vh] border border-stone-200/50"
+              className="relative w-full max-w-xl bg-white rounded-[10px] sm:rounded-[15px] shadow-2xl overflow-y-auto max-h-[90vh] border border-stone-200/50"
             >
               <div className="p-8">
                 <div className="w-16 h-16 bg-emerald-50 rounded-xl flex items-center justify-center mb-6">
@@ -2256,7 +2261,102 @@ function BakeryApp() {
                   } of {nutritionEditMaterial.name}
                 </p>
 
+                <div className="mb-6 p-4 bg-stone-50 rounded-xl border border-stone-100">
+                  <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Look Up</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={nutritionSearchQuery}
+                      onChange={(e) => setNutritionSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          searchNutritionSources();
+                        }
+                      }}
+                      placeholder="e.g. all-purpose flour"
+                      className="flex-1 bg-white border border-stone-200 rounded-xl px-4 py-2.5 text-sm text-stone-800 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={searchNutritionSources}
+                      disabled={!nutritionSearchQuery.trim() || isSearchingNutrition}
+                      className="flex items-center gap-1.5 bg-stone-800 hover:bg-stone-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-40 transition-colors"
+                    >
+                      {isSearchingNutrition ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                      Search
+                    </button>
+                  </div>
+
+                  {(usdaSearchResults.length > 0 || offSearchResults.length > 0 || usdaSearchError || offSearchError) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                      <div>
+                        <div className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-2">USDA FoodData Central</div>
+                        {usdaSearchError && <p className="text-[11px] text-rose-500 italic">{usdaSearchError}</p>}
+                        {!usdaSearchError && usdaSearchResults.length === 0 && <p className="text-[11px] text-stone-400 italic">No results</p>}
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {usdaSearchResults.map((result) => (
+                            <button
+                              key={result.id}
+                              type="button"
+                              onClick={() => applyNutritionSearchResult(result)}
+                              className="w-full text-left p-2.5 bg-white border border-stone-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors"
+                            >
+                              <div className="text-xs font-bold text-stone-700">{result.name}</div>
+                              {result.nutrition && (
+                                <div className="text-[10px] text-stone-400 font-mono mt-0.5">
+                                  {result.nutrition.calories.toFixed(0)} kcal · P {result.nutrition.protein.toFixed(1)}g · C {result.nutrition.carbs.toFixed(1)}g · F {result.nutrition.fat.toFixed(1)}g
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] font-bold text-stone-400 uppercase tracking-widest mb-2">Open Food Facts</div>
+                        {offSearchError && <p className="text-[11px] text-rose-500 italic">{offSearchError}</p>}
+                        {!offSearchError && offSearchResults.length === 0 && <p className="text-[11px] text-stone-400 italic">No results</p>}
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                          {offSearchResults.map((result) => (
+                            <button
+                              key={result.id}
+                              type="button"
+                              onClick={() => applyNutritionSearchResult(result)}
+                              className="w-full text-left p-2.5 bg-white border border-stone-200 rounded-lg hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors"
+                            >
+                              <div className="text-xs font-bold text-stone-700">{result.name}</div>
+                              {result.brand && <div className="text-[10px] text-stone-400 italic">{result.brand}</div>}
+                              {result.nutrition && (
+                                <div className="text-[10px] text-stone-400 font-mono mt-0.5">
+                                  {result.nutrition.calories.toFixed(0)} kcal · P {result.nutrition.protein.toFixed(1)}g · C {result.nutrition.carbs.toFixed(1)}g · F {result.nutrition.fat.toFixed(1)}g
+                                </div>
+                              )}
+                              {result.allergens.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {result.allergens.map(tag => (
+                                    <span key={tag} className="text-[8px] font-bold uppercase tracking-wide bg-rose-50 text-rose-500 px-1.5 py-0.5 rounded-full">{tag.replace(/_/g, ' ')}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <form onSubmit={saveNutritionInfo}>
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Nutrition</span>
+                    <span className="text-[9px] font-bold uppercase tracking-widest text-stone-400">
+                      Source: {
+                        nutritionSourceUsed === 'usda' ? 'USDA FoodData Central'
+                        : nutritionSourceUsed === 'openfoodfacts' ? 'Open Food Facts'
+                        : 'Manual'
+                      }
+                    </span>
+                  </div>
                   <div className="grid grid-cols-2 gap-4 mb-6">
                     <div>
                       <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Calories</label>

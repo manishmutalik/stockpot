@@ -15,7 +15,11 @@ import { useState } from 'react';
 import Papa from 'papaparse';
 import { auth, db, doc, setDoc, deleteDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
+import { apiFetch } from '../utils/apiClient';
 import { RawMaterial, MenuItem } from '../types';
+// Type-only: erased at build time, so the search functions themselves
+// (axios calls, USDA_API_KEY) never end up in the client bundle.
+import type { NutritionSearchResult } from '../../lib/nutritionSearch';
 
 export function useInventoryActions(
   materials: RawMaterial[],
@@ -37,6 +41,17 @@ export function useInventoryActions(
   const [nutritionCarbs, setNutritionCarbs] = useState('');
   const [nutritionFat, setNutritionFat] = useState('');
   const [nutritionAllergens, setNutritionAllergens] = useState<string[]>([]);
+  const [nutritionSourceUsed, setNutritionSourceUsed] = useState<'usda' | 'openfoodfacts' | 'manual'>('manual');
+
+  // Lookup search: query, in-flight state, and each source's own results/
+  // error kept separate (not merged into one list) so the UI can show both
+  // sets side by side rather than one source silently masking the other.
+  const [nutritionSearchQuery, setNutritionSearchQuery] = useState('');
+  const [isSearchingNutrition, setIsSearchingNutrition] = useState(false);
+  const [usdaSearchResults, setUsdaSearchResults] = useState<NutritionSearchResult[]>([]);
+  const [usdaSearchError, setUsdaSearchError] = useState<string | null>(null);
+  const [offSearchResults, setOffSearchResults] = useState<NutritionSearchResult[]>([]);
+  const [offSearchError, setOffSearchError] = useState<string | null>(null);
 
   /**
    * Creates a blank material in the given category. The user edits it inline
@@ -261,12 +276,85 @@ export function useInventoryActions(
     setNutritionCarbs(mat.nutrition?.carbs?.toString() ?? '');
     setNutritionFat(mat.nutrition?.fat?.toString() ?? '');
     setNutritionAllergens(mat.allergens ?? []);
+    setNutritionSourceUsed(mat.nutritionSource ?? 'manual');
+
+    // Reset the lookup panel for the new material rather than carrying over
+    // whatever was searched for the previously-edited one.
+    setNutritionSearchQuery(mat.name);
+    setUsdaSearchResults([]);
+    setUsdaSearchError(null);
+    setOffSearchResults([]);
+    setOffSearchError(null);
   };
 
   const toggleNutritionAllergen = (tag: string) => {
     setNutritionAllergens(prev => (
       prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
     ));
+  };
+
+  /**
+   * Queries USDA FoodData Central and Open Food Facts in parallel for every
+   * lookup — never one as a fallback for the other. USDA carries no
+   * allergen data at all, so a fallback chain that only tries Open Food
+   * Facts when USDA comes up empty would rarely actually reach the one
+   * source this feature depends on for allergens. Each source's results
+   * (and failure, if any) are kept separate so the UI can show both lists
+   * and let the owner pick from either.
+   */
+  const searchNutritionSources = async () => {
+    const query = nutritionSearchQuery.trim();
+    if (!query) return;
+
+    setIsSearchingNutrition(true);
+    setUsdaSearchError(null);
+    setOffSearchError(null);
+
+    const [usdaOutcome, offOutcome] = await Promise.allSettled([
+      apiFetch(`/api/nutrition/search-usda?q=${encodeURIComponent(query)}`).then(r => r.json()),
+      apiFetch(`/api/nutrition/search-openfoodfacts?q=${encodeURIComponent(query)}`).then(r => r.json()),
+    ]);
+
+    if (usdaOutcome.status === 'fulfilled' && !usdaOutcome.value.error) {
+      setUsdaSearchResults(usdaOutcome.value.results || []);
+    } else {
+      setUsdaSearchResults([]);
+      setUsdaSearchError(
+        usdaOutcome.status === 'fulfilled' ? usdaOutcome.value.error : 'USDA lookup failed'
+      );
+    }
+
+    if (offOutcome.status === 'fulfilled' && !offOutcome.value.error) {
+      setOffSearchResults(offOutcome.value.results || []);
+    } else {
+      setOffSearchResults([]);
+      setOffSearchError(
+        offOutcome.status === 'fulfilled' ? offOutcome.value.error : 'Open Food Facts lookup failed'
+      );
+    }
+
+    setIsSearchingNutrition(false);
+  };
+
+  /**
+   * Pre-fills the form from a chosen search result. Every field stays
+   * manually editable afterwards — no database perfectly matches a
+   * specific brand or supplier, so this is a starting point, not a final
+   * answer. Allergens are merged with (not replacing) whatever's already
+   * selected, since applying a USDA result after already having picked
+   * allergens manually shouldn't silently clear them.
+   */
+  const applyNutritionSearchResult = (result: NutritionSearchResult) => {
+    if (result.nutrition) {
+      setNutritionCalories(result.nutrition.calories.toString());
+      setNutritionProtein(result.nutrition.protein.toString());
+      setNutritionCarbs(result.nutrition.carbs.toString());
+      setNutritionFat(result.nutrition.fat.toString());
+    }
+    if (result.allergens.length > 0) {
+      setNutritionAllergens(prev => Array.from(new Set([...prev, ...result.allergens])));
+    }
+    setNutritionSourceUsed(result.source);
   };
 
   /**
@@ -292,7 +380,7 @@ export function useInventoryActions(
           carbs: parseFloat(nutritionCarbs) || 0,
           fat: parseFloat(nutritionFat) || 0,
         },
-        nutritionSource: 'manual' as const,
+        nutritionSource: nutritionSourceUsed,
       } : {}),
       allergens: nutritionAllergens,
     });
@@ -354,5 +442,15 @@ export function useInventoryActions(
     nutritionAllergens,
     toggleNutritionAllergen,
     saveNutritionInfo,
+    nutritionSourceUsed,
+    nutritionSearchQuery,
+    setNutritionSearchQuery,
+    isSearchingNutrition,
+    usdaSearchResults,
+    usdaSearchError,
+    offSearchResults,
+    offSearchError,
+    searchNutritionSources,
+    applyNutritionSearchResult,
   };
 }

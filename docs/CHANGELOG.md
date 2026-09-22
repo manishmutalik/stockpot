@@ -1,5 +1,49 @@
 # Changelog
 
+## USDA + Open Food Facts nutrition lookup (step 4 of the feature)
+
+Third step built (step 3, the menu item detail rollup view, is still
+pending) of the Nutrition & Allergen Info feature: a "Look up" search in
+the Nutrition & Allergens modal that queries both free data sources and
+lets the owner pick a result to pre-fill the form from.
+
+- New `lib/nutritionSearch.ts`: `searchUsda()` and `searchOpenFoodFacts()`,
+  each normalizing its source's response into a shared
+  `NutritionSearchResult` shape. USDA is restricted to Foundation/SR Legacy
+  data types (generic ingredients, matching its intended use here) and
+  never carries allergen data; Open Food Facts is the primary allergen
+  source, with its `en:`-prefixed tags mapped onto this app's fixed
+  `ALLERGEN_TAGS` (documented as a deliberate, non-exhaustive best-effort
+  mapping — e.g. `en:gluten` -> `wheat`). Covered by
+  `lib/__tests__/nutritionSearch.test.ts` (the pure normalization logic;
+  the actual HTTP calls aren't mocked/tested).
+- Two new authenticated routes in `server.ts`:
+  `GET /api/nutrition/search-usda` and `GET /api/nutrition/search-openfoodfacts`,
+  each wrapped in its own try/catch per this codebase's established
+  "one unguarded external call crashed the whole server" lesson. The USDA
+  route requires `USDA_API_KEY` (new env var, documented in `.env.example`
+  and the README) and fails with a clear "not configured" error without it;
+  Open Food Facts needs no key.
+- **The client queries both routes in parallel for every lookup, never one
+  as a fallback for the other** — USDA has no allergen data at all, so a
+  fallback chain that only tried Open Food Facts when USDA came up empty
+  would rarely actually reach the app's one allergen source in practice.
+  Both result lists (and either source's own failure) are shown side by
+  side in the modal, so the owner can pick from either.
+- Picking a result pre-fills the form (still fully editable afterward,
+  since no database perfectly matches a specific brand/supplier) and
+  records which source it came from, shown in the modal as the visible
+  `nutritionSource` the data model already had a field for.
+
+**Known limitation:** this environment's outbound network policy blocks
+both `api.nal.usda.gov` and `world.openfoodfacts.org`, so the API
+integration could not be exercised against live traffic while writing it.
+The request/response shapes match each API's stable, documented contract,
+but treat this as unverified against real responses until it's been
+smoke-tested from an environment that can actually reach them.
+
+---
+
 ## Nutrition & allergen manual entry UI (step 2 of the feature)
 
 Second step of the Nutrition & Allergen Info feature (step 1 added the data

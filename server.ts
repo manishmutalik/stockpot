@@ -9,6 +9,7 @@ import { requireCsrf, issueCsrfToken } from "./lib/csrf";
 import { saveCredentials, getCredentials, deleteCredentials } from "./lib/integrationStore";
 import { getStripe } from "./lib/stripe";
 import { setBillingInfo, getBillingInfo, findUidByStripeCustomerId, SubscriptionStatus } from "./lib/subscriptionStore";
+import { searchUsda, searchOpenFoodFacts } from "./lib/nutritionSearch";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -521,6 +522,47 @@ async function startServer() {
     } catch (err: any) {
       console.error("Failed to disconnect Odoo:", err.message);
       res.status(500).json({ error: "Failed to disconnect Odoo" });
+    }
+  });
+
+  // --- Nutrition Lookup Routes ---
+  // The client queries both of these in parallel for every lookup (not one
+  // as a fallback for the other): USDA has no allergen data at all, so
+  // only ever calling it and falling back to Open Food Facts on an empty
+  // result would rarely actually reach the allergen source in practice.
+
+  api.get("/nutrition/search-usda", async (req: AuthedRequest, res) => {
+    const query = (req.query.q as string || "").trim();
+    if (!query) {
+      return res.status(400).json({ error: "Missing q parameter" });
+    }
+
+    const apiKey = process.env.USDA_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: "USDA lookup is not configured on this server." });
+    }
+
+    try {
+      const results = await searchUsda(query, apiKey);
+      res.json({ results });
+    } catch (err: any) {
+      console.error("USDA FoodData Central lookup failed:", err.response?.data || err.message);
+      res.status(500).json({ error: "Failed to search USDA FoodData Central" });
+    }
+  });
+
+  api.get("/nutrition/search-openfoodfacts", async (req: AuthedRequest, res) => {
+    const query = (req.query.q as string || "").trim();
+    if (!query) {
+      return res.status(400).json({ error: "Missing q parameter" });
+    }
+
+    try {
+      const results = await searchOpenFoodFacts(query);
+      res.json({ results });
+    } catch (err: any) {
+      console.error("Open Food Facts lookup failed:", err.response?.data || err.message);
+      res.status(500).json({ error: "Failed to search Open Food Facts" });
     }
   });
 
