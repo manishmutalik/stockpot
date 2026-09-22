@@ -34,7 +34,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
     user, isAlertDismissed, setIsAlertDismissed, isExpiredAlertDismissed, setIsExpiredAlertDismissed,
-    inventoryUsage, summaryInventoryUsage, remainingInventory, sortedRemainingInventory, lowStockItems,
+    inventoryUsage, summaryInventoryUsage, sortedRemainingInventory, lowStockItems,
     summaryFinancials, activeOrdersCount, averageOrderValue, financials, chartData, handleRangeChange,
     refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
     addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock,
@@ -416,19 +416,22 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-50">
-                    {(['raw', 'packaging'] as const).map((cat) => {
-                      const categoryItems = remainingInventory.filter(i => i.category === cat);
+                    {[...categories, 'Uncategorized'].map((category) => {
+                      const categoryItems = category === 'Uncategorized'
+                        ? sortedRemainingInventory.filter(i => !categories.includes(i.category))
+                        : sortedRemainingInventory.filter(i => i.category === category);
                       if (categoryItems.length === 0) return null;
 
                       return (
-                        <React.Fragment key={cat}>
+                        <React.Fragment key={category}>
                           <tr className="bg-stone-50/30">
                             <td colSpan={5} className="px-8 py-3 text-[10px] font-bold text-primary/60 uppercase tracking-widest bg-primary/5">
-                              {cat === 'raw' ? 'Raw Materials' : 'Packaging Materials'}
+                              {category}
                             </td>
                           </tr>
                           {categoryItems.map((item) => {
-                            const isLow = item.currentStock <= (item.minStock || 0);
+                            const usedInPeriod = summaryInventoryUsage[item.id] || 0;
+                            const isLow = (item.threshold ?? 0) > 0 && item.remaining <= item.threshold;
                             return (
                               <tr key={item.id} className="group hover:bg-stone-50/50 transition-colors">
                                 <td className="px-8 py-5">
@@ -439,11 +442,11 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                                   {item.initialStock.toFixed(2)}
                                 </td>
                                 <td className="px-8 py-5 font-mono text-sm text-stone-600">
-                                  {item.usedInPeriod.toFixed(2)}
+                                  {usedInPeriod.toFixed(2)}
                                 </td>
                                 <td className="px-8 py-5">
                                   <div className={`font-mono text-sm font-bold ${isLow ? 'text-rose-600' : 'text-stone-800'}`}>
-                                    {item.currentStock.toFixed(2)}
+                                    {item.remaining.toFixed(2)}
                                   </div>
                                 </td>
                                 <td className="px-8 py-5 text-right">
