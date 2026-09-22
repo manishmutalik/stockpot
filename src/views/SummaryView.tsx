@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { 
   Plus, Trash2, ChevronRight, ChevronDown, Package, Utensils, ClipboardList, Calculator,
-  Save, RotateCcw, AlertCircle, CheckCircle2, Check, Info, Database, RefreshCw, Copy,
+  Save, RotateCcw, CheckCircle2, Info, Database, RefreshCw, Copy,
   DollarSign, Globe, Calendar, Filter, ArrowLeft, ArrowRight, Clock, Settings, Settings2,
   Layers, UserCog, Puzzle, User as UserIcon, LogOut, Image, Palette, Store, Mail, Phone,
   MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
@@ -34,7 +34,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
     user, isAlertDismissed, setIsAlertDismissed, isExpiredAlertDismissed, setIsExpiredAlertDismissed,
-    inventoryUsage, summaryInventoryUsage, sortedRemainingInventory, lowStockItems,
+    inventoryUsage, lowStockItems,
     summaryFinancials, activeOrdersCount, averageOrderValue, financials, chartData, handleRangeChange,
     refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
     addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock,
@@ -400,76 +400,6 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                   <div className="text-4xl font-sans font-bold text-stone-800">
                     {[...new Set(orders.map(o => o.date))].length}
                   </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full min-w-[500px] text-left border-collapse">
-                  <thead>
-                    <tr className="bg-stone-50/50 border-b border-stone-100">
-                      <th className="px-8 py-5 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Material</th>
-                      <th className="px-8 py-5 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Initial Stock</th>
-                      <th className="px-8 py-5 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Used in Period</th>
-                      <th className="px-8 py-5 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Current Stock</th>
-                      <th className="px-8 py-5 text-[10px] font-bold text-stone-400 uppercase tracking-widest text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-50">
-                    {[...categories, 'Uncategorized'].map((category) => {
-                      const categoryItems = category === 'Uncategorized'
-                        ? sortedRemainingInventory.filter(i => !categories.includes(i.category))
-                        : sortedRemainingInventory.filter(i => i.category === category);
-                      if (categoryItems.length === 0) return null;
-
-                      return (
-                        <React.Fragment key={category}>
-                          <tr className="bg-stone-50/30">
-                            <td colSpan={5} className="px-8 py-3 text-[10px] font-bold text-primary/60 uppercase tracking-widest bg-primary/5">
-                              {category}
-                            </td>
-                          </tr>
-                          {categoryItems.map((item) => {
-                            const usedInPeriod = summaryInventoryUsage[item.id] || 0;
-                            const isLow = (item.threshold ?? 0) > 0 && item.remaining <= item.threshold;
-                            return (
-                              <tr key={item.id} className="group hover:bg-stone-50/50 transition-colors">
-                                <td className="px-8 py-5">
-                                  <div className="font-sans font-bold text-stone-800">{item.name}</div>
-                                  <div className="text-[10px] text-stone-400 uppercase tracking-widest font-bold">{item.unit}</div>
-                                </td>
-                                <td className="px-8 py-5 font-mono text-sm text-stone-600">
-                                  {item.initialStock.toFixed(2)}
-                                </td>
-                                <td className="px-8 py-5 font-mono text-sm text-stone-600">
-                                  {usedInPeriod.toFixed(2)}
-                                </td>
-                                <td className="px-8 py-5">
-                                  <div className={`font-mono text-sm font-bold ${isLow ? 'text-rose-600' : 'text-stone-800'}`}>
-                                    {item.remaining.toFixed(2)}
-                                  </div>
-                                </td>
-                                <td className="px-8 py-5 text-right">
-                                  {isLow ? (
-                                    <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-600 text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-rose-100">
-                                      <AlertCircle size={10} />
-                                      Low Stock
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-600 text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full border border-emerald-100">
-                                      <Check size={10} />
-                                      Healthy
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
                 </div>
               </div>
             </motion.div>

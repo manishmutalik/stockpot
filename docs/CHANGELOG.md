@@ -1,5 +1,21 @@
 # Changelog
 
+## Removed the Summary tab's Inventory Status table
+
+A previous fix made this table actually render (it had been dead code —
+see the entry below), but real usage surfaced a deeper problem: its
+"Used in Period" figure only counts orders that are still unfulfilled
+(a deliberate choice elsewhere in the app, to avoid double-counting stock
+already deducted at fulfillment), so it reads 0 for any business that
+promptly fulfills orders — the normal case — making "Initial Stock" and
+"Current Stock" identical too. Redesigning it to show real period
+consumption was one option, but the Inventory tab already shows live
+stock levels per material, making this table redundant. Removed it
+(and the now-unused `sortedRemainingInventory`/`summaryInventoryUsage`
+props and icon imports that only it needed).
+
+---
+
 ## Fixed the Summary tab's Inventory Status table (was always empty)
 
 The table at the bottom of the Summary/dashboard tab (`SummaryView.tsx`),
