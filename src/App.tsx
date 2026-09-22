@@ -1124,6 +1124,7 @@ function BakeryApp() {
       expenses: parseFloat(fins.expenses.toFixed(2)), 
       orderExpenses: parseFloat(fins.orderExpenses.toFixed(2)),
       experimentExpenses: parseFloat(fins.experimentExpenses.toFixed(2)),
+      deliveryExpenses: parseFloat(fins.deliveryExpenses.toFixed(2)),
       profit: parseFloat(fins.profit.toFixed(2)) 
     };
   }, [summaryDateStart, summaryDateEnd, orders, experiments, menu, materials]);
