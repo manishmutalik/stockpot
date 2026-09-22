@@ -30,7 +30,7 @@ export interface RawMaterial {
   threshold?: number;
   dateAdded: string;
   expiryDate?: string; // YYYY-MM-DD — expiry of the current/latest stock batch
-  gstRate?: number;
+  gstRate?: number; // Input GST %, applied to this material's own cost/unit — drives the "GST Paid" figure in getFinancialsForRange, not the restock modal's display-only fallback.
 }
 
 export interface WastageLog {
@@ -155,6 +155,9 @@ export interface BakerySettings {
   address: string;
   phone: string;
   email: string;
+  gstApplicable?: boolean;
+  gstRate?: number; // Output GST %, applied to sales — see gstPricingMode for how.
+  gstPricingMode?: 'inclusive' | 'exclusive'; // Whether menu prices already include GST, or GST is added on top.
 }
 
 /**
@@ -294,7 +297,7 @@ export interface AppViewProps {
   deleteOrder: (id: string) => void;
   resetOrders: () => void;
   saveSettings: () => void;
-  updateSettingsField: (field: any, value: string) => void;
+  updateSettingsField: (field: any, value: string | number | boolean) => void;
   handleRestock: (e: React.FormEvent) => void;
   restockMaterial: RawMaterial | null;
   setDiscardTarget: (t: { id: string; name: string; type: 'material' | 'recipe'; batchId?: string; maxQty: number; unit: string; costPerUnit: number } | null) => void;

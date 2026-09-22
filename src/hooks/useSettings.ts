@@ -64,7 +64,7 @@ export function useSettings(
    * Patches a single field in the local settings state.
    * The debounced effect above will sync the change to Firestore after 1 s.
    */
-  const updateSettingsField = (field: keyof BakerySettings, value: string) => {
+  const updateSettingsField = (field: keyof BakerySettings, value: string | number | boolean) => {
     setSettings(prev => ({ ...prev, [field]: value }));
   };
 

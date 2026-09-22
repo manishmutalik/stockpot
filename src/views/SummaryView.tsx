@@ -9,7 +9,7 @@ import {
   DollarSign, Globe, Calendar, Filter, ArrowLeft, ArrowRight, Clock, Settings, Settings2,
   Layers, UserCog, Puzzle, User as UserIcon, LogOut, Image, Palette, Store, Mail, Phone,
   MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
-  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X
+  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X, Percent
 } from 'lucide-react';
 import { AppViewProps } from '../types';
 import { IngredientSelectorModal } from '../components/IngredientSelectorModal';
@@ -361,6 +361,29 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                   </div>
                 </div>
               </div>
+
+              {settings.gstApplicable && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-violet-50 p-8 rounded-[10px] sm:rounded-[15px] border border-violet-100 shadow-sm group hover:shadow-md transition-all">
+                    <div className="text-violet-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                      <Percent size={11} /> GST Collected
+                    </div>
+                    <div className="text-4xl font-sans font-bold text-violet-700">{currency.symbol}{financials.gstCollected.toFixed(2)}</div>
+                    <div className="text-[10px] text-violet-500 mt-2 uppercase font-bold tracking-wider">
+                      Output tax on sales in period
+                    </div>
+                  </div>
+                  <div className="bg-orange-50 p-8 rounded-[10px] sm:rounded-[15px] border border-orange-100 shadow-sm group hover:shadow-md transition-all">
+                    <div className="text-orange-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                      <Percent size={11} /> GST Paid
+                    </div>
+                    <div className="text-4xl font-sans font-bold text-orange-700">{currency.symbol}{financials.gstPaid.toFixed(2)}</div>
+                    <div className="text-[10px] text-orange-500 mt-2 uppercase font-bold tracking-wider">
+                      Input tax on materials used
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 <div className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm">

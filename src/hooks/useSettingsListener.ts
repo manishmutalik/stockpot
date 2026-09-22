@@ -24,6 +24,9 @@ const DEFAULT_SETTINGS: BakerySettings = {
   address: '',
   phone: '',
   email: '',
+  gstApplicable: false,
+  gstRate: 0,
+  gstPricingMode: 'exclusive',
 };
 
 export function useSettingsListener(authReady: boolean, user: AppUser | null) {
@@ -50,6 +53,9 @@ export function useSettingsListener(authReady: boolean, user: AppUser | null) {
             address: data.address ?? DEFAULT_SETTINGS.address,
             phone: data.phone ?? DEFAULT_SETTINGS.phone,
             email: data.email ?? DEFAULT_SETTINGS.email,
+            gstApplicable: data.gstApplicable ?? DEFAULT_SETTINGS.gstApplicable,
+            gstRate: data.gstRate ?? DEFAULT_SETTINGS.gstRate,
+            gstPricingMode: data.gstPricingMode ?? DEFAULT_SETTINGS.gstPricingMode,
           });
           if (data.categories) setCategories(data.categories);
           if (data.currency) setCurrency(data.currency);

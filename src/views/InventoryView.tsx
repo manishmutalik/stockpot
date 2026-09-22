@@ -176,6 +176,7 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
                           <th className="px-6 py-4 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Current Stock</th>
                           <th className="px-6 py-4 text-[10px] font-bold text-stone-400 uppercase tracking-widest" title="Alert when current stock drops below this amount">Threshold (Alert)</th>
                           <th className="px-6 py-4 text-[10px] font-bold text-stone-400 uppercase tracking-widest">Cost / Unit</th>
+                          <th className="px-6 py-4 text-[10px] font-bold text-stone-400 uppercase tracking-widest" title="GST rate paid when this material is purchased">GST %</th>
                           <th className="px-6 py-4 text-[10px] font-bold text-stone-400 uppercase tracking-widest" title="Expiry date of the current stock batch">Expiry Date</th>
                           <th className="px-6 py-4 text-[10px] font-bold text-stone-400 uppercase tracking-widest w-20"></th>
                         </tr>
@@ -265,6 +266,20 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
                                     onChange={(e) => updateMaterial(mat.id, 'costPerUnit', parseFloat(e.target.value) || 0)}
                                     className="w-24 bg-stone-50/50 border border-stone-100 rounded-xl px-3 py-1.5 text-sm font-mono focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                                   />
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={mat.gstRate ?? 0}
+                                    onChange={(e) => updateMaterial(mat.id, 'gstRate', parseFloat(e.target.value) || 0)}
+                                    className="w-20 bg-stone-50/50 border border-stone-100 rounded-xl px-3 py-1.5 text-sm font-mono focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                                    title="GST rate paid on purchases of this material"
+                                  />
+                                  <span className="text-stone-400 text-[10px] font-bold">%</span>
                                 </div>
                               </td>
                               <td className="px-6 py-4">
