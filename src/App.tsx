@@ -307,6 +307,7 @@ const INITIAL_MENU: MenuItem[] = [
 // `from '../App'` imports in view files keep working.
 import { UNIT_CONVERSIONS, convertAmount, CURRENCIES } from './utils/conversions';
 import { splitSaleForGst, calculateMaterialGstPaid } from './utils/gstCalculations';
+import { attributeDeliveryFieldByGroup } from './utils/orderClustering';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
 
@@ -1098,10 +1099,17 @@ function BakeryApp() {
       });
     });
 
+    // Delivery charge/fee attributed once per orderGroupId, not once per
+    // document within a group — see attributeDeliveryFieldByGroup. A group's
+    // members share one delivery, so naively summing every document's field
+    // would multiply-count it by the group size.
+    const deliveryChargeByOrder = attributeDeliveryFieldByGroup(rangeOrders, 'deliveryCharge');
+    const deliveryFeeByOrder = attributeDeliveryFieldByGroup(rangeOrders, 'deliveryFee');
+
     const income = rangeOrders.reduce((acc, order) => {
       const item = menu.find(m => m.id === order.menuItemId);
       const itemRevenue = item ? (item.sellingPrice || 0) * order.quantity : 0;
-      return acc + itemRevenue + (order.deliveryCharge || 0);
+      return acc + itemRevenue + (deliveryChargeByOrder.get(order.id) || 0);
     }, 0);
 
     const orderExpenses = materials.reduce((acc, mat) => {
@@ -1116,7 +1124,7 @@ function BakeryApp() {
 
     // Fees paid to third-party couriers (Uber, Porter, etc.) for orders in
     // this range. Self-delivery/pickup orders have no fee tracked here.
-    const deliveryExpenses = rangeOrders.reduce((acc, order) => acc + (order.deliveryFee || 0), 0);
+    const deliveryExpenses = rangeOrders.reduce((acc, order) => acc + (deliveryFeeByOrder.get(order.id) || 0), 0);
 
     // Cost of discarded/expired stock logged in this range (see handleDiscardBatch
     // and useWastageActions) — wasted material and finished-goods cost that was
@@ -1132,7 +1140,7 @@ function BakeryApp() {
       ? rangeOrders.reduce((acc, order) => {
           const item = menu.find(m => m.id === order.menuItemId);
           const itemRevenue = item ? (item.sellingPrice || 0) * order.quantity : 0;
-          const saleAmount = itemRevenue + (order.deliveryCharge || 0);
+          const saleAmount = itemRevenue + (deliveryChargeByOrder.get(order.id) || 0);
           return acc + splitSaleForGst(saleAmount, settings.gstRate || 0, settings.gstPricingMode || 'exclusive').gstAmount;
         }, 0)
       : 0;
