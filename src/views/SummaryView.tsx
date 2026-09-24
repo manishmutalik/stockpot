@@ -326,48 +326,48 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6">
-                <div className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm group hover:shadow-md transition-all flex flex-col">
+                <div className="bg-white p-6 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
                   <div className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px]">Total Income</div>
-                  <div className="text-4xl font-sans font-bold text-emerald-600">{currency.symbol}{financials.income}</div>
+                  <div className="text-2xl font-sans font-bold text-emerald-600 truncate">{currency.symbol}{financials.income}</div>
                   <div className="text-[10px] text-stone-400 mt-2 uppercase font-bold tracking-wider">From {filteredOrders.reduce((acc, o) => acc + o.quantity, 0)} items sold</div>
                 </div>
-                <div className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm group hover:shadow-md transition-all flex flex-col">
+                <div className="bg-white p-6 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
                   <div className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px]">Cost of Goods Sold</div>
-                  <div className="text-4xl font-sans font-bold text-rose-600">{currency.symbol}{financials.orderExpenses.toFixed(2)}</div>
+                  <div className="text-2xl font-sans font-bold text-rose-600 truncate">{currency.symbol}{financials.orderExpenses.toFixed(2)}</div>
                   <div className="text-[10px] text-stone-400 mt-2 uppercase font-bold tracking-wider">
                     Cost of fulfilled orders
                   </div>
                 </div>
-                <div className="bg-amber-50 p-8 rounded-[10px] sm:rounded-[15px] border border-amber-100 shadow-sm group hover:shadow-md transition-all flex flex-col">
+                <div className="bg-amber-50 p-6 rounded-[10px] sm:rounded-[15px] border border-amber-100 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
                   <div className="text-amber-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px] flex items-center gap-1.5">
                     <Factory size={11} /> Production Cost
                   </div>
-                  <div className="text-4xl font-sans font-bold text-amber-700">{currency.symbol}{totalProductionCost.toFixed(2)}</div>
+                  <div className="text-2xl font-sans font-bold text-amber-700 truncate">{currency.symbol}{totalProductionCost.toFixed(2)}</div>
                   <div className="text-[10px] text-amber-500 mt-2 uppercase font-bold tracking-wider">
                     {filteredProductionRuns.length} run{filteredProductionRuns.length !== 1 ? 's' : ''} in period
                   </div>
                 </div>
-                <div className="bg-sky-50 p-8 rounded-[10px] sm:rounded-[15px] border border-sky-100 shadow-sm group hover:shadow-md transition-all flex flex-col">
+                <div className="bg-sky-50 p-6 rounded-[10px] sm:rounded-[15px] border border-sky-100 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
                   <div className="text-sky-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px] flex items-center gap-1.5">
                     <MapPin size={11} /> Delivery Expenses
                   </div>
-                  <div className="text-4xl font-sans font-bold text-sky-700">{currency.symbol}{financials.deliveryExpenses.toFixed(2)}</div>
+                  <div className="text-2xl font-sans font-bold text-sky-700 truncate">{currency.symbol}{financials.deliveryExpenses.toFixed(2)}</div>
                   <div className="text-[10px] text-sky-500 mt-2 uppercase font-bold tracking-wider">
                     Paid to third-party couriers
                   </div>
                 </div>
-                <div className="bg-rose-50 p-8 rounded-[10px] sm:rounded-[15px] border border-rose-100 shadow-sm group hover:shadow-md transition-all flex flex-col">
+                <div className="bg-rose-50 p-6 rounded-[10px] sm:rounded-[15px] border border-rose-100 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
                   <div className="text-rose-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px] flex items-center gap-1.5">
                     <Trash2 size={11} /> Wastage
                   </div>
-                  <div className="text-4xl font-sans font-bold text-rose-700">{currency.symbol}{financials.wastageExpenses.toFixed(2)}</div>
+                  <div className="text-2xl font-sans font-bold text-rose-700 truncate">{currency.symbol}{financials.wastageExpenses.toFixed(2)}</div>
                   <div className="text-[10px] text-rose-500 mt-2 uppercase font-bold tracking-wider">
                     {filteredWastageLogs.length} log{filteredWastageLogs.length !== 1 ? 's' : ''} in period
                   </div>
                 </div>
-                <div className="bg-primary/5 p-8 rounded-[10px] sm:rounded-[15px] border border-primary/20 shadow-lg shadow-primary/5 group hover:shadow-primary/10 transition-all flex flex-col">
+                <div className="bg-primary/5 p-6 rounded-[10px] sm:rounded-[15px] border border-primary/20 shadow-lg shadow-primary/5 group hover:shadow-primary/10 transition-all flex flex-col min-w-0">
                   <div className="text-primary/60 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px]">Net Profit</div>
-                  <div className="text-4xl font-sans font-bold text-primary">{currency.symbol}{financials.profit.toFixed(2)}</div>
+                  <div className="text-2xl font-sans font-bold text-primary truncate">{currency.symbol}{financials.profit.toFixed(2)}</div>
                   <div className="text-[10px] text-primary/40 mt-2 uppercase font-bold tracking-wider">
                     {financials.income > 0 ? `${((financials.profit / financials.income) * 100).toFixed(1)}% margin` : 'No sales yet'}
                     {financials.experimentExpenses > 0 && <span className="block mt-1">Operating Exp: {currency.symbol}{financials.experimentExpenses.toFixed(2)} R&amp;D</span>}
