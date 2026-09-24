@@ -122,6 +122,16 @@ export interface Order {
   /** What's paid to a third-party courier (Uber, Porter, etc.) — counted as
    * an expense. Only meaningful when deliveryMethod is 'third_party'. */
   deliveryFee?: number;
+  /** Groups several single-item Order documents into one logical order the
+   * customer thinks of as a single purchase (e.g. "2 cakes and 3 cookies").
+   * Undefined/absent means this order isn't part of a multi-item group —
+   * fully backward compatible with every existing order.
+   *
+   * Each grouped Order is still a complete, independent document — its own
+   * fulfilled status, its own refund status, etc. Group membership is for
+   * UI presentation and bulk actions, not a change to what an individual
+   * Order document means. */
+  orderGroupId?: string;
 }
 
 /**

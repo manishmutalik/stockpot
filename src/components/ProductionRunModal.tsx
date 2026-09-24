@@ -23,6 +23,11 @@ export interface ProductionRun {
   costTotal: number;       // Material cost snapshotted at creation time (not live-calculated)
   createdAt: number;       // Unix ms timestamp
   expiryDate?: string;     // YYYY-MM-DD
+  /** Groups several single-recipe ProductionRun documents that were logged
+   * together in one session (e.g. "today's baking run made cookies and a
+   * cake"). Same semantics as Order.orderGroupId — display/UX grouping only,
+   * each run stays an independent, fully-functioning document underneath. */
+  productionSessionId?: string;
 }
 
 interface MenuItem {
