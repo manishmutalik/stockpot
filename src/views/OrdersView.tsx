@@ -11,7 +11,8 @@ import {
   MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
   LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X
 } from 'lucide-react';
-import { AppViewProps, Order } from '../types';
+import { AppViewProps, Order, MenuItem } from '../types';
+import { clusterOrdersByGroup } from '../utils/orderClustering';
 import { IngredientSelectorModal } from '../components/IngredientSelectorModal';
 import { ProductionRunModal } from '../components/ProductionRunModal';
 import { CURRENCIES, INITIAL_MATERIALS } from '../App';
@@ -86,6 +87,167 @@ const DeliveryDetailsSection: React.FC<{
             )}
           </div>
         </>
+      )}
+    </div>
+  );
+};
+
+/**
+ * One order's editable row — item, quantity, customer name/phone, and its
+ * actions (delivery details, fulfill, delete). Extracted so the same row
+ * renders identically whether it stands alone or sits nested inside a
+ * multi-item order's clustered container (see the orderGroupId clustering
+ * in OrdersView below) — one implementation, not two copies to keep in sync.
+ */
+const OrderRow: React.FC<{
+  order: Order;
+  menu: MenuItem[];
+  updateOrder: (id: string, field: keyof Order, value: any) => void;
+  fulfillOrder: (order: Order) => void;
+  deleteOrder: (id: string) => void;
+  expandedOrderIds: Set<string>;
+  toggleDeliveryDetails: (orderId: string) => void;
+  currencySymbol: string;
+}> = ({ order, menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol }) => {
+  return (
+    <div className="group p-3 bg-stone-50/50 rounded-xl border border-stone-100 hover:border-primary/20 transition-all">
+      {/* Mobile: stacked card layout */}
+      <div className="flex flex-col gap-2 sm:hidden">
+        <select
+          value={order.menuItemId || ''}
+          onChange={(e) => updateOrder(order.id, 'menuItemId', e.target.value)}
+          className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm"
+        >
+          <option value="" disabled>Select Item</option>
+          {menu.map(m => <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name}</option>)}
+        </select>
+        <div className="flex items-center gap-2">
+          <input
+            type="number" min="1"
+            value={order.quantity ?? 0}
+            onChange={(e) => updateOrder(order.id, 'quantity', parseInt(e.target.value) || 0)}
+            className="w-20 bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none shadow-sm text-center"
+          />
+          <button
+            onClick={() => toggleDeliveryDetails(order.id)}
+            className="p-2.5 text-stone-400 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors shrink-0"
+            title="Delivery details"
+          >
+            <MapPin size={18} fill={order.deliveryMethod && order.deliveryMethod !== 'pickup' ? 'currentColor' : 'none'} />
+          </button>
+          {!order.fulfilled ? (
+            <button
+              onClick={() => fulfillOrder(order)}
+              className="p-2.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors shrink-0"
+              title="Fulfill Order (deduct inventory)"
+            >
+              <CheckCircle2 size={18} />
+            </button>
+          ) : (
+            <span className="p-2.5 text-emerald-500 shrink-0" title="Order fulfilled — inventory deducted">
+              <CheckCircle2 size={18} fill="currentColor" className="text-emerald-100" />
+            </span>
+          )}
+          <button
+            onClick={() => deleteOrder(order.id)}
+            className="p-2.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors shrink-0"
+            title="Delete Order"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={order.customerName || ''}
+            onChange={(e) => updateOrder(order.id, 'customerName', e.target.value)}
+            placeholder="Customer name"
+            className="flex-1 bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none shadow-sm"
+          />
+          <input
+            type="text"
+            value={order.customerPhone || ''}
+            onChange={(e) => updateOrder(order.id, 'customerPhone', e.target.value)}
+            placeholder="Phone"
+            className="w-28 bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none shadow-sm"
+          />
+        </div>
+        {expandedOrderIds.has(order.id) && (
+          <DeliveryDetailsSection order={order} updateOrder={updateOrder} currencySymbol={currencySymbol} />
+        )}
+      </div>
+      {/* Desktop: grid row layout */}
+      <div className="hidden sm:grid grid-cols-12 items-center gap-4">
+        <div className="col-span-4">
+          <select
+            value={order.menuItemId || ''}
+            onChange={(e) => updateOrder(order.id, 'menuItemId', e.target.value)}
+            className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm transition-all"
+          >
+            <option value="" disabled>Select Item</option>
+            {menu.map(m => <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name}</option>)}
+          </select>
+        </div>
+        <div className="col-span-2">
+          <input
+            type="number" min="1"
+            value={order.quantity ?? 0}
+            onChange={(e) => updateOrder(order.id, 'quantity', parseInt(e.target.value) || 0)}
+            className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-mono font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm transition-all"
+          />
+        </div>
+        <div className="col-span-2">
+          <input
+            type="text"
+            value={order.customerName || ''}
+            onChange={(e) => updateOrder(order.id, 'customerName', e.target.value)}
+            placeholder="No name"
+            className="w-full bg-stone-50 border border-stone-100 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all"
+          />
+        </div>
+        <div className="col-span-2">
+          <input
+            type="text"
+            value={order.customerPhone || ''}
+            onChange={(e) => updateOrder(order.id, 'customerPhone', e.target.value)}
+            placeholder="No phone"
+            className="w-full bg-stone-50 border border-stone-100 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all"
+          />
+        </div>
+        <div className="col-span-2 flex justify-end gap-1">
+          <button
+            onClick={() => toggleDeliveryDetails(order.id)}
+            className={`transition-colors p-2 rounded-xl ${order.deliveryMethod && order.deliveryMethod !== 'pickup' ? 'text-primary bg-primary/5' : 'text-stone-300 hover:text-primary hover:bg-primary/5 opacity-0 group-hover:opacity-100'}`}
+            title="Delivery details"
+          >
+            <MapPin size={18} fill={order.deliveryMethod && order.deliveryMethod !== 'pickup' ? 'currentColor' : 'none'} />
+          </button>
+          {!order.fulfilled ? (
+            <button
+              onClick={() => fulfillOrder(order)}
+              className="text-stone-300 hover:text-emerald-500 transition-colors p-2 hover:bg-emerald-50 rounded-xl opacity-0 group-hover:opacity-100"
+              title="Fulfill Order (deduct inventory)"
+            >
+              <CheckCircle2 size={18} />
+            </button>
+          ) : (
+            <span className="text-emerald-500 p-2" title="Order fulfilled — inventory deducted">
+              <CheckCircle2 size={18} fill="currentColor" className="text-emerald-100" />
+            </span>
+          )}
+          <button
+            onClick={() => deleteOrder(order.id)}
+            className="text-stone-300 hover:text-rose-500 transition-colors p-2 hover:bg-rose-50 rounded-xl opacity-0 group-hover:opacity-100"
+            title="Delete Order"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
+      </div>
+      {expandedOrderIds.has(order.id) && (
+        <div className="hidden sm:block">
+          <DeliveryDetailsSection order={order} updateOrder={updateOrder} currencySymbol={currencySymbol} />
+        </div>
       )}
     </div>
   );
@@ -321,148 +483,71 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                             <div className="col-span-2 text-right">Actions</div>
                           </div>
                           <div className="px-3 sm:px-8 pb-4 space-y-2">
-                            {byDate[date].map(order => (
-                              <div key={order.id} className="group p-3 bg-stone-50/50 rounded-xl border border-stone-100 hover:border-primary/20 transition-all">
-                                {/* Mobile: stacked card layout */}
-                                <div className="flex flex-col gap-2 sm:hidden">
-                                  <select
-                                    value={order.menuItemId || ''}
-                                    onChange={(e) => updateOrder(order.id, 'menuItemId', e.target.value)}
-                                    className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm"
-                                  >
-                                    <option value="" disabled>Select Item</option>
-                                    {menu.map(m => <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name}</option>)}
-                                  </select>
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="number" min="1"
-                                      value={order.quantity ?? 0}
-                                      onChange={(e) => updateOrder(order.id, 'quantity', parseInt(e.target.value) || 0)}
-                                      className="w-20 bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none shadow-sm text-center"
-                                    />
-                                    <button
-                                      onClick={() => toggleDeliveryDetails(order.id)}
-                                      className="p-2.5 text-stone-400 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors shrink-0"
-                                      title="Delivery details"
-                                    >
-                                      <MapPin size={18} fill={order.deliveryMethod && order.deliveryMethod !== 'pickup' ? 'currentColor' : 'none'} />
-                                    </button>
-                                    {!order.fulfilled ? (
-                                      <button
-                                        onClick={() => fulfillOrder(order)}
-                                        className="p-2.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors shrink-0"
-                                        title="Fulfill Order (deduct inventory)"
-                                      >
-                                        <CheckCircle2 size={18} />
-                                      </button>
-                                    ) : (
-                                      <span className="p-2.5 text-emerald-500 shrink-0" title="Order fulfilled — inventory deducted">
-                                        <CheckCircle2 size={18} fill="currentColor" className="text-emerald-100" />
+                            {(() => {
+                              const clusters = clusterOrdersByGroup(byDate[date]);
+
+                              return clusters.map(cluster => cluster.type === 'single' ? (
+                                <OrderRow
+                                  key={cluster.order.id}
+                                  order={cluster.order}
+                                  menu={menu}
+                                  updateOrder={updateOrder}
+                                  fulfillOrder={fulfillOrder}
+                                  deleteOrder={deleteOrder}
+                                  expandedOrderIds={expandedOrderIds}
+                                  toggleDeliveryDetails={toggleDeliveryDetails}
+                                  currencySymbol={currency.symbol}
+                                />
+                              ) : (
+                                <div key={cluster.groupId} className="border-2 border-primary/15 rounded-xl overflow-hidden">
+                                  <div className="flex items-center justify-between px-3 py-2 bg-primary/5 border-b border-primary/10">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <ShoppingBag size={13} className="text-primary shrink-0" />
+                                      <span className="text-[10px] font-bold uppercase tracking-widest text-primary truncate">
+                                        Order ({cluster.orders.length} items){cluster.orders[0].customerName ? ` — ${cluster.orders[0].customerName}` : ''}
                                       </span>
-                                    )}
-                                    <button
-                                      onClick={() => deleteOrder(order.id)}
-                                      className="p-2.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors shrink-0"
-                                      title="Delete Order"
-                                    >
-                                      <Trash2 size={18} />
-                                    </button>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      type="text"
-                                      value={order.customerName || ''}
-                                      onChange={(e) => updateOrder(order.id, 'customerName', e.target.value)}
-                                      placeholder="Customer name"
-                                      className="flex-1 bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none shadow-sm"
-                                    />
-                                    <input
-                                      type="text"
-                                      value={order.customerPhone || ''}
-                                      onChange={(e) => updateOrder(order.id, 'customerPhone', e.target.value)}
-                                      placeholder="Phone"
-                                      className="w-28 bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none shadow-sm"
-                                    />
-                                  </div>
-                                  {expandedOrderIds.has(order.id) && (
-                                    <DeliveryDetailsSection order={order} updateOrder={updateOrder} currencySymbol={currency.symbol} />
-                                  )}
-                                </div>
-                                {/* Desktop: grid row layout */}
-                                <div className="hidden sm:grid grid-cols-12 items-center gap-4">
-                                  <div className="col-span-4">
-                                    <select
-                                      value={order.menuItemId || ''}
-                                      onChange={(e) => updateOrder(order.id, 'menuItemId', e.target.value)}
-                                      className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm transition-all"
-                                    >
-                                      <option value="" disabled>Select Item</option>
-                                      {menu.map(m => <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name}</option>)}
-                                    </select>
-                                  </div>
-                                  <div className="col-span-2">
-                                    <input
-                                      type="number" min="1"
-                                      value={order.quantity ?? 0}
-                                      onChange={(e) => updateOrder(order.id, 'quantity', parseInt(e.target.value) || 0)}
-                                      className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-mono font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm transition-all"
-                                    />
-                                  </div>
-                                  <div className="col-span-2">
-                                    <input
-                                      type="text"
-                                      value={order.customerName || ''}
-                                      onChange={(e) => updateOrder(order.id, 'customerName', e.target.value)}
-                                      placeholder="No name"
-                                      className="w-full bg-stone-50 border border-stone-100 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all"
-                                    />
-                                  </div>
-                                  <div className="col-span-2">
-                                    <input
-                                      type="text"
-                                      value={order.customerPhone || ''}
-                                      onChange={(e) => updateOrder(order.id, 'customerPhone', e.target.value)}
-                                      placeholder="No phone"
-                                      className="w-full bg-stone-50 border border-stone-100 rounded-xl px-3 py-2 text-sm font-medium text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all"
-                                    />
-                                  </div>
-                                  <div className="col-span-2 flex justify-end gap-1">
-                                    <button
-                                      onClick={() => toggleDeliveryDetails(order.id)}
-                                      className={`transition-colors p-2 rounded-xl ${order.deliveryMethod && order.deliveryMethod !== 'pickup' ? 'text-primary bg-primary/5' : 'text-stone-300 hover:text-primary hover:bg-primary/5 opacity-0 group-hover:opacity-100'}`}
-                                      title="Delivery details"
-                                    >
-                                      <MapPin size={18} fill={order.deliveryMethod && order.deliveryMethod !== 'pickup' ? 'currentColor' : 'none'} />
-                                    </button>
-                                    {!order.fulfilled ? (
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {cluster.orders.some(o => !o.fulfilled) && (
+                                        <button
+                                          onClick={() => cluster.orders.forEach(o => { if (!o.fulfilled) fulfillOrder(o); })}
+                                          title="Fulfill every item in this order"
+                                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                        >
+                                          <CheckCircle2 size={13} /> Fulfill All
+                                        </button>
+                                      )}
                                       <button
-                                        onClick={() => fulfillOrder(order)}
-                                        className="text-stone-300 hover:text-emerald-500 transition-colors p-2 hover:bg-emerald-50 rounded-xl opacity-0 group-hover:opacity-100"
-                                        title="Fulfill Order (deduct inventory)"
+                                        onClick={() => {
+                                          if (window.confirm(`Delete this whole order? This removes all ${cluster.orders.length} items.`)) {
+                                            cluster.orders.forEach(o => deleteOrder(o.id));
+                                          }
+                                        }}
+                                        title="Delete every item in this order"
+                                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-50 transition-colors"
                                       >
-                                        <CheckCircle2 size={18} />
+                                        <Trash2 size={13} /> Delete All
                                       </button>
-                                    ) : (
-                                      <span className="text-emerald-500 p-2" title="Order fulfilled — inventory deducted">
-                                        <CheckCircle2 size={18} fill="currentColor" className="text-emerald-100" />
-                                      </span>
-                                    )}
-                                    <button
-                                      onClick={() => deleteOrder(order.id)}
-                                      className="text-stone-300 hover:text-rose-500 transition-colors p-2 hover:bg-rose-50 rounded-xl opacity-0 group-hover:opacity-100"
-                                      title="Delete Order"
-                                    >
-                                      <Trash2 size={18} />
-                                    </button>
+                                    </div>
+                                  </div>
+                                  <div className="p-2 space-y-2 bg-white">
+                                    {cluster.orders.map(order => (
+                                      <OrderRow
+                                        key={order.id}
+                                        order={order}
+                                        menu={menu}
+                                        updateOrder={updateOrder}
+                                        fulfillOrder={fulfillOrder}
+                                        deleteOrder={deleteOrder}
+                                        expandedOrderIds={expandedOrderIds}
+                                        toggleDeliveryDetails={toggleDeliveryDetails}
+                                        currencySymbol={currency.symbol}
+                                      />
+                                    ))}
                                   </div>
                                 </div>
-                                {expandedOrderIds.has(order.id) && (
-                                  <div className="hidden sm:block">
-                                    <DeliveryDetailsSection order={order} updateOrder={updateOrder} currencySymbol={currency.symbol} />
-                                  </div>
-                                )}
-                              </div>
-                            ))}
+                              ));
+                            })()}
                           </div>
                         </div>
                       ))}
