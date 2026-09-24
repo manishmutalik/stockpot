@@ -1122,7 +1122,13 @@ function BakeryApp() {
     // this range. Self-delivery/pickup orders have no fee tracked here.
     const deliveryExpenses = rangeOrders.reduce((acc, order) => acc + (order.deliveryFee || 0), 0);
 
-    const expenses = orderExpenses + experimentExpenses + deliveryExpenses;
+    // Cost of discarded/expired stock logged in this range (see handleDiscardBatch
+    // and useWastageActions) — wasted material and finished-goods cost that was
+    // already paid for but never turned into revenue.
+    const rangeWastage = wastageLogs.filter(w => w.date >= start && w.date <= end);
+    const wastageExpenses = rangeWastage.reduce((acc, w) => acc + (w.cost || 0), 0);
+
+    const expenses = orderExpenses + experimentExpenses + deliveryExpenses + wastageExpenses;
 
     // GST collected on sales (output tax) — only meaningful while GST is
     // switched on in Settings; otherwise there's no rate to apply.
@@ -1141,7 +1147,7 @@ function BakeryApp() {
       materials.map(mat => ({ usedAmount: usage[mat.id] || 0, costPerUnit: mat.costPerUnit, gstRate: mat.gstRate }))
     );
 
-    return { income, expenses, orderExpenses, experimentExpenses, deliveryExpenses, gstCollected, gstPaid, profit: income - orderExpenses - deliveryExpenses };
+    return { income, expenses, orderExpenses, experimentExpenses, deliveryExpenses, wastageExpenses, gstCollected, gstPaid, profit: income - orderExpenses - deliveryExpenses - wastageExpenses };
   };
 
   // Round-to-2-decimal wrapper around `getFinancialsForRange` for the summary period.
@@ -1154,11 +1160,12 @@ function BakeryApp() {
       orderExpenses: parseFloat(fins.orderExpenses.toFixed(2)),
       experimentExpenses: parseFloat(fins.experimentExpenses.toFixed(2)),
       deliveryExpenses: parseFloat(fins.deliveryExpenses.toFixed(2)),
+      wastageExpenses: parseFloat(fins.wastageExpenses.toFixed(2)),
       gstCollected: parseFloat(fins.gstCollected.toFixed(2)),
       gstPaid: parseFloat(fins.gstPaid.toFixed(2)),
       profit: parseFloat(fins.profit.toFixed(2))
     };
-  }, [summaryDateStart, summaryDateEnd, orders, experiments, menu, materials, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]);
+  }, [summaryDateStart, summaryDateEnd, orders, experiments, menu, materials, wastageLogs, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]);
 
   // Data points for the Recharts AreaChart.
   // Shape adapts based on summaryRange: daily→7 days, weekly→5 weeks, monthly→6 months.
@@ -1240,7 +1247,7 @@ function BakeryApp() {
       }
     }
     return data;
-  }, [orders, menu, materials, summaryRange, summaryRefDate, summaryDateStart, summaryDateEnd]);
+  }, [orders, menu, materials, wastageLogs, summaryRange, summaryRefDate, summaryDateStart, summaryDateEnd]);
 
   /**
    * Provides visual "refresh" feedback by updating `lastSynced`.
@@ -1349,7 +1356,7 @@ function BakeryApp() {
 
   // Aggregated income/expenses/profit for the currently selected date range.
   // Re-computed whenever orders, menu prices, materials costs, or date bounds change.
-  const summaryFinancials = useMemo(() => getFinancialsForRange(summaryDateStart, summaryDateEnd), [summaryDateStart, summaryDateEnd, orders, menu, materials, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]);
+  const summaryFinancials = useMemo(() => getFinancialsForRange(summaryDateStart, summaryDateEnd), [summaryDateStart, summaryDateEnd, orders, menu, materials, wastageLogs, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]);
   // Count and average value of orders within the selected period.
   const activeOrdersCount = useMemo(() => orders.filter(o => o.date >= summaryDateStart && o.date <= summaryDateEnd).length, [orders, summaryDateStart, summaryDateEnd]);
   const averageOrderValue = useMemo(() => activeOrdersCount > 0 ? summaryFinancials.income / activeOrdersCount : 0, [summaryFinancials.income, activeOrdersCount]);

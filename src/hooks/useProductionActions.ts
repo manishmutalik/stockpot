@@ -39,11 +39,21 @@ export function useProductionActions(
     runData: Omit<ProductionRun, 'id' | 'createdAt'>
   ) => {
     if (!auth.currentUser) return;
+
+    // The selected recipe must exist in the current menu — a stale/unknown id
+    // (e.g. a UI default picked before the real menu loaded) would otherwise
+    // silently create a nameless phantom `menu/{recipeId}` doc and a dangling
+    // Order, both of which render with a blank item name.
+    const recipeItem = menu.find(m => m.id === runData.recipeId);
+    if (!recipeItem) {
+      showAlert('Error', 'Selected recipe could not be found. Please reselect it and try again.');
+      throw new Error(`logProductionRun: no menu item found for recipeId "${runData.recipeId}"`);
+    }
+
     const userId = auth.currentUser.uid;
     const id = Math.random().toString(36).substr(2, 9);
 
     // Firestore does not accept `undefined` — build object only with defined fields
-    const recipeItem = menu.find(m => m.id === runData.recipeId);
     let expiryDate = undefined;
     if (recipeItem?.shelfLifeDays) {
        const d = new Date(runData.date);
@@ -69,16 +79,13 @@ export function useProductionActions(
       const batch = writeBatch(db);
 
       // 1. Deduct raw materials (added to batch, not committed yet)
-      const item = menu.find(m => m.id === runData.recipeId);
-      if (item) {
-        await deductIngredients(userId, materials, item.recipe, runData.quantityProduced, batch);
-      }
+      await deductIngredients(userId, materials, recipeItem.recipe, runData.quantityProduced, batch);
 
       // 2. Add finished goods (if purpose warrants it)
       const STOCK_PURPOSES: ProductionPurpose[] = ['customer_order', 'market_stock', 'other'];
       if (STOCK_PURPOSES.includes(runData.purpose)) {
         const effectiveYield = runData.quantityYield ?? runData.quantityProduced;
-        const currentStock = item?.finishedGoodsStock ?? 0;
+        const currentStock = recipeItem.finishedGoodsStock ?? 0;
         batch.set(
           doc(db, 'users', userId, 'menu', runData.recipeId),
           { finishedGoodsStock: currentStock + effectiveYield },
@@ -109,7 +116,7 @@ export function useProductionActions(
       await batch.commit();
 
       const orderNote = runData.purpose === 'customer_order' ? ' A matching order was added to the Orders tab.' : '';
-      showAlert('Production Run Logged', `Recorded ${runData.quantityProduced} unit(s) of ${item?.name || 'recipe'}. Raw materials deducted.${orderNote}`);
+      showAlert('Production Run Logged', `Recorded ${runData.quantityProduced} unit(s) of ${recipeItem.name}. Raw materials deducted.${orderNote}`);
     } catch (err: any) {
       console.error('logProductionRun error:', err);
       showAlert('Error', `Failed to log production run: ${err?.message || 'Unknown error'}`);
