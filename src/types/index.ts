@@ -246,17 +246,11 @@ export interface AppViewProps {
   
   isAddOrderModalOpen: boolean;
   setIsAddOrderModalOpen: (b: boolean) => void;
-  modalOrderDate: string;
-  setModalOrderDate: (s: string) => void;
-  modalCustomerName: string;
-  setModalCustomerName: (s: string) => void;
-  modalCustomerPhone: string;
-  setModalCustomerPhone: (s: string) => void;
-  modalLineItems: any[];
-  setModalLineItems: (l: any[]) => void;
-  isSavingOrder: boolean;
-  setIsSavingOrder: (b: boolean) => void;
-  
+  addOrderGroup: (
+    common: { date: string; customerName?: string; customerPhone?: string },
+    lineItems: { menuItemId: string; quantity: number }[]
+  ) => Promise<void>;
+
   summaryRefDate: string;
   setSummaryRefDate: (s: string) => void;
   expandedRecipeId: string | null;

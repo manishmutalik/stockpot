@@ -86,6 +86,7 @@ const SettingsView = React.lazy(() => import('./views/SettingsView').then(m => (
 
 import { IngredientSelectorModal } from './components/IngredientSelectorModal';
 import { ProductionRunModal, ProductionRun, ProductionPurpose } from './components/ProductionRunModal';
+import { AddOrderModal } from './components/AddOrderModal';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { 
@@ -454,14 +455,9 @@ function BakeryApp() {
     const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split('T')[0];
   });
   const [orderFilterEnd, setOrderFilterEnd] = useState(new Date().toISOString().split('T')[0]);
-  // Add Order modal state
+  // Add Order modal state — the modal itself (AddOrderModal) owns its form
+  // fields, same as ProductionRunModal; App.tsx only needs to control visibility.
   const [isAddOrderModalOpen, setIsAddOrderModalOpen] = useState(false);
-  interface OrderLineItem { menuItemId: string; quantity: number; }
-  const [modalOrderDate, setModalOrderDate] = useState(new Date().toISOString().split('T')[0]);
-  const [modalCustomerName, setModalCustomerName] = useState('');
-  const [modalCustomerPhone, setModalCustomerPhone] = useState('');
-  const [modalLineItems, setModalLineItems] = useState<OrderLineItem[]>([{ menuItemId: '', quantity: 1 }]);
-  const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [summaryRefDate, setSummaryRefDate] = useState(new Date().toISOString().split('T')[0]);
   const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
   const [inventorySortBy, setInventorySortBy] = useState<'name' | 'stock' | 'cost' | 'date'>('name');
@@ -879,7 +875,7 @@ function BakeryApp() {
   // ── Order Actions ────────────────────────────────────────────────────────────
   // Extracted to src/hooks/useOrderActions.ts as part of the Phase 4 breakup.
   const {
-    addOrder, fulfillOrder, updateOrder, deleteOrder, resetOrders,
+    addOrder, addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders,
   } = useOrderActions(menu, orders, materials, productionRuns, orderDate, showConfirm, showAlert);
 
   // ── Production Run Actions ───────────────────────────────────────────────────
@@ -1629,8 +1625,6 @@ function BakeryApp() {
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
-    modalOrderDate, setModalOrderDate, modalCustomerName, setModalCustomerName, modalCustomerPhone,
-    setModalCustomerPhone, modalLineItems, setModalLineItems, isSavingOrder, setIsSavingOrder,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
@@ -1643,7 +1637,7 @@ function BakeryApp() {
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
     deleteProductionRun, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
-    addOrder, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    addOrder, addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,
     billing, openBillingPortal, isOpeningPortal, startCheckout, isStartingCheckout,
@@ -1923,6 +1917,13 @@ function BakeryApp() {
           menu={menu}
           materials={materials}
           onSave={logProductionRunSession}
+          currency={currency}
+        />
+        <AddOrderModal
+          isOpen={isAddOrderModalOpen}
+          onClose={() => setIsAddOrderModalOpen(false)}
+          menu={menu}
+          onSave={addOrderGroup}
           currency={currency}
         />
         <IngredientSelectorModal

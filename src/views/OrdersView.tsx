@@ -125,6 +125,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
     removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
     deleteProductionRun, handleDiscardBatch, addOrder, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    isAddOrderModalOpen, setIsAddOrderModalOpen,
     handleRestock, restockMaterial, setRestockMaterial,
     showSaveFeedback, saveDay,
     updateCurrency, handleLogout, isListening, transcript, convertAmount
@@ -192,10 +193,22 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                   <button
                     onClick={addOrder}
                     disabled={menu.length === 0}
+                    title="Quickly add a single blank order to edit inline"
                     className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-primary/20 transform active:scale-95 disabled:opacity-50"
                   >
                     <Plus size={18} />
                     Add Order
+                  </button>
+
+                  {/* Multi-Item Order Button */}
+                  <button
+                    onClick={() => setIsAddOrderModalOpen(true)}
+                    disabled={menu.length === 0}
+                    title="Add a customer order with several items and customer details in one form"
+                    className="flex items-center gap-2 bg-white border border-primary/30 text-primary hover:bg-primary/5 px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-sm transform active:scale-95 disabled:opacity-50"
+                  >
+                    <ShoppingBag size={16} />
+                    Multi-Item Order
                   </button>
 
                   {shopifyStatus.connected && (
