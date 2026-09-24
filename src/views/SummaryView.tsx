@@ -62,6 +62,10 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     () => filteredProductionRuns.reduce((sum, r) => sum + (r.costTotal || 0), 0),
     [filteredProductionRuns]
   );
+  const filteredWastageLogs = useMemo(
+    () => wastageLogs.filter(w => w.date >= summaryDateStart && w.date <= summaryDateEnd),
+    [wastageLogs, summaryDateStart, summaryDateEnd]
+  );
 
   return (
     <motion.div
@@ -321,7 +325,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6">
                 <div className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm group hover:shadow-md transition-all">
                   <div className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-3">Total Income</div>
                   <div className="text-4xl font-sans font-bold text-emerald-600">{currency.symbol}{financials.income}</div>
@@ -352,12 +356,22 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                     Paid to third-party couriers
                   </div>
                 </div>
+                <div className="bg-rose-50 p-8 rounded-[10px] sm:rounded-[15px] border border-rose-100 shadow-sm group hover:shadow-md transition-all">
+                  <div className="text-rose-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <Trash2 size={11} /> Wastage
+                  </div>
+                  <div className="text-4xl font-sans font-bold text-rose-700">{currency.symbol}{financials.wastageExpenses.toFixed(2)}</div>
+                  <div className="text-[10px] text-rose-500 mt-2 uppercase font-bold tracking-wider">
+                    {filteredWastageLogs.length} log{filteredWastageLogs.length !== 1 ? 's' : ''} in period
+                  </div>
+                </div>
                 <div className="bg-primary/5 p-8 rounded-[10px] sm:rounded-[15px] border border-primary/20 shadow-lg shadow-primary/5 group hover:shadow-primary/10 transition-all">
                   <div className="text-primary/60 text-[10px] font-bold uppercase tracking-widest mb-3">Net Profit</div>
                   <div className="text-4xl font-sans font-bold text-primary">{currency.symbol}{financials.profit.toFixed(2)}</div>
                   <div className="text-[10px] text-primary/40 mt-2 uppercase font-bold tracking-wider">
                     {financials.income > 0 ? `${((financials.profit / financials.income) * 100).toFixed(1)}% margin` : 'No sales yet'}
                     {financials.experimentExpenses > 0 && <span className="block mt-1">Operating Exp: {currency.symbol}{financials.experimentExpenses.toFixed(2)} R&amp;D</span>}
+                    {financials.wastageExpenses > 0 && <span className="block mt-1">Wastage: {currency.symbol}{financials.wastageExpenses.toFixed(2)}</span>}
                   </div>
                 </div>
               </div>
