@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, ChevronDown, ChevronUp, Calendar, Package, Factory } from 'lucide-react';
 
 /**
@@ -106,6 +106,18 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   const [isSaving,   setIsSaving]   = useState(false);
   const [error,      setError]      = useState('');
 
+  // Re-sync the selected recipe against the *current* menu whenever the modal
+  // opens. `menu` can still be loading (or have changed) since `recipeId` was
+  // first initialized, so a value picked earlier may no longer exist — without
+  // this, a stale id silently survives validation and gets saved with no
+  // matching menu item (see logProductionRun's `item` lookup).
+  useEffect(() => {
+    if (isOpen && !menu.some(m => m.id === recipeId)) {
+      setRecipeId(menu[0]?.id || '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, menu]);
+
   // ─── Derived Values ─────────────────────────────────────────────────────────
   const selectedRecipe = menu.find(m => m.id === recipeId);
   const purposeInfo    = PURPOSE_OPTIONS.find(p => p.value === purpose);
@@ -135,7 +147,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
    */
    const handleSave = async () => {
     setError('');
-    if (!recipeId) {
+    if (!recipeId || !menu.some(m => m.id === recipeId)) {
       setError('Please select a recipe before logging.');
       return;
     }

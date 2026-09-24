@@ -104,6 +104,27 @@ describe('logProductionRun — linking a "customer order" run to an Order', () =
     expect(showAlert).toHaveBeenCalledWith('Production Run Logged', expect.stringContaining('Orders tab'));
   });
 
+  it('rejects an unknown recipeId instead of writing a nameless phantom menu item / order', async () => {
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, [], [], showAlert)
+    );
+
+    await expect(
+      result.current.logProductionRun({
+        recipeId: 'does-not-exist',
+        quantityProduced: 3,
+        date: '2026-02-01',
+        purpose: 'customer_order',
+        costTotal: 15,
+      } as any)
+    ).rejects.toThrow();
+
+    expect(batchCommit).not.toHaveBeenCalled();
+    expect(batchSet).not.toHaveBeenCalled();
+    expect(showAlert).toHaveBeenCalledWith('Error', expect.stringContaining('could not be found'));
+  });
+
   it('does NOT create an order for other purposes (e.g. market_stock)', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
