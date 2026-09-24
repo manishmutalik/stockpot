@@ -885,7 +885,7 @@ function BakeryApp() {
   // ── Production Run Actions ───────────────────────────────────────────────────
   // Extracted to src/hooks/useProductionActions.ts as part of the Phase 4 breakup.
   const {
-    logProductionRun, deleteProductionRun, handleDiscardBatch,
+    logProductionRun, logProductionRunSession, deleteProductionRun, handleDiscardBatch,
     runsNeedingOrderBackfill, backfillMissingOrders,
   } = useProductionActions(menu, materials, productionRuns, orders, showAlert);
 
@@ -1922,7 +1922,7 @@ function BakeryApp() {
           onClose={() => setIsProductionRunModalOpen(false)}
           menu={menu}
           materials={materials}
-          onSave={logProductionRun}
+          onSave={logProductionRunSession}
           currency={currency}
         />
         <IngredientSelectorModal
