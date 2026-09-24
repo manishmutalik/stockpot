@@ -370,4 +370,97 @@ describe('deleteProductionRun — cleaning up the linked Order', () => {
 
     window.confirm = originalConfirm;
   });
+
+  it('with skipConfirm/silent, deletes without prompting and without its own success alert', async () => {
+    const run: ProductionRun = {
+      id: 'run4', recipeId: 'cake', quantityProduced: 2, quantityYield: 2, remainingQuantity: 2,
+      date: '2026-02-01', purpose: 'market_stock', costTotal: 10,
+    } as ProductionRun;
+
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => true);
+
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, [run], [], showAlert)
+    );
+
+    await result.current.deleteProductionRun('run4', { skipConfirm: true, silent: true });
+
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(batchDelete).toHaveBeenCalledTimes(1);
+    expect(showAlert).not.toHaveBeenCalledWith('Success', expect.any(String));
+
+    window.confirm = originalConfirm;
+  });
+});
+
+describe('deleteProductionRunSession — bulk-deleting a whole session with one confirm', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const sessionRuns: ProductionRun[] = [
+    { id: 'r1', recipeId: 'cake', quantityProduced: 2, quantityYield: 2, remainingQuantity: 2, date: '2026-03-01', purpose: 'market_stock', costTotal: 10, productionSessionId: 'sess1' } as ProductionRun,
+    { id: 'r2', recipeId: 'cookie', quantityProduced: 3, quantityYield: 3, remainingQuantity: 3, date: '2026-03-01', purpose: 'market_stock', costTotal: 5, productionSessionId: 'sess1' } as ProductionRun,
+    { id: 'r3', recipeId: 'cake', quantityProduced: 1, date: '2026-03-02', purpose: 'market_stock', costTotal: 4 } as ProductionRun, // unrelated
+  ];
+
+  it('asks exactly once, then deletes every run in the session without per-run prompts', async () => {
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => true);
+
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, sessionRuns, [], showAlert)
+    );
+
+    await result.current.deleteProductionRunSession('sess1');
+
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    const deletedRunIds = batchDelete.mock.calls
+      .map(([ref]: any[]) => ref.path)
+      .filter((p: string) => p.includes('productionRuns'))
+      .map((p: string) => p.split('/').pop());
+    expect(deletedRunIds.sort()).toEqual(['r1', 'r2']); // not r3, which isn't part of the session
+    expect(showAlert).toHaveBeenCalledWith('Success', expect.stringContaining('2'));
+    // Only the one consolidated alert, not one per run.
+    expect(showAlert).toHaveBeenCalledTimes(1);
+
+    window.confirm = originalConfirm;
+  });
+
+  it('deletes nothing when the confirmation is declined', async () => {
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => false);
+
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, sessionRuns, [], showAlert)
+    );
+
+    await result.current.deleteProductionRunSession('sess1');
+
+    expect(batchDelete).not.toHaveBeenCalled();
+    expect(showAlert).not.toHaveBeenCalled();
+
+    window.confirm = originalConfirm;
+  });
+
+  it('is a no-op for a session id with no matching runs', async () => {
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => true);
+
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, sessionRuns, [], showAlert)
+    );
+
+    await result.current.deleteProductionRunSession('no-such-session');
+
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(batchDelete).not.toHaveBeenCalled();
+
+    window.confirm = originalConfirm;
+  });
 });

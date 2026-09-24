@@ -206,13 +206,16 @@ export function useProductionActions(
    *     leave an orphaned, already-fulfilled order behind with nothing
    *     backing it.
    */
-  const deleteProductionRun = async (runId: string) => {
+  const deleteProductionRun = async (
+    runId: string,
+    options?: { skipConfirm?: boolean; silent?: boolean } // used by deleteProductionRunSession to bulk-delete a session with one confirm and one summary alert instead of one per run
+  ) => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const run = productionRuns.find(r => r.id === runId);
     if (!run) return;
 
-    if (window.confirm('Are you sure you want to delete this production run? This will restore raw materials and deduct finished goods stock.')) {
+    if (options?.skipConfirm || window.confirm('Are you sure you want to delete this production run? This will restore raw materials and deduct finished goods stock.')) {
       try {
         const batch = writeBatch(db);
 
@@ -241,12 +244,37 @@ export function useProductionActions(
 
         await batch.commit();
 
-        showAlert('Success', 'Production run deleted and inventory restored.');
+        if (!options?.silent) {
+          showAlert('Success', 'Production run deleted and inventory restored.');
+        }
       } catch (err: any) {
         console.error('deleteProductionRun error:', err);
         showAlert('Error', `Failed to delete production run: ${err?.message || 'Unknown error'}`);
       }
     }
+  };
+
+  /**
+   * Deletes every production run in a session (see
+   * ProductionRun.productionSessionId) with ONE confirmation instead of one
+   * per run. Each run still goes through the unchanged deleteProductionRun
+   * per member (its own inventory reversal, its own linked-order cleanup),
+   * just with its individual confirm and success alert suppressed — a
+   * single consolidated success alert fires at the end instead.
+   */
+  const deleteProductionRunSession = async (sessionId: string) => {
+    const sessionRuns = productionRuns.filter(r => r.productionSessionId === sessionId);
+    if (sessionRuns.length === 0) return;
+
+    if (!window.confirm(`Are you sure you want to delete this whole session? This restores raw materials and deducts finished-goods stock for all ${sessionRuns.length} item(s).`)) {
+      return;
+    }
+
+    for (const run of sessionRuns) {
+      await deleteProductionRun(run.id, { skipConfirm: true, silent: true });
+    }
+
+    showAlert('Success', `Deleted ${sessionRuns.length} item(s) and restored inventory.`);
   };
 
   /**
@@ -350,6 +378,7 @@ export function useProductionActions(
     logProductionRun,
     logProductionRunSession,
     deleteProductionRun,
+    deleteProductionRunSession,
     handleDiscardBatch,
     runsNeedingOrderBackfill,
     backfillMissingOrders,

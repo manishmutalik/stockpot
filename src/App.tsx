@@ -881,7 +881,7 @@ function BakeryApp() {
   // ── Production Run Actions ───────────────────────────────────────────────────
   // Extracted to src/hooks/useProductionActions.ts as part of the Phase 4 breakup.
   const {
-    logProductionRun, logProductionRunSession, deleteProductionRun, handleDiscardBatch,
+    logProductionRun, logProductionRunSession, deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
     runsNeedingOrderBackfill, backfillMissingOrders,
   } = useProductionActions(menu, materials, productionRuns, orders, showAlert);
 
@@ -1636,7 +1636,7 @@ function BakeryApp() {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
+    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
     addOrder, addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,
@@ -1749,27 +1749,43 @@ function BakeryApp() {
                     <ul className="flex flex-col gap-2 max-h-60 overflow-y-auto">
                       {expiredBatches.map(batch => {
                         const recipe = menu.find(m => m.id === batch.recipeId);
+                        // Other items from the same multi-item session (see
+                        // productionSessionId), so discarding one bad batch is
+                        // an informed choice — not a guess based on the recipe
+                        // name alone if several things were made together.
+                        const sessionSiblings = batch.productionSessionId
+                          ? productionRuns
+                              .filter(r => r.productionSessionId === batch.productionSessionId && r.id !== batch.id)
+                              .map(r => menu.find(m => m.id === r.recipeId)?.name || 'Unknown')
+                          : [];
                         return (
-                          <li key={batch.id} className="flex justify-between items-center gap-2 text-xs">
-                            <span className="font-bold text-stone-700 truncate pr-2">{recipe?.name || 'Unknown'}</span>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-rose-500 font-medium whitespace-nowrap bg-rose-50 px-1.5 py-0.5 rounded">
-                                Qty: {batch.remainingQuantity}
-                              </span>
-                              <button
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (window.confirm(`Discard ${batch.remainingQuantity} unit(s) of "${recipe?.name || 'this item'}"? This will be logged as wastage.`)) {
-                                    handleDiscardBatch(batch);
-                                  }
-                                }}
-                                className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                                title="Discard this batch and log as wastage"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                          <li key={batch.id} className="flex flex-col gap-0.5 text-xs">
+                            <div className="flex justify-between items-center gap-2">
+                              <span className="font-bold text-stone-700 truncate pr-2">{recipe?.name || 'Unknown'}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-rose-500 font-medium whitespace-nowrap bg-rose-50 px-1.5 py-0.5 rounded">
+                                  Qty: {batch.remainingQuantity}
+                                </span>
+                                <button
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`Discard ${batch.remainingQuantity} unit(s) of "${recipe?.name || 'this item'}"? This will be logged as wastage.`)) {
+                                      handleDiscardBatch(batch);
+                                    }
+                                  }}
+                                  className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                  title="Discard this batch and log as wastage"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
                             </div>
+                            {sessionSiblings.length > 0 && (
+                              <span className="text-[9px] text-stone-400 truncate">
+                                Also from this session: {sessionSiblings.join(', ')}
+                              </span>
+                            )}
                           </li>
                         );
                       })}

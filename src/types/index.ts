@@ -312,6 +312,7 @@ export interface AppViewProps {
   removeIngredientFromRecipe: (id: string, i: number) => void;
   logProductionRun: (r: any) => void;
   deleteProductionRun: (id: string) => void;
+  deleteProductionRunSession: (sessionId: string) => void;
   handleDiscardBatch: (b: any) => void;
   runsNeedingOrderBackfill: any[];
   backfillMissingOrders: () => void;
