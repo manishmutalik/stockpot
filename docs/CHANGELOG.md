@@ -1,5 +1,54 @@
 # Changelog
 
+## Multi-item orders & production runs
+
+A customer order is often for several different items ("2 cakes and 3
+cookies"), and a single baking session often makes several different
+things at once. `Order` and `ProductionRun` were both single-item
+(`menuItemId`/`recipeId` + one `quantity`) — this feature adds multi-item
+support to both, without restructuring either into arrays of line items.
+
+- **Data model**: `Order.orderGroupId` and `ProductionRun.productionSessionId`
+  are both optional and additive — undefined means "not part of a group,"
+  which is every order/run that existed before this feature and every
+  single-item one since. Chosen over restructuring into arrays specifically
+  so every existing calculation that operates on one order/run at a time
+  (`fulfillOrder`, inventory usage, `getFinancialsForRange`, the
+  customer-order-to-production auto-linking, GST rollup, nutrition rollup)
+  keeps working completely unchanged, and so per-item actions — a partial
+  refund on one item from a multi-item order, discarding one bad batch from
+  a session that also made other things — stay natural, since every
+  document is still fully independent underneath the grouping.
+- **Logging a production run**: the modal now accepts multiple
+  recipe+quantity rows in one submission. Each row still becomes its own
+  independent `ProductionRun` document via the existing single-run save
+  path (materials deduction, finished-goods stock, customer-order
+  auto-linking, all unchanged) — rows sharing a submission just get a
+  common `productionSessionId`. Rows save sequentially, not atomically: a
+  failure partway through leaves the earlier rows saved rather than rolled
+  back, and a retry reuses the same session id instead of splitting the
+  group.
+- **Adding an order**: a new "Multi-Item Order" flow alongside the existing
+  quick "Add Order" — shared date/customer fields plus one or more
+  menu-item+quantity rows, saved as one atomic write (unlike production
+  runs, a plain `Order` document has no side effects to partially unwind,
+  so there's no reason to allow a partial group here).
+- **Orders tab / Production Log display**: orders and runs sharing a group
+  render together in a clustered container with a "(N items)" header and
+  group-level bulk actions (fulfill/delete all, delete session), instead of
+  as unrelated rows. The Expired Batches list also shows what else was made
+  in the same session, so discarding one bad batch is an informed choice.
+  Grouping logic (`clusterByGroupId`) is a single generic, unit-tested
+  utility shared by both views rather than two parallel implementations.
+- **Financials**: `getFinancialsForRange` now attributes `deliveryCharge`/
+  `deliveryFee` once per `orderGroupId` rather than once per document —
+  a group's members share one physical delivery, so summing every
+  document's value would have multiplied a shared charge by the group
+  size. The fix finds the actual value regardless of which member of the
+  group it was entered on, so no UI changes were needed: delivery info is
+  added the same way for every order, grouped or not, via the existing
+  per-order inline editor.
+
 ## Shareable nutrition card (step 5 — final step of the feature)
 
 Last step of the Nutrition & Allergen Info feature: a "Share Nutrition
