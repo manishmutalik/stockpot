@@ -56,7 +56,9 @@ import {
   X,
   Salad,
   Search,
-  Loader2
+  Loader2,
+  Home,
+  Gift
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { apiFetch } from './utils/apiClient';
@@ -1982,12 +1984,21 @@ function BakeryApp() {
               className="relative w-full max-w-md bg-white rounded-[10px] sm:rounded-[15px] shadow-2xl overflow-y-auto max-h-[90vh] border border-stone-200/50"
             >
               <div className="p-8">
-                <div className="w-16 h-16 bg-rose-50 rounded-xl flex items-center justify-center mb-6">
-                  <Trash2 size={32} className="text-rose-500" />
+                <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-6 ${
+                  discardTarget.presetReason === 'Personal Use' ? 'bg-amber-50' :
+                  discardTarget.presetReason === 'Sampling' ? 'bg-purple-50' : 'bg-rose-50'
+                }`}>
+                  {discardTarget.presetReason === 'Personal Use' ? <Home size={32} className="text-amber-600" /> :
+                   discardTarget.presetReason === 'Sampling' ? <Gift size={32} className="text-purple-600" /> :
+                   <Trash2 size={32} className="text-rose-500" />}
                 </div>
-                <h3 className="text-2xl font-bold text-stone-800 mb-2">Discard {discardTarget.name}</h3>
+                <h3 className="text-2xl font-bold text-stone-800 mb-2">
+                  {discardTarget.presetReason ? `${discardTarget.presetReason}: ${discardTarget.name}` : `Discard ${discardTarget.name}`}
+                </h3>
                 <p className="text-stone-500 text-sm font-sans italic mb-6">
-                  Log wasted stock and track cost. Max: {discardTarget.maxQty} {discardTarget.unit}
+                  {discardTarget.presetReason
+                    ? `Log this as ${discardTarget.presetReason.toLowerCase()} — excluded from income. Max: ${discardTarget.maxQty} ${discardTarget.unit}`
+                    : `Log wasted stock and track cost. Max: ${discardTarget.maxQty} ${discardTarget.unit}`}
                 </p>
 
                 <form onSubmit={handleDiscard}>
@@ -2027,9 +2038,13 @@ function BakeryApp() {
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-6 py-4 rounded-xl text-xs font-bold text-white bg-rose-500 hover:bg-rose-600 transition-colors uppercase tracking-widest shadow-lg shadow-rose-500/20"
+                      className={`flex-1 px-6 py-4 rounded-xl text-xs font-bold text-white transition-colors uppercase tracking-widest shadow-lg ${
+                        discardTarget.presetReason === 'Personal Use' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20' :
+                        discardTarget.presetReason === 'Sampling' ? 'bg-purple-500 hover:bg-purple-600 shadow-purple-500/20' :
+                        'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20'
+                      }`}
                     >
-                      Confirm Discard
+                      {discardTarget.presetReason ? `Confirm ${discardTarget.presetReason}` : 'Confirm Discard'}
                     </button>
                   </div>
                 </form>

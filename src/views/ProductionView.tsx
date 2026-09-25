@@ -9,7 +9,7 @@ import {
   DollarSign, Globe, Calendar, Filter, ArrowLeft, ArrowRight, Clock, Settings, Settings2,
   Layers, UserCog, Puzzle, User as UserIcon, LogOut, Image, Palette, Store, Mail, Phone,
   MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
-  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X
+  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X, Home, Gift
 } from 'lucide-react';
 import { AppViewProps, MenuItem } from '../types';
 import { IngredientSelectorModal } from '../components/IngredientSelectorModal';
@@ -116,6 +116,16 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     updateCurrency, handleLogout, isListening, transcript, convertAmount
   } = props;
 
+  // Material cost per unit for one menu item, at current material prices —
+  // shared by every Market Stock action below (Personal Use, Sampling,
+  // Discard) since they all log the same kind of wastage entry.
+  const costPerUnitFor = (item: MenuItem) => item.recipe.reduce((total, req) => {
+    const mat = materials.find(m => m.id === req.materialId);
+    if (!mat) return total;
+    const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
+    return total + (convertedAmount * (mat.costPerUnit || 0));
+  }, 0);
+
   return (
     <motion.div
               key="production"
@@ -164,46 +174,56 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                 </div>
               </div>
 
-              {/* Finished Goods Stock */}
+              {/* Market Stock — what's left to sell after orders have claimed their share */}
               {menu.some(m => (m.finishedGoodsStock ?? 0) > 0) && (
                 <div className="bg-white rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm overflow-hidden">
                   <div className="px-4 sm:px-8 py-5 border-b border-stone-100 flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
                       <Package size={18} />
                     </div>
-                    <h3 className="text-base font-bold text-stone-800">Finished Goods In Stock</h3>
+                    <div>
+                      <h3 className="text-base font-bold text-stone-800">Market Stock</h3>
+                      <p className="text-xs text-stone-400 italic">What's left to sell — mark it used or discard it here.</p>
+                    </div>
                   </div>
-                  <div className="px-4 sm:px-8 py-5 flex flex-wrap gap-3">
-                    {menu.filter(m => (m.finishedGoodsStock ?? 0) > 0).map(item => (
-                      <div key={item.id} className="flex items-center gap-2 bg-stone-50 border border-stone-100 rounded-xl pl-4 pr-2 py-1.5">
-                        <span className="text-sm font-bold text-stone-700">{item.name}</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${(item.finishedGoodsStock ?? 0) <= 5 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                          {item.finishedGoodsStock} units
-                        </span>
-                        <button
-                          onClick={() => {
-                            const cost = item.recipe.reduce((total, req) => {
-                              const mat = materials.find(m => m.id === req.materialId);
-                              if (!mat) return total;
-                              const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-                              return total + (convertedAmount * (mat.costPerUnit || 0));
-                            }, 0);
-                            setDiscardTarget({
-                              id: item.id,
-                              name: item.name,
-                              type: 'recipe',
-                              maxQty: item.finishedGoodsStock ?? 0,
-                              unit: 'pcs',
-                              costPerUnit: cost,
-                            });
-                          }}
-                          className="p-1.5 ml-1 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center"
-                          title="Discard / log as wastage"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
+                  <div className="px-4 sm:px-8 py-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {menu.filter(m => (m.finishedGoodsStock ?? 0) > 0).map(item => {
+                      const stock = item.finishedGoodsStock ?? 0;
+                      const baseTarget = { id: item.id, name: item.name, type: 'recipe' as const, maxQty: stock, unit: 'pcs', costPerUnit: costPerUnitFor(item) };
+                      return (
+                        <div key={item.id} className="flex items-center justify-between gap-2 bg-stone-50 border border-stone-100 rounded-xl pl-4 pr-2 py-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-stone-700 truncate">{item.name}</div>
+                            <span className={`inline-block mt-0.5 text-xs font-bold px-2 py-0.5 rounded-full ${stock <= 5 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {stock} units
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              onClick={() => setDiscardTarget({ ...baseTarget, presetReason: 'Personal Use' })}
+                              className="p-1.5 text-stone-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors flex items-center justify-center"
+                              title="Mark as Personal Use"
+                            >
+                              <Home size={14} />
+                            </button>
+                            <button
+                              onClick={() => setDiscardTarget({ ...baseTarget, presetReason: 'Sampling' })}
+                              className="p-1.5 text-stone-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center justify-center"
+                              title="Mark as Sampling"
+                            >
+                              <Gift size={14} />
+                            </button>
+                            <button
+                              onClick={() => setDiscardTarget(baseTarget)}
+                              className="p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center"
+                              title="Discard / log as wastage"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

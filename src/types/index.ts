@@ -341,7 +341,7 @@ export interface AppViewProps {
   updateSettingsField: (field: any, value: string | number | boolean) => void;
   handleRestock: (e: React.FormEvent) => void;
   restockMaterial: RawMaterial | null;
-  setDiscardTarget: (t: { id: string; name: string; type: 'material' | 'recipe'; batchId?: string; maxQty: number; unit: string; costPerUnit: number } | null) => void;
+  setDiscardTarget: (t: { id: string; name: string; type: 'material' | 'recipe'; batchId?: string; maxQty: number; unit: string; costPerUnit: number; presetReason?: string } | null) => void;
   setRestockMaterial: (m: RawMaterial | null) => void;
   openNutritionEditor: (m: RawMaterial) => void;
 
