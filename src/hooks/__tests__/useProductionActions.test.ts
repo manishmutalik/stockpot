@@ -74,12 +74,12 @@ describe('handleDiscardBatch (wired to the expired-batches dropdown)', () => {
   });
 });
 
-describe('logProductionRun — linking a "customer order" run to an Order', () => {
+describe('logProductionRun — every run adds to stock, no purpose tagging', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('creates a linked, pre-fulfilled Order when purpose is customer_order', async () => {
+  it('increments finishedGoodsStock without a purpose field at all', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
       useProductionActions(menu, materials, [], [], showAlert)
@@ -89,20 +89,14 @@ describe('logProductionRun — linking a "customer order" run to an Order', () =
       recipeId: 'cake',
       quantityProduced: 3,
       date: '2026-02-01',
-      purpose: 'customer_order',
       costTotal: 15,
     } as any);
 
-    const orderCall = batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('/orders/'));
-    expect(orderCall).toBeTruthy();
-    const [, orderPayload] = orderCall as [any, Order];
-    expect(orderPayload.menuItemId).toBe('cake');
-    expect(orderPayload.quantity).toBe(3);
-    expect(orderPayload.date).toBe('2026-02-01');
-    expect(orderPayload.fulfilled).toBe(true);
-    expect(orderPayload.productionRunId).toBeTruthy();
+    const menuUpdateCall = batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('/menu/'));
+    expect(menuUpdateCall[1].finishedGoodsStock).toBe(8); // 5 (starting) + 3
 
-    expect(showAlert).toHaveBeenCalledWith('Production Run Logged', expect.stringContaining('Orders tab'));
+    const runCall = batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('productionRuns'));
+    expect(runCall[1].purpose).toBeUndefined();
   });
 
   it('rejects an unknown recipeId instead of writing a nameless phantom menu item / order', async () => {
@@ -116,7 +110,6 @@ describe('logProductionRun — linking a "customer order" run to an Order', () =
         recipeId: 'does-not-exist',
         quantityProduced: 3,
         date: '2026-02-01',
-        purpose: 'customer_order',
         costTotal: 15,
       } as any)
     ).rejects.toThrow();
@@ -126,7 +119,7 @@ describe('logProductionRun — linking a "customer order" run to an Order', () =
     expect(showAlert).toHaveBeenCalledWith('Error', expect.stringContaining('could not be found'));
   });
 
-  it('does NOT create an order for other purposes (e.g. market_stock)', async () => {
+  it('never auto-creates a linked Order (the customer_order auto-link is retired)', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
       useProductionActions(menu, materials, [], [], showAlert)
@@ -136,7 +129,6 @@ describe('logProductionRun — linking a "customer order" run to an Order', () =
       recipeId: 'cake',
       quantityProduced: 3,
       date: '2026-02-01',
-      purpose: 'market_stock',
       costTotal: 15,
     } as any);
 
@@ -154,7 +146,6 @@ describe('logProductionRunSession — logging multiple items from one submission
     recipeId,
     quantityProduced: 2,
     date: '2026-03-01',
-    purpose: 'market_stock' as const,
     costTotal: 10,
   });
 
@@ -247,60 +238,6 @@ describe('logProductionRunSession — logging multiple items from one submission
   });
 });
 
-describe('backfillMissingOrders — catching up runs logged before the linking feature existed', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('identifies customer-order runs with no linked order, and only those', () => {
-    const linkedRun: ProductionRun = { id: 'run-a', recipeId: 'cake', quantityProduced: 2, date: '2026-01-01', purpose: 'customer_order', costTotal: 10 } as ProductionRun;
-    const unlinkedRun: ProductionRun = { id: 'run-b', recipeId: 'cake', quantityProduced: 4, date: '2026-01-02', purpose: 'customer_order', costTotal: 20 } as ProductionRun;
-    const marketRun: ProductionRun = { id: 'run-c', recipeId: 'cake', quantityProduced: 1, date: '2026-01-03', purpose: 'market_stock', costTotal: 5 } as ProductionRun;
-    const existingOrder: Order = { id: 'order-a', menuItemId: 'cake', quantity: 2, date: '2026-01-01', fulfilled: true, productionRunId: 'run-a' };
-
-    const showAlert = vi.fn();
-    const { result } = renderHook(() =>
-      useProductionActions(menu, materials, [linkedRun, unlinkedRun, marketRun], [existingOrder], showAlert)
-    );
-
-    expect(result.current.runsNeedingOrderBackfill).toHaveLength(1);
-    expect(result.current.runsNeedingOrderBackfill[0].id).toBe('run-b');
-  });
-
-  it('creates orders for all missing runs in one batch, without touching inventory', async () => {
-    const unlinkedRun1: ProductionRun = { id: 'run-x', recipeId: 'cake', quantityProduced: 2, date: '2026-01-01', purpose: 'customer_order', costTotal: 10 } as ProductionRun;
-    const unlinkedRun2: ProductionRun = { id: 'run-y', recipeId: 'cake', quantityProduced: 5, date: '2026-01-05', purpose: 'customer_order', costTotal: 25 } as ProductionRun;
-
-    const showAlert = vi.fn();
-    const { result } = renderHook(() =>
-      useProductionActions(menu, materials, [unlinkedRun1, unlinkedRun2], [], showAlert)
-    );
-
-    await result.current.backfillMissingOrders();
-
-    // Only order writes — no materials/menu writes, since inventory was
-    // already correctly adjusted when each run was originally logged.
-    expect(batchSet).toHaveBeenCalledTimes(2);
-    for (const [, payload] of batchSet.mock.calls) {
-      expect(payload.fulfilled).toBe(true);
-      expect(['run-x', 'run-y']).toContain(payload.productionRunId);
-    }
-    expect(batchCommit).toHaveBeenCalledTimes(1);
-    expect(showAlert).toHaveBeenCalledWith('Backfill Complete', expect.stringContaining('2'));
-  });
-
-  it('does nothing when there is nothing to backfill', async () => {
-    const showAlert = vi.fn();
-    const { result } = renderHook(() =>
-      useProductionActions(menu, materials, [], [], showAlert)
-    );
-
-    await result.current.backfillMissingOrders();
-
-    expect(batchCommit).not.toHaveBeenCalled();
-  });
-});
-
 describe('deleteProductionRun — cleaning up the linked Order', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -390,6 +327,50 @@ describe('deleteProductionRun — cleaning up the linked Order', () => {
     expect(window.confirm).not.toHaveBeenCalled();
     expect(batchDelete).toHaveBeenCalledTimes(1);
     expect(showAlert).not.toHaveBeenCalledWith('Success', expect.any(String));
+
+    window.confirm = originalConfirm;
+  });
+
+  it('decrements finishedGoodsStock for a new-style run with no purpose (every run now adds to stock)', async () => {
+    const run: ProductionRun = {
+      id: 'run5', recipeId: 'cake', quantityProduced: 3, quantityYield: 3, remainingQuantity: 3,
+      date: '2026-02-01', costTotal: 15,
+    } as ProductionRun;
+
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => true);
+
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, [run], [], showAlert)
+    );
+
+    await result.current.deleteProductionRun('run5');
+
+    const menuUpdateCall = batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('/menu/'));
+    expect(menuUpdateCall[1].finishedGoodsStock).toBe(2); // 5 (starting) - 3
+
+    window.confirm = originalConfirm;
+  });
+
+  it('does NOT decrement finishedGoodsStock for a legacy run whose purpose never added stock (e.g. sampling)', async () => {
+    const run: ProductionRun = {
+      id: 'run6', recipeId: 'cake', quantityProduced: 3, quantityYield: 3, remainingQuantity: 3,
+      date: '2026-02-01', purpose: 'sampling', costTotal: 15,
+    } as ProductionRun;
+
+    const originalConfirm = window.confirm;
+    window.confirm = vi.fn(() => true);
+
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, [run], [], showAlert)
+    );
+
+    await result.current.deleteProductionRun('run6');
+
+    const menuUpdateCall = batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('/menu/'));
+    expect(menuUpdateCall).toBeUndefined(); // stock was never touched at creation, so it isn't touched here either
 
     window.confirm = originalConfirm;
   });

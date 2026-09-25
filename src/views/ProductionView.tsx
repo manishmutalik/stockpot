@@ -18,6 +18,9 @@ import { CURRENCIES, INITIAL_MATERIALS } from '../App';
 import { UNIT_CONVERSIONS } from '../App';
 import { clusterProductionRunsBySession } from '../utils/productionRunClustering';
 
+// Historical display only — new production runs no longer set `purpose`
+// (see ProductionRun.purpose); these labels/colors only render for runs
+// logged before that change.
 const PURPOSE_LABELS: Record<string, string> = {
   market_stock: '🛒 Market Stock',
   customer_order: '📦 Customer Order',
@@ -57,9 +60,13 @@ const ProductionRunRow: React.FC<{
       <td className="px-6 py-4 text-sm font-bold text-stone-800">{recipe?.name || 'Unknown'}</td>
       <td className="px-6 py-4 text-sm text-stone-600">{run.expiryDate ? new Date(run.expiryDate).toLocaleDateString() : '-'}</td>
       <td className="px-6 py-4">
-        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${PURPOSE_COLORS[run.purpose] || 'bg-stone-100 text-stone-600'}`}>
-          {PURPOSE_LABELS[run.purpose] || run.purpose}
-        </span>
+        {run.purpose ? (
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${PURPOSE_COLORS[run.purpose] || 'bg-stone-100 text-stone-600'}`}>
+            {PURPOSE_LABELS[run.purpose] || run.purpose}
+          </span>
+        ) : (
+          <span className="text-stone-300">—</span>
+        )}
       </td>
       <td className="px-6 py-4 text-right text-sm font-bold text-stone-700">{run.quantityProduced}</td>
       <td className="px-6 py-4 text-right text-sm text-stone-600">
@@ -86,7 +93,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     materials, setMaterials, categories, setCategories, menu, setMenu, orders, setOrders,
     experiments, setExperiments, productionRuns, setProductionRuns, wastageLogs, setWastageLogs,
     isProductionRunModalOpen, setIsProductionRunModalOpen, productionFilterRecipe, setProductionFilterRecipe,
-    productionFilterPurpose, setProductionFilterPurpose, activeTab, setActiveTab, activeSettingsTab,
+    activeTab, setActiveTab, activeSettingsTab,
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
@@ -102,7 +109,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
+    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
     addOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, restockMaterial, setRestockMaterial,
     showSaveFeedback, saveDay,
@@ -124,20 +131,6 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                   <p className="text-stone-500 text-sm italic font-sans">Record production runs and manage finished goods stock.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {runsNeedingOrderBackfill.length > 0 && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Add ${runsNeedingOrderBackfill.length} missing order(s) to the Orders tab for customer-order production runs logged before this feature existed?`)) {
-                          backfillMissingOrders();
-                        }
-                      }}
-                      title="Add missing orders for older Customer Order production runs"
-                      className="flex items-center gap-2 bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 px-4 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all active:scale-95"
-                    >
-                      <RefreshCw size={14} />
-                      Backfill {runsNeedingOrderBackfill.length} Missing Order{runsNeedingOrderBackfill.length === 1 ? '' : 's'}
-                    </button>
-                  )}
                   <button
                     onClick={() => setIsProductionRunModalOpen(true)}
                     className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-amber-200 active:scale-95"
@@ -225,24 +218,12 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                   <option value="">All Recipes</option>
                   {menu.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
-                <select
-                  value={productionFilterPurpose}
-                  onChange={e => setProductionFilterPurpose(e.target.value)}
-                  className="bg-white border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold text-stone-600 outline-none focus:ring-2 focus:ring-amber-400/30"
-                >
-                  <option value="">All Purposes</option>
-                  <option value="market_stock">🛒 Market Stock</option>
-                  <option value="customer_order">📦 Customer Order</option>
-                  <option value="sampling">🎁 Sampling</option>
-                  <option value="personal_use">🏠 Personal Use</option>
-                  <option value="other">✳️ Other</option>
-                </select>
               </div>
 
               {/* Runs List */}
               {(() => {
                 const filtered = [...productionRuns]
-                  .filter(r => (!productionFilterRecipe || r.recipeId === productionFilterRecipe) && (!productionFilterPurpose || r.purpose === productionFilterPurpose))
+                  .filter(r => !productionFilterRecipe || r.recipeId === productionFilterRecipe)
                   .sort((a, b) => b.createdAt - a.createdAt);
 
                 if (filtered.length === 0) {

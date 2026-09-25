@@ -85,7 +85,7 @@ const WastageView = React.lazy(() => import('./views/WastageView').then(m => ({ 
 const SettingsView = React.lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })));
 
 import { IngredientSelectorModal } from './components/IngredientSelectorModal';
-import { ProductionRunModal, ProductionRun, ProductionPurpose } from './components/ProductionRunModal';
+import { ProductionRunModal, ProductionRun } from './components/ProductionRunModal';
 import { AddOrderModal } from './components/AddOrderModal';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -883,7 +883,6 @@ function BakeryApp() {
   // Extracted to src/hooks/useProductionActions.ts as part of the Phase 4 breakup.
   const {
     logProductionRun, logProductionRunSession, deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
-    runsNeedingOrderBackfill, backfillMissingOrders,
   } = useProductionActions(menu, materials, productionRuns, orders, showAlert);
 
   // ── Experiment Actions ───────────────────────────────────────────────────────
@@ -1644,7 +1643,7 @@ function BakeryApp() {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
+    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
     addOrder, addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,

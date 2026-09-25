@@ -333,8 +333,6 @@ export interface AppViewProps {
   deleteProductionRun: (id: string) => void;
   deleteProductionRunSession: (sessionId: string) => void;
   handleDiscardBatch: (b: any) => void;
-  runsNeedingOrderBackfill: any[];
-  backfillMissingOrders: () => void;
   addOrder: (o: any) => void;
   updateOrder: (id: string, f: string, v: any) => void;
   fulfillOrder: (order: Order) => void;
