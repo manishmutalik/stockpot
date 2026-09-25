@@ -876,8 +876,8 @@ function BakeryApp() {
   // ── Order Actions ────────────────────────────────────────────────────────────
   // Extracted to src/hooks/useOrderActions.ts as part of the Phase 4 breakup.
   const {
-    addOrder, addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders,
-  } = useOrderActions(menu, orders, materials, productionRuns, orderDate, showConfirm, showAlert);
+    addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders,
+  } = useOrderActions(menu, orders, orderDate, showConfirm, showAlert);
 
   // ── Production Run Actions ───────────────────────────────────────────────────
   // Extracted to src/hooks/useProductionActions.ts as part of the Phase 4 breakup.
@@ -1644,7 +1644,7 @@ function BakeryApp() {
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
     deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
-    addOrder, addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,
     billing, openBillingPortal, isOpeningPortal, startCheckout, isStartingCheckout,

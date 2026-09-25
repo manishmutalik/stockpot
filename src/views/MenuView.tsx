@@ -42,7 +42,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, handleDiscardBatch, addOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    deleteProductionRun, handleDiscardBatch, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, restockMaterial, setRestockMaterial,
     showSaveFeedback, saveDay,
     updateCurrency, handleLogout, isListening, transcript, convertAmount

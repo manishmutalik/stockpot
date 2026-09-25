@@ -5,51 +5,30 @@
  * Extracted out of App.tsx as part of the Phase 4 breakup — behavior
  * preserved exactly from the original inline implementation.
  *
- * `fulfillOrder` is wired to a "Fulfill" button per order in OrdersView.
- * It's idempotent: once `order.fulfilled` is true, calling it again is a
- * no-op, since re-running it would deduct inventory a second time for the
- * same order.
+ * As of the production-run/order redesign, stock is a hard cap enforced at
+ * order-creation time (see addOrderGroup) rather than at a later
+ * fulfilment step — an order can only be created, or edited, for
+ * quantities `MenuItem.finishedGoodsStock` currently covers. `fulfillOrder`
+ * is now a plain completion-status flag with no inventory effect of its
+ * own; `updateOrder`, `deleteOrder`, and `resetOrders` all rebalance the
+ * stock an order has claimed whenever that order's item/quantity changes
+ * or the order goes away.
  *
- * `menu`/`orders`/`materials`/`productionRuns` are NOT owned here — they're
- * populated by the shared Firestore listener in App.tsx and passed in as
- * read-only parameters (same pattern as the other extracted hooks).
+ * `menu`/`orders` are NOT owned here — they're populated by the shared
+ * Firestore listener in App.tsx and passed in as read-only parameters
+ * (same pattern as the other extracted hooks).
  */
-import { auth, db, doc, setDoc, deleteDoc, writeBatch } from '../firebase';
+import { auth, db, doc, setDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { deductIngredients } from '../utils/inventoryDeduction';
-import { MenuItem, Order, RawMaterial } from '../types';
-import { ProductionRun } from '../components/ProductionRunModal';
+import { MenuItem, Order } from '../types';
 
 export function useOrderActions(
   menu: MenuItem[],
   orders: Order[],
-  materials: RawMaterial[],
-  productionRuns: ProductionRun[],
   orderDate: string,
   showConfirm: (title: string, message: string, onConfirm: () => void) => void,
   showAlert: (title: string, message: string) => void
 ) {
-  /**
-   * Adds a blank order for `orderDate`, defaulting to the first menu item.
-   * The user edits the item and quantity inline on the Orders tab.
-   */
-  const addOrder = async () => {
-    if (menu.length === 0 || !auth.currentUser) return;
-    const userId = auth.currentUser.uid;
-    const id = Math.random().toString(36).substr(2, 9);
-    const newOrder: Order = {
-      id,
-      menuItemId: menu[0].id,
-      quantity: 1,
-      date: orderDate
-    };
-    try {
-      await setDoc(doc(db, 'users', userId, 'orders', id), newOrder);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.WRITE, `users/${userId}/orders/${id}`);
-    }
-  };
-
   /**
    * Creates one or more Order documents from a single "Add Order"
    * submission — e.g. a customer ordering several different items at once
@@ -73,6 +52,15 @@ export function useOrderActions(
    * orderGroupId (see the handoff doc's open question); until then,
    * delivery info is only set through the existing per-order inline
    * editing in the Orders tab, one order at a time.
+   *
+   * Stock is a hard cap: this is inventory tracking, not a storefront, so
+   * an order can only claim quantities `finishedGoodsStock` currently
+   * covers — if there isn't enough, the answer is to log another
+   * production run, not to fall back to raw materials. Validated up front
+   * (combining quantities when the same item appears in more than one
+   * line, so two rows for the same item can't each pass individually and
+   * jointly overshoot) so a bad submission fails before any writes happen,
+   * then claimed atomically in the same batch as the order documents.
    */
   const addOrderGroup = async (
     common: { date: string; customerName?: string; customerPhone?: string },
@@ -84,6 +72,22 @@ export function useOrderActions(
     if (badItem) {
       showAlert('Error', 'One of the selected items could not be found. Please reselect it and try again.');
       throw new Error(`addOrderGroup: no menu item found for menuItemId "${badItem.menuItemId}"`);
+    }
+
+    const requestedByItem = new Map<string, number>();
+    for (const li of lineItems) {
+      requestedByItem.set(li.menuItemId, (requestedByItem.get(li.menuItemId) ?? 0) + li.quantity);
+    }
+    for (const [menuItemId, requested] of requestedByItem) {
+      const item = menu.find(m => m.id === menuItemId)!;
+      const available = item.finishedGoodsStock ?? 0;
+      if (requested > available) {
+        showAlert(
+          'Not Enough Stock',
+          `Only ${available} unit(s) of "${item.name}" in stock, but this order needs ${requested}. Log another production run to cover the rest.`
+        );
+        throw new Error(`addOrderGroup: insufficient stock for menuItemId "${menuItemId}" (requested ${requested}, available ${available})`);
+      }
     }
 
     const userId = auth.currentUser.uid;
@@ -104,6 +108,11 @@ export function useOrderActions(
         };
         batch.set(doc(db, 'users', userId, 'orders', id), newOrder);
       }
+      for (const [menuItemId, requested] of requestedByItem) {
+        const item = menu.find(m => m.id === menuItemId)!;
+        const current = item.finishedGoodsStock ?? 0;
+        batch.set(doc(db, 'users', userId, 'menu', menuItemId), { finishedGoodsStock: current - requested }, { merge: true });
+      }
       await batch.commit();
       const firstItemName = menu.find(m => m.id === lineItems[0].menuItemId)?.name;
       showAlert(
@@ -120,84 +129,80 @@ export function useOrderActions(
   };
 
   /**
-   * Handles inventory deduction when an order is marked as fulfilled.
-   * Uses `writeBatch` for atomic multi-doc writes. No-ops if the order was
-   * already fulfilled, to avoid double-deducting inventory.
-   *
-   * Priority logic:
-   *  - If `finishedGoodsStock === 0`: deducts raw materials directly.
-   *  - If stock >= order.quantity: deducts from finished goods only.
-   *  - Partial stock: asks the user whether to use raw materials for the full order.
+   * Marks an order as fulfilled — a plain completion status ("has this
+   * order actually been handed over/paid") with no inventory effect of its
+   * own. Stock was already claimed when the order was created (see
+   * addOrderGroup), so there's nothing left to deduct here. No-ops if the
+   * order was already fulfilled.
    */
   const fulfillOrder = async (order: Order) => {
     if (!auth.currentUser) return;
     if (order.fulfilled) return;
     const userId = auth.currentUser.uid;
-    const item = menu.find(m => m.id === order.menuItemId);
-    if (!item) {
-      showAlert('Error', 'This order refers to a menu item that no longer exists.');
-      return;
-    }
-
-    const stock = item.finishedGoodsStock ?? 0;
-
-    if (stock === 0) {
-      const batch = writeBatch(db);
-      await deductIngredients(userId, materials, item.recipe, order.quantity, batch);
-      batch.set(doc(db, 'users', userId, 'orders', order.id), { fulfilled: true }, { merge: true });
-      await batch.commit();
-      showAlert('Order Fulfilled', `Deducted raw materials for ${order.quantity} unit(s) of ${item.name}.`);
-    } else if (stock >= order.quantity) {
-      const batch = writeBatch(db);
-
-      let remainingToDeduct = order.quantity;
-      const relevantRuns = productionRuns
-        .filter(r => r.recipeId === item.id && (r.remainingQuantity ?? 0) > 0)
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-      for (const run of relevantRuns) {
-        if (remainingToDeduct <= 0) break;
-        const available = run.remainingQuantity ?? 0;
-        const deduct = Math.min(available, remainingToDeduct);
-        batch.set(
-          doc(db, 'users', userId, 'productionRuns', run.id),
-          { remainingQuantity: available - deduct },
-          { merge: true }
-        );
-        remainingToDeduct -= deduct;
-      }
-
-      batch.set(
-        doc(db, 'users', userId, 'menu', item.id),
-        { finishedGoodsStock: stock - order.quantity },
-        { merge: true }
-      );
-      batch.set(doc(db, 'users', userId, 'orders', order.id), { fulfilled: true }, { merge: true });
-      await batch.commit();
-      showAlert('Order Fulfilled', `Deducted ${order.quantity} unit(s) of ${item.name} from finished-goods stock.`);
-    } else {
-      const choice = window.confirm(
-        `Only ${stock} unit(s) of "${item.name}" in finished stock, but order is for ${order.quantity}.\n\nClick OK to use raw materials for the full order.\nClick Cancel to log a production run first.`
-      );
-      if (choice) {
-        const batch = writeBatch(db);
-        await deductIngredients(userId, materials, item.recipe, order.quantity, batch);
-        batch.set(
-          doc(db, 'users', userId, 'menu', item.id),
-          { finishedGoodsStock: 0 },
-          { merge: true }
-        );
-        batch.set(doc(db, 'users', userId, 'orders', order.id), { fulfilled: true }, { merge: true });
-        await batch.commit();
-        showAlert('Order Fulfilled', `Used all remaining finished stock plus raw materials for ${order.quantity} unit(s) of ${item.name}.`);
-      }
+    try {
+      await setDoc(doc(db, 'users', userId, 'orders', order.id), { fulfilled: true }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${order.id}`);
     }
   };
 
+  /**
+   * Updates one field on an order. `menuItemId`/`quantity` are stock-aware:
+   * changing either re-balances what this order has claimed — releasing
+   * what it currently holds and claiming what the new item/quantity needs,
+   * capped at what's actually available (same hard cap as creating a new
+   * order) — instead of just overwriting the field. Every other field
+   * (customer name/phone, delivery details, etc.) is a plain write with no
+   * stock effect.
+   */
   const updateOrder = async (id: string, field: keyof Order, value: string | number) => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const order = orders.find(o => o.id === id);
+
+    if (order && (field === 'menuItemId' || field === 'quantity')) {
+      const newMenuItemId = field === 'menuItemId' ? String(value) : order.menuItemId;
+      const newQuantity = field === 'quantity' ? Number(value) : order.quantity;
+      if (!newMenuItemId || newQuantity < 1) return; // ignore transient/invalid input mid-edit
+
+      const sameItem = newMenuItemId === order.menuItemId;
+      const targetItem = menu.find(m => m.id === newMenuItemId);
+      if (!targetItem) {
+        showAlert('Error', 'That menu item could not be found.');
+        return;
+      }
+      // This order already holds `order.quantity` of its current item — that's
+      // available to reclaim on top of finishedGoodsStock when the item isn't
+      // changing, since it's this same order's own claim being resized.
+      const alreadyClaimedOfTarget = sameItem ? order.quantity : 0;
+      const availableForTarget = (targetItem.finishedGoodsStock ?? 0) + alreadyClaimedOfTarget;
+      if (newQuantity > availableForTarget) {
+        showAlert('Not Enough Stock', `Only ${availableForTarget} unit(s) of "${targetItem.name}" available.`);
+        return;
+      }
+
+      try {
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'users', userId, 'orders', id), { menuItemId: newMenuItemId, quantity: newQuantity }, { merge: true });
+
+        if (sameItem) {
+          const delta = order.quantity - newQuantity; // positive = release back, negative = claim more
+          batch.set(doc(db, 'users', userId, 'menu', newMenuItemId), { finishedGoodsStock: (targetItem.finishedGoodsStock ?? 0) + delta }, { merge: true });
+        } else {
+          const oldItem = menu.find(m => m.id === order.menuItemId);
+          if (oldItem) {
+            batch.set(doc(db, 'users', userId, 'menu', order.menuItemId), { finishedGoodsStock: (oldItem.finishedGoodsStock ?? 0) + order.quantity }, { merge: true });
+          }
+          batch.set(doc(db, 'users', userId, 'menu', newMenuItemId), { finishedGoodsStock: (targetItem.finishedGoodsStock ?? 0) - newQuantity }, { merge: true });
+        }
+
+        await batch.commit();
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${id}`);
+      }
+      return;
+    }
+
     try {
       if (order) {
         await setDoc(doc(db, 'users', userId, 'orders', id), {
@@ -213,23 +218,34 @@ export function useOrderActions(
   };
 
   /**
-   * Deletes an order document from Firestore.
-   * Note: Raw material stock is NOT automatically restored on delete;
-   * use `fulfillOrder` with a negative quantity adjustment if needed.
+   * Deletes an order document, restoring the stock it had claimed back to
+   * `finishedGoodsStock` in the same atomic batch — a deleted order can't
+   * be left permanently holding stock that's no longer claimed by anything.
    */
   const deleteOrder = async (id: string) => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
+    const order = orders.find(o => o.id === id);
     try {
-      await deleteDoc(doc(db, 'users', userId, 'orders', id));
+      const batch = writeBatch(db);
+      batch.delete(doc(db, 'users', userId, 'orders', id));
+      if (order) {
+        const item = menu.find(m => m.id === order.menuItemId);
+        if (item) {
+          batch.set(doc(db, 'users', userId, 'menu', order.menuItemId), { finishedGoodsStock: (item.finishedGoodsStock ?? 0) + order.quantity }, { merge: true });
+        }
+      }
+      await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `users/${userId}/orders/${id}`);
     }
   };
 
   /**
-   * Bulk-deletes all orders for the currently selected `orderDate` after confirmation.
-   * Does not restore inventory for fulfilled orders.
+   * Bulk-deletes all orders for the currently selected `orderDate` after
+   * confirmation, restoring each one's claimed stock — aggregated per menu
+   * item first (more than one deleted order can share an item), so each
+   * menu document gets exactly one write in the batch.
    */
   const resetOrders = () => {
     showConfirm(
@@ -239,10 +255,24 @@ export function useOrderActions(
         if (!auth.currentUser) return;
         const userId = auth.currentUser.uid;
         const ordersToDelete = orders.filter(o => o.date === orderDate);
+        if (ordersToDelete.length === 0) return;
+
+        const restoreByItem = new Map<string, number>();
+        for (const order of ordersToDelete) {
+          restoreByItem.set(order.menuItemId, (restoreByItem.get(order.menuItemId) ?? 0) + order.quantity);
+        }
+
         try {
+          const batch = writeBatch(db);
           for (const order of ordersToDelete) {
-            await deleteDoc(doc(db, 'users', userId, 'orders', order.id));
+            batch.delete(doc(db, 'users', userId, 'orders', order.id));
           }
+          for (const [menuItemId, restoreQty] of restoreByItem) {
+            const item = menu.find(m => m.id === menuItemId);
+            if (!item) continue;
+            batch.set(doc(db, 'users', userId, 'menu', menuItemId), { finishedGoodsStock: (item.finishedGoodsStock ?? 0) + restoreQty }, { merge: true });
+          }
+          await batch.commit();
         } catch (err) {
           handleFirestoreError(err, OperationType.DELETE, `users/${userId}/orders`);
         }
@@ -251,7 +281,6 @@ export function useOrderActions(
   };
 
   return {
-    addOrder,
     addOrderGroup,
     fulfillOrder,
     updateOrder,

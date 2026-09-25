@@ -110,7 +110,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
     deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
-    addOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, restockMaterial, setRestockMaterial,
     showSaveFeedback, saveDay,
     updateCurrency, handleLogout, isListening, transcript, convertAmount
