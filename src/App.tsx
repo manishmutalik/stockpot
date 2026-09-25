@@ -86,6 +86,7 @@ const SettingsView = React.lazy(() => import('./views/SettingsView').then(m => (
 
 import { IngredientSelectorModal } from './components/IngredientSelectorModal';
 import { ProductionRunModal, ProductionRun, ProductionPurpose } from './components/ProductionRunModal';
+import { AddOrderModal } from './components/AddOrderModal';
 import { motion, AnimatePresence } from 'motion/react';
 
 import { 
@@ -306,6 +307,7 @@ const INITIAL_MENU: MenuItem[] = [
 // `from '../App'` imports in view files keep working.
 import { UNIT_CONVERSIONS, convertAmount, CURRENCIES } from './utils/conversions';
 import { splitSaleForGst, calculateMaterialGstPaid } from './utils/gstCalculations';
+import { attributeDeliveryFieldByGroup } from './utils/orderClustering';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
 
@@ -454,14 +456,9 @@ function BakeryApp() {
     const d = new Date(); d.setDate(d.getDate() - 6); return d.toISOString().split('T')[0];
   });
   const [orderFilterEnd, setOrderFilterEnd] = useState(new Date().toISOString().split('T')[0]);
-  // Add Order modal state
+  // Add Order modal state — the modal itself (AddOrderModal) owns its form
+  // fields, same as ProductionRunModal; App.tsx only needs to control visibility.
   const [isAddOrderModalOpen, setIsAddOrderModalOpen] = useState(false);
-  interface OrderLineItem { menuItemId: string; quantity: number; }
-  const [modalOrderDate, setModalOrderDate] = useState(new Date().toISOString().split('T')[0]);
-  const [modalCustomerName, setModalCustomerName] = useState('');
-  const [modalCustomerPhone, setModalCustomerPhone] = useState('');
-  const [modalLineItems, setModalLineItems] = useState<OrderLineItem[]>([{ menuItemId: '', quantity: 1 }]);
-  const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [summaryRefDate, setSummaryRefDate] = useState(new Date().toISOString().split('T')[0]);
   const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
   const [inventorySortBy, setInventorySortBy] = useState<'name' | 'stock' | 'cost' | 'date'>('name');
@@ -879,13 +876,13 @@ function BakeryApp() {
   // ── Order Actions ────────────────────────────────────────────────────────────
   // Extracted to src/hooks/useOrderActions.ts as part of the Phase 4 breakup.
   const {
-    addOrder, fulfillOrder, updateOrder, deleteOrder, resetOrders,
+    addOrder, addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders,
   } = useOrderActions(menu, orders, materials, productionRuns, orderDate, showConfirm, showAlert);
 
   // ── Production Run Actions ───────────────────────────────────────────────────
   // Extracted to src/hooks/useProductionActions.ts as part of the Phase 4 breakup.
   const {
-    logProductionRun, deleteProductionRun, handleDiscardBatch,
+    logProductionRun, logProductionRunSession, deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
     runsNeedingOrderBackfill, backfillMissingOrders,
   } = useProductionActions(menu, materials, productionRuns, orders, showAlert);
 
@@ -1102,10 +1099,17 @@ function BakeryApp() {
       });
     });
 
+    // Delivery charge/fee attributed once per orderGroupId, not once per
+    // document within a group — see attributeDeliveryFieldByGroup. A group's
+    // members share one delivery, so naively summing every document's field
+    // would multiply-count it by the group size.
+    const deliveryChargeByOrder = attributeDeliveryFieldByGroup(rangeOrders, 'deliveryCharge');
+    const deliveryFeeByOrder = attributeDeliveryFieldByGroup(rangeOrders, 'deliveryFee');
+
     const income = rangeOrders.reduce((acc, order) => {
       const item = menu.find(m => m.id === order.menuItemId);
       const itemRevenue = item ? (item.sellingPrice || 0) * order.quantity : 0;
-      return acc + itemRevenue + (order.deliveryCharge || 0);
+      return acc + itemRevenue + (deliveryChargeByOrder.get(order.id) || 0);
     }, 0);
 
     const orderExpenses = materials.reduce((acc, mat) => {
@@ -1120,7 +1124,7 @@ function BakeryApp() {
 
     // Fees paid to third-party couriers (Uber, Porter, etc.) for orders in
     // this range. Self-delivery/pickup orders have no fee tracked here.
-    const deliveryExpenses = rangeOrders.reduce((acc, order) => acc + (order.deliveryFee || 0), 0);
+    const deliveryExpenses = rangeOrders.reduce((acc, order) => acc + (deliveryFeeByOrder.get(order.id) || 0), 0);
 
     // Cost of discarded/expired stock logged in this range (see handleDiscardBatch
     // and useWastageActions) — wasted material and finished-goods cost that was
@@ -1136,7 +1140,7 @@ function BakeryApp() {
       ? rangeOrders.reduce((acc, order) => {
           const item = menu.find(m => m.id === order.menuItemId);
           const itemRevenue = item ? (item.sellingPrice || 0) * order.quantity : 0;
-          const saleAmount = itemRevenue + (order.deliveryCharge || 0);
+          const saleAmount = itemRevenue + (deliveryChargeByOrder.get(order.id) || 0);
           return acc + splitSaleForGst(saleAmount, settings.gstRate || 0, settings.gstPricingMode || 'exclusive').gstAmount;
         }, 0)
       : 0;
@@ -1629,8 +1633,6 @@ function BakeryApp() {
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
-    modalOrderDate, setModalOrderDate, modalCustomerName, setModalCustomerName, modalCustomerPhone,
-    setModalCustomerPhone, modalLineItems, setModalLineItems, isSavingOrder, setIsSavingOrder,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
@@ -1642,8 +1644,8 @@ function BakeryApp() {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
-    addOrder, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
+    addOrder, addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,
     billing, openBillingPortal, isOpeningPortal, startCheckout, isStartingCheckout,
@@ -1755,27 +1757,43 @@ function BakeryApp() {
                     <ul className="flex flex-col gap-2 max-h-60 overflow-y-auto">
                       {expiredBatches.map(batch => {
                         const recipe = menu.find(m => m.id === batch.recipeId);
+                        // Other items from the same multi-item session (see
+                        // productionSessionId), so discarding one bad batch is
+                        // an informed choice — not a guess based on the recipe
+                        // name alone if several things were made together.
+                        const sessionSiblings = batch.productionSessionId
+                          ? productionRuns
+                              .filter(r => r.productionSessionId === batch.productionSessionId && r.id !== batch.id)
+                              .map(r => menu.find(m => m.id === r.recipeId)?.name || 'Unknown')
+                          : [];
                         return (
-                          <li key={batch.id} className="flex justify-between items-center gap-2 text-xs">
-                            <span className="font-bold text-stone-700 truncate pr-2">{recipe?.name || 'Unknown'}</span>
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-rose-500 font-medium whitespace-nowrap bg-rose-50 px-1.5 py-0.5 rounded">
-                                Qty: {batch.remainingQuantity}
-                              </span>
-                              <button
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (window.confirm(`Discard ${batch.remainingQuantity} unit(s) of "${recipe?.name || 'this item'}"? This will be logged as wastage.`)) {
-                                    handleDiscardBatch(batch);
-                                  }
-                                }}
-                                className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                                title="Discard this batch and log as wastage"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                          <li key={batch.id} className="flex flex-col gap-0.5 text-xs">
+                            <div className="flex justify-between items-center gap-2">
+                              <span className="font-bold text-stone-700 truncate pr-2">{recipe?.name || 'Unknown'}</span>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="text-rose-500 font-medium whitespace-nowrap bg-rose-50 px-1.5 py-0.5 rounded">
+                                  Qty: {batch.remainingQuantity}
+                                </span>
+                                <button
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`Discard ${batch.remainingQuantity} unit(s) of "${recipe?.name || 'this item'}"? This will be logged as wastage.`)) {
+                                      handleDiscardBatch(batch);
+                                    }
+                                  }}
+                                  className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                  title="Discard this batch and log as wastage"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
                             </div>
+                            {sessionSiblings.length > 0 && (
+                              <span className="text-[9px] text-stone-400 truncate">
+                                Also from this session: {sessionSiblings.join(', ')}
+                              </span>
+                            )}
                           </li>
                         );
                       })}
@@ -1922,7 +1940,14 @@ function BakeryApp() {
           onClose={() => setIsProductionRunModalOpen(false)}
           menu={menu}
           materials={materials}
-          onSave={logProductionRun}
+          onSave={logProductionRunSession}
+          currency={currency}
+        />
+        <AddOrderModal
+          isOpen={isAddOrderModalOpen}
+          onClose={() => setIsAddOrderModalOpen(false)}
+          menu={menu}
+          onSave={addOrderGroup}
           currency={currency}
         />
         <IngredientSelectorModal

@@ -51,6 +51,75 @@ export function useOrderActions(
   };
 
   /**
+   * Creates one or more Order documents from a single "Add Order"
+   * submission — e.g. a customer ordering several different items at once
+   * ("2 cakes and 3 cookies"). All documents are written in ONE atomic
+   * writeBatch: either every line item is created, or none are. Unlike a
+   * production-run session, a plain Order document has no side effects to
+   * partially unwind (no inventory deduction, no cross-document writes),
+   * so there's no reason to allow a partial group here — retry the whole
+   * thing, or don't, rather than reconciling which rows already saved.
+   *
+   * When there's more than one line item, every resulting Order shares one
+   * freshly-generated orderGroupId (see Order.orderGroupId) so they can be
+   * displayed/managed together — display/UX grouping only, each document
+   * is still fully independent (its own fulfilled status, its own
+   * eventual refund status). A single line item gets no group id at all.
+   *
+   * customerName/customerPhone/date are shared across every line item.
+   * Delivery fields are deliberately NOT part of this yet — putting a
+   * shared delivery charge on every grouped document would double-count
+   * it in getFinancialsForRange until that function dedupes by
+   * orderGroupId (see the handoff doc's open question); until then,
+   * delivery info is only set through the existing per-order inline
+   * editing in the Orders tab, one order at a time.
+   */
+  const addOrderGroup = async (
+    common: { date: string; customerName?: string; customerPhone?: string },
+    lineItems: { menuItemId: string; quantity: number }[]
+  ) => {
+    if (!auth.currentUser || lineItems.length === 0) return;
+
+    const badItem = lineItems.find(li => !menu.some(m => m.id === li.menuItemId));
+    if (badItem) {
+      showAlert('Error', 'One of the selected items could not be found. Please reselect it and try again.');
+      throw new Error(`addOrderGroup: no menu item found for menuItemId "${badItem.menuItemId}"`);
+    }
+
+    const userId = auth.currentUser.uid;
+    const orderGroupId = lineItems.length > 1 ? Math.random().toString(36).substr(2, 9) : undefined;
+
+    try {
+      const batch = writeBatch(db);
+      for (const item of lineItems) {
+        const id = Math.random().toString(36).substr(2, 9);
+        const newOrder: Order = {
+          id,
+          menuItemId: item.menuItemId,
+          quantity: item.quantity,
+          date: common.date,
+          ...(common.customerName && { customerName: common.customerName }),
+          ...(common.customerPhone && { customerPhone: common.customerPhone }),
+          ...(orderGroupId && { orderGroupId }),
+        };
+        batch.set(doc(db, 'users', userId, 'orders', id), newOrder);
+      }
+      await batch.commit();
+      const firstItemName = menu.find(m => m.id === lineItems[0].menuItemId)?.name;
+      showAlert(
+        'Order Added',
+        lineItems.length > 1
+          ? `Added an order with ${lineItems.length} items.`
+          : `Added order for ${lineItems[0].quantity} unit(s) of ${firstItemName}.`
+      );
+    } catch (err: any) {
+      console.error('addOrderGroup error:', err);
+      showAlert('Error', `Failed to add order: ${err?.message || 'Unknown error'}`);
+      throw err;
+    }
+  };
+
+  /**
    * Handles inventory deduction when an order is marked as fulfilled.
    * Uses `writeBatch` for atomic multi-doc writes. No-ops if the order was
    * already fulfilled, to avoid double-deducting inventory.
@@ -183,6 +252,7 @@ export function useOrderActions(
 
   return {
     addOrder,
+    addOrderGroup,
     fulfillOrder,
     updateOrder,
     deleteOrder,

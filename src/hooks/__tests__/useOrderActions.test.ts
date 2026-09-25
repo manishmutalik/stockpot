@@ -23,6 +23,94 @@ const showConfirm = vi.fn();
 
 const orderNoStock: Order = { id: 'o1', menuItemId: 'cake', quantity: 3, date: '2026-01-01' };
 
+describe('addOrderGroup — adding a customer order with one or more items', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const menu: MenuItem[] = [
+    { id: 'cake', name: 'Cake', sellingPrice: 20, recipe: [] } as MenuItem,
+    { id: 'cookie', name: 'Cookie', sellingPrice: 5, recipe: [] } as MenuItem,
+  ];
+
+  it('a single line item gets no orderGroupId and writes one order document', async () => {
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useOrderActions(menu, [], materials, productionRuns, '2026-04-01', showConfirm, showAlert)
+    );
+
+    await result.current.addOrderGroup(
+      { date: '2026-04-01' },
+      [{ menuItemId: 'cake', quantity: 3 }]
+    );
+
+    expect(batchCommit).toHaveBeenCalledTimes(1);
+    const orderCalls = batchSet.mock.calls.filter(([ref]: any[]) => ref.path.includes('/orders/'));
+    expect(orderCalls).toHaveLength(1);
+    expect(orderCalls[0][1].orderGroupId).toBeUndefined();
+    expect(orderCalls[0][1]).toMatchObject({ menuItemId: 'cake', quantity: 3, date: '2026-04-01' });
+    expect(showAlert).toHaveBeenCalledWith('Order Added', expect.stringContaining('Cake'));
+  });
+
+  it('multiple line items share one orderGroupId and shared customer/date fields, written atomically', async () => {
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useOrderActions(menu, [], materials, productionRuns, '2026-04-01', showConfirm, showAlert)
+    );
+
+    await result.current.addOrderGroup(
+      { date: '2026-04-01', customerName: 'Asha', customerPhone: '555-1234' },
+      [{ menuItemId: 'cake', quantity: 2 }, { menuItemId: 'cookie', quantity: 5 }]
+    );
+
+    expect(batchCommit).toHaveBeenCalledTimes(1); // one atomic write, not one per row
+    const orderCalls = batchSet.mock.calls.filter(([ref]: any[]) => ref.path.includes('/orders/'));
+    expect(orderCalls).toHaveLength(2);
+
+    const groupId = orderCalls[0][1].orderGroupId;
+    expect(groupId).toBeTruthy();
+    expect(orderCalls[1][1].orderGroupId).toBe(groupId);
+    for (const [, payload] of orderCalls) {
+      expect(payload.customerName).toBe('Asha');
+      expect(payload.customerPhone).toBe('555-1234');
+      expect(payload.date).toBe('2026-04-01');
+    }
+    expect(orderCalls.map(([, p]: any[]) => p.menuItemId).sort()).toEqual(['cake', 'cookie']);
+    expect(showAlert).toHaveBeenCalledWith('Order Added', expect.stringContaining('2'));
+  });
+
+  it('rejects an unknown menuItemId before writing anything', async () => {
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useOrderActions(menu, [], materials, productionRuns, '2026-04-01', showConfirm, showAlert)
+    );
+
+    await expect(
+      result.current.addOrderGroup(
+        { date: '2026-04-01' },
+        [{ menuItemId: 'cake', quantity: 1 }, { menuItemId: 'does-not-exist', quantity: 1 }]
+      )
+    ).rejects.toThrow();
+
+    expect(batchCommit).not.toHaveBeenCalled();
+    expect(batchSet).not.toHaveBeenCalled();
+    expect(showAlert).toHaveBeenCalledWith('Error', expect.stringContaining('could not be found'));
+  });
+
+  it('omits customerName/customerPhone entirely when left blank, rather than writing empty strings', async () => {
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useOrderActions(menu, [], materials, productionRuns, '2026-04-01', showConfirm, showAlert)
+    );
+
+    await result.current.addOrderGroup({ date: '2026-04-01' }, [{ menuItemId: 'cake', quantity: 1 }]);
+
+    const orderCall = batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('/orders/'));
+    expect(orderCall[1]).not.toHaveProperty('customerName');
+    expect(orderCall[1]).not.toHaveProperty('customerPhone');
+  });
+});
+
 describe('fulfillOrder (now wired to the Fulfill button in OrdersView)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

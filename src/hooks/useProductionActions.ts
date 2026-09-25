@@ -36,7 +36,8 @@ export function useProductionActions(
    *  3. Writes the run document to `users/{userId}/productionRuns/{id}`.
    */
   const logProductionRun = async (
-    runData: Omit<ProductionRun, 'id' | 'createdAt'>
+    runData: Omit<ProductionRun, 'id' | 'createdAt'>,
+    options?: { silent?: boolean } // silent: true skips the success alert (used by logProductionRunSession for multi-item sessions, which shows one consolidated alert instead of one per item)
   ) => {
     if (!auth.currentUser) return;
 
@@ -74,6 +75,7 @@ export function useProductionActions(
     };
     if (runData.quantityYield !== undefined) run.quantityYield = runData.quantityYield;
     if (runData.notes) run.notes = runData.notes;
+    if (runData.productionSessionId) run.productionSessionId = runData.productionSessionId;
 
     try {
       const batch = writeBatch(db);
@@ -115,13 +117,82 @@ export function useProductionActions(
 
       await batch.commit();
 
-      const orderNote = runData.purpose === 'customer_order' ? ' A matching order was added to the Orders tab.' : '';
-      showAlert('Production Run Logged', `Recorded ${runData.quantityProduced} unit(s) of ${recipeItem.name}. Raw materials deducted.${orderNote}`);
+      if (!options?.silent) {
+        const orderNote = runData.purpose === 'customer_order' ? ' A matching order was added to the Orders tab.' : '';
+        showAlert('Production Run Logged', `Recorded ${runData.quantityProduced} unit(s) of ${recipeItem.name}. Raw materials deducted.${orderNote}`);
+      }
     } catch (err: any) {
       console.error('logProductionRun error:', err);
       showAlert('Error', `Failed to log production run: ${err?.message || 'Unknown error'}`);
       throw err; // re-throw so modal catch block handles isSaving reset
     }
+  };
+
+  /**
+   * Logs one or more production runs from a single "Log Production Run"
+   * submission (e.g. a session that made several different recipes at
+   * once). Each row becomes its own independent ProductionRun document via
+   * logProductionRun, unchanged - materials deduction, finished-goods
+   * stock, and customer-order auto-linking all work exactly as they do for
+   * a single run, called once per row.
+   *
+   * When there's more than one row, all resulting documents share one
+   * productionSessionId (see ProductionRun.productionSessionId) so they can
+   * be displayed/managed together - this is a display/UX grouping only,
+   * not a change to what each document means. A single-row call (and no
+   * `existingSessionId`) gets no session id at all, so it's byte-for-byte
+   * identical to calling logProductionRun directly.
+   *
+   * `existingSessionId`: pass the `sessionId` this function returned from
+   * an earlier call to keep retrying rows in the same group. Without this,
+   * retrying a partial failure would generate a *new* session id for the
+   * remaining rows, splitting one session into two unrelated groups.
+   *
+   * Rows are saved sequentially, not as one atomic transaction: each row's
+   * own writeBatch commits independently, so if row 3 of 5 fails, rows 1-2
+   * are already durably saved. Stops at the first failure rather than
+   * continuing, so the caller can see exactly which row needs attention.
+   * Per-row success alerts are suppressed for multi-row sessions (one
+   * consolidated alert at the end instead of N stacked ones); a failure's
+   * error alert always shows, from logProductionRun itself, regardless of
+   * row count, so the reason is never hidden.
+   *
+   * @returns succeededCount - how many rows saved before stopping.
+   *          failedIndex - the 0-based index of the row that failed, or
+   *          null if every row succeeded. The caller should drop rows
+   *          [0, succeededCount) from its own pending list before letting
+   *          the user retry, so a retry doesn't resubmit rows that are
+   *          already saved (which would create duplicates).
+   *          sessionId - the id used for this call, if any. Pass it back in
+   *          as `existingSessionId` on a retry.
+   */
+  const logProductionRunSession = async (
+    rows: Omit<ProductionRun, 'id' | 'createdAt' | 'productionSessionId'>[],
+    existingSessionId?: string
+  ): Promise<{ succeededCount: number; failedIndex: number | null; sessionId?: string }> => {
+    if (rows.length === 0) return { succeededCount: 0, failedIndex: null };
+
+    const isSession = rows.length > 1 || !!existingSessionId;
+    const sessionId = isSession ? (existingSessionId || Math.random().toString(36).substr(2, 9)) : undefined;
+
+    for (let i = 0; i < rows.length; i++) {
+      try {
+        await logProductionRun(
+          { ...rows[i], ...(sessionId && { productionSessionId: sessionId }) },
+          { silent: isSession }
+        );
+      } catch {
+        // logProductionRun already showed its own error alert - just report
+        // how far we got so the caller can drop the successful rows and
+        // retry with the same sessionId.
+        return { succeededCount: i, failedIndex: i, sessionId };
+      }
+    }
+
+    if (isSession) {
+      showAlert('Production Runs Logged', `Recorded ${rows.length} item(s) in this session.`);
+    }
+    return { succeededCount: rows.length, failedIndex: null, sessionId };
   };
 
   /**
@@ -135,13 +206,16 @@ export function useProductionActions(
    *     leave an orphaned, already-fulfilled order behind with nothing
    *     backing it.
    */
-  const deleteProductionRun = async (runId: string) => {
+  const deleteProductionRun = async (
+    runId: string,
+    options?: { skipConfirm?: boolean; silent?: boolean } // used by deleteProductionRunSession to bulk-delete a session with one confirm and one summary alert instead of one per run
+  ) => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const run = productionRuns.find(r => r.id === runId);
     if (!run) return;
 
-    if (window.confirm('Are you sure you want to delete this production run? This will restore raw materials and deduct finished goods stock.')) {
+    if (options?.skipConfirm || window.confirm('Are you sure you want to delete this production run? This will restore raw materials and deduct finished goods stock.')) {
       try {
         const batch = writeBatch(db);
 
@@ -170,12 +244,37 @@ export function useProductionActions(
 
         await batch.commit();
 
-        showAlert('Success', 'Production run deleted and inventory restored.');
+        if (!options?.silent) {
+          showAlert('Success', 'Production run deleted and inventory restored.');
+        }
       } catch (err: any) {
         console.error('deleteProductionRun error:', err);
         showAlert('Error', `Failed to delete production run: ${err?.message || 'Unknown error'}`);
       }
     }
+  };
+
+  /**
+   * Deletes every production run in a session (see
+   * ProductionRun.productionSessionId) with ONE confirmation instead of one
+   * per run. Each run still goes through the unchanged deleteProductionRun
+   * per member (its own inventory reversal, its own linked-order cleanup),
+   * just with its individual confirm and success alert suppressed — a
+   * single consolidated success alert fires at the end instead.
+   */
+  const deleteProductionRunSession = async (sessionId: string) => {
+    const sessionRuns = productionRuns.filter(r => r.productionSessionId === sessionId);
+    if (sessionRuns.length === 0) return;
+
+    if (!window.confirm(`Are you sure you want to delete this whole session? This restores raw materials and deducts finished-goods stock for all ${sessionRuns.length} item(s).`)) {
+      return;
+    }
+
+    for (const run of sessionRuns) {
+      await deleteProductionRun(run.id, { skipConfirm: true, silent: true });
+    }
+
+    showAlert('Success', `Deleted ${sessionRuns.length} item(s) and restored inventory.`);
   };
 
   /**
@@ -277,7 +376,9 @@ export function useProductionActions(
 
   return {
     logProductionRun,
+    logProductionRunSession,
     deleteProductionRun,
+    deleteProductionRunSession,
     handleDiscardBatch,
     runsNeedingOrderBackfill,
     backfillMissingOrders,

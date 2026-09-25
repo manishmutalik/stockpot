@@ -122,6 +122,16 @@ export interface Order {
   /** What's paid to a third-party courier (Uber, Porter, etc.) — counted as
    * an expense. Only meaningful when deliveryMethod is 'third_party'. */
   deliveryFee?: number;
+  /** Groups several single-item Order documents into one logical order the
+   * customer thinks of as a single purchase (e.g. "2 cakes and 3 cookies").
+   * Undefined/absent means this order isn't part of a multi-item group —
+   * fully backward compatible with every existing order.
+   *
+   * Each grouped Order is still a complete, independent document — its own
+   * fulfilled status, its own refund status, etc. Group membership is for
+   * UI presentation and bulk actions, not a change to what an individual
+   * Order document means. */
+  orderGroupId?: string;
 }
 
 /**
@@ -236,17 +246,11 @@ export interface AppViewProps {
   
   isAddOrderModalOpen: boolean;
   setIsAddOrderModalOpen: (b: boolean) => void;
-  modalOrderDate: string;
-  setModalOrderDate: (s: string) => void;
-  modalCustomerName: string;
-  setModalCustomerName: (s: string) => void;
-  modalCustomerPhone: string;
-  setModalCustomerPhone: (s: string) => void;
-  modalLineItems: any[];
-  setModalLineItems: (l: any[]) => void;
-  isSavingOrder: boolean;
-  setIsSavingOrder: (b: boolean) => void;
-  
+  addOrderGroup: (
+    common: { date: string; customerName?: string; customerPhone?: string },
+    lineItems: { menuItemId: string; quantity: number }[]
+  ) => Promise<void>;
+
   summaryRefDate: string;
   setSummaryRefDate: (s: string) => void;
   expandedRecipeId: string | null;
@@ -308,6 +312,7 @@ export interface AppViewProps {
   removeIngredientFromRecipe: (id: string, i: number) => void;
   logProductionRun: (r: any) => void;
   deleteProductionRun: (id: string) => void;
+  deleteProductionRunSession: (sessionId: string) => void;
   handleDiscardBatch: (b: any) => void;
   runsNeedingOrderBackfill: any[];
   backfillMissingOrders: () => void;

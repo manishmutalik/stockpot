@@ -11,12 +11,74 @@ import {
   MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
   LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X
 } from 'lucide-react';
-import { AppViewProps } from '../types';
+import { AppViewProps, MenuItem } from '../types';
 import { IngredientSelectorModal } from '../components/IngredientSelectorModal';
-import { ProductionRunModal } from '../components/ProductionRunModal';
+import { ProductionRunModal, ProductionRun } from '../components/ProductionRunModal';
 import { CURRENCIES, INITIAL_MATERIALS } from '../App';
 import { UNIT_CONVERSIONS } from '../App';
+import { clusterProductionRunsBySession } from '../utils/productionRunClustering';
 
+const PURPOSE_LABELS: Record<string, string> = {
+  market_stock: '🛒 Market Stock',
+  customer_order: '📦 Customer Order',
+  sampling: '🎁 Sampling',
+  personal_use: '🏠 Personal Use',
+  other: '✳️ Other',
+};
+const PURPOSE_COLORS: Record<string, string> = {
+  market_stock: 'bg-blue-50 text-blue-700',
+  customer_order: 'bg-emerald-50 text-emerald-700',
+  sampling: 'bg-purple-50 text-purple-700',
+  personal_use: 'bg-stone-100 text-stone-600',
+  other: 'bg-amber-50 text-amber-700',
+};
+
+/**
+ * One production run's table row. Extracted so the same row renders
+ * identically whether it stands alone or sits nested inside a session's
+ * clustered group (see the productionSessionId clustering in
+ * ProductionView below) — one implementation, not two copies to keep in
+ * sync. `tinted` lightly shades a row that's part of a session, to
+ * visually connect it to its group header above.
+ */
+const ProductionRunRow: React.FC<{
+  run: ProductionRun;
+  menu: MenuItem[];
+  currency: { symbol: string };
+  deleteProductionRun: (id: string) => void;
+  tinted?: boolean;
+}> = ({ run, menu, currency, deleteProductionRun, tinted }) => {
+  const recipe = menu.find(m => m.id === run.recipeId);
+  const sellable = run.quantityYield ?? run.quantityProduced;
+  const waste = run.quantityProduced - sellable;
+  return (
+    <tr className={`hover:bg-stone-50/50 transition-colors ${tinted ? 'bg-amber-50/20' : ''}`}>
+      <td className="px-6 py-4 text-sm text-stone-600">{new Date(run.date).toLocaleDateString()}</td>
+      <td className="px-6 py-4 text-sm font-bold text-stone-800">{recipe?.name || 'Unknown'}</td>
+      <td className="px-6 py-4 text-sm text-stone-600">{run.expiryDate ? new Date(run.expiryDate).toLocaleDateString() : '-'}</td>
+      <td className="px-6 py-4">
+        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${PURPOSE_COLORS[run.purpose] || 'bg-stone-100 text-stone-600'}`}>
+          {PURPOSE_LABELS[run.purpose] || run.purpose}
+        </span>
+      </td>
+      <td className="px-6 py-4 text-right text-sm font-bold text-stone-700">{run.quantityProduced}</td>
+      <td className="px-6 py-4 text-right text-sm text-stone-600">
+        {sellable}
+        {waste > 0 && <span className="text-xs text-amber-500 ml-1">(-{waste} waste)</span>}
+      </td>
+      <td className="px-6 py-4 text-right text-sm font-bold text-stone-900 font-sans">{currency.symbol}{(run.costTotal || 0).toFixed(2)}</td>
+      <td className="px-6 py-4 text-right">
+        <button
+          onClick={() => deleteProductionRun(run.id)}
+          className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+          title="Delete Production Run"
+        >
+          <Trash2 size={16} />
+        </button>
+      </td>
+    </tr>
+  );
+};
 
 export const ProductionView: React.FC<AppViewProps> = (props) => {
   // Destructure all props to make variables available in the scope
@@ -28,8 +90,6 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
-    modalOrderDate, setModalOrderDate, modalCustomerName, setModalCustomerName, modalCustomerPhone,
-    setModalCustomerPhone, modalLineItems, setModalLineItems, isSavingOrder, setIsSavingOrder,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
@@ -42,7 +102,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
+    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
     addOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, restockMaterial, setRestockMaterial,
     showSaveFeedback, saveDay,
@@ -181,20 +241,6 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
 
               {/* Runs List */}
               {(() => {
-                const PURPOSE_LABELS: Record<string, string> = {
-                  market_stock: '🛒 Market Stock',
-                  customer_order: '📦 Customer Order',
-                  sampling: '🎁 Sampling',
-                  personal_use: '🏠 Personal Use',
-                  other: '✳️ Other',
-                };
-                const PURPOSE_COLORS: Record<string, string> = {
-                  market_stock: 'bg-blue-50 text-blue-700',
-                  customer_order: 'bg-emerald-50 text-emerald-700',
-                  sampling: 'bg-purple-50 text-purple-700',
-                  personal_use: 'bg-stone-100 text-stone-600',
-                  other: 'bg-amber-50 text-amber-700',
-                };
                 const filtered = [...productionRuns]
                   .filter(r => (!productionFilterRecipe || r.recipeId === productionFilterRecipe) && (!productionFilterPurpose || r.purpose === productionFilterPurpose))
                   .sort((a, b) => b.createdAt - a.createdAt);
@@ -228,38 +274,42 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-stone-100">
-                        {filtered.map(run => {
-                          const recipe = menu.find(m => m.id === run.recipeId);
-                          const sellable = run.quantityYield ?? run.quantityProduced;
-                          const waste = run.quantityProduced - sellable;
-                          return (
-                            <tr key={run.id} className="hover:bg-stone-50/50 transition-colors">
-                              <td className="px-6 py-4 text-sm text-stone-600">{new Date(run.date).toLocaleDateString()}</td>
-                              <td className="px-6 py-4 text-sm font-bold text-stone-800">{recipe?.name || 'Unknown'}</td>
-                              <td className="px-6 py-4 text-sm text-stone-600">{run.expiryDate ? new Date(run.expiryDate).toLocaleDateString() : '-'}</td>
-                              <td className="px-6 py-4">
-                                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${PURPOSE_COLORS[run.purpose] || 'bg-stone-100 text-stone-600'}`}>
-                                  {PURPOSE_LABELS[run.purpose] || run.purpose}
+                        {clusterProductionRunsBySession(filtered).flatMap(cluster => cluster.type === 'single' ? (
+                          <ProductionRunRow
+                            key={cluster.run.id}
+                            run={cluster.run}
+                            menu={menu}
+                            currency={currency}
+                            deleteProductionRun={deleteProductionRun}
+                          />
+                        ) : [
+                          <tr key={`${cluster.groupId}-header`} className="bg-amber-50/60">
+                            <td colSpan={8} className="px-6 py-2.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-700 flex items-center gap-1.5">
+                                  <Factory size={12} /> Session ({cluster.runs.length} items)
                                 </span>
-                              </td>
-                              <td className="px-6 py-4 text-right text-sm font-bold text-stone-700">{run.quantityProduced}</td>
-                              <td className="px-6 py-4 text-right text-sm text-stone-600">
-                                {sellable}
-                                {waste > 0 && <span className="text-xs text-amber-500 ml-1">(-{waste} waste)</span>}
-                              </td>
-                              <td className="px-6 py-4 text-right text-sm font-bold text-stone-900 font-sans">{currency.symbol}{(run.costTotal || 0).toFixed(2)}</td>
-                              <td className="px-6 py-4 text-right">
                                 <button
-                                  onClick={() => deleteProductionRun(run.id)}
-                                  className="p-2 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                                  title="Delete Production Run"
+                                  onClick={() => deleteProductionRunSession(cluster.groupId)}
+                                  title="Delete every item in this session"
+                                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold uppercase tracking-widest text-rose-500 hover:bg-rose-100 transition-colors"
                                 >
-                                  <Trash2 size={16} />
+                                  <Trash2 size={12} /> Delete Session
                                 </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                              </div>
+                            </td>
+                          </tr>,
+                          ...cluster.runs.map(run => (
+                            <ProductionRunRow
+                              key={run.id}
+                              run={run}
+                              menu={menu}
+                              currency={currency}
+                              deleteProductionRun={deleteProductionRun}
+                              tinted
+                            />
+                          )),
+                        ])}
                       </tbody>
                     </table>
                     </div>
