@@ -78,6 +78,14 @@ export interface IngredientRequirement {
  *
  * `finishedGoodsStock` tracks pre-baked units available for immediate sale,
  * populated by production runs and decremented on order fulfilment.
+ *
+ * Moving to a stricter meaning as part of the production-run/order
+ * redesign: this becomes the authoritative count of *unreserved* stock —
+ * every production run still adds to it, but an order will claim
+ * (decrement) its quantity at order-creation time rather than at a later
+ * fulfilment step, and an order can only be created for quantities this
+ * number currently covers. `fulfilled` (see Order below) stops being tied
+ * to this deduction once that lands.
  */
 export interface MenuItem {
   id: string;
@@ -103,12 +111,23 @@ export interface Order {
   customerPhone?: string;
   /** Set to true once fulfillOrder() has successfully deducted inventory for
    * this order, so it can't be fulfilled a second time (which would deduct
-   * inventory twice for the same order). */
+   * inventory twice for the same order).
+   *
+   * Changing role as part of the production-run/order redesign: once stock
+   * is reserved at order-creation time instead of here, this becomes a
+   * plain completion/status flag ("has this order actually been handed
+   * over") with no inventory math attached — an order can be created,
+   * edited, and deleted correctly regardless of whether it's fulfilled. */
   fulfilled?: boolean;
   /** Set when this order was auto-created from a Production Log entry logged
    * with purpose 'customer_order' — links back to that ProductionRun's id,
    * so deleting the production run also removes its linked order instead of
-   * leaving an orphaned, already-fulfilled order behind. */
+   * leaving an orphaned, already-fulfilled order behind.
+   *
+   * This auto-link is being retired: new production runs stop creating
+   * orders (customer identification now always originates from the Orders
+   * tab, which already captures name/phone). Field stays populated on
+   * pre-existing linked orders. */
   productionRunId?: string;
   /** Delivery address, free text. Optional — most orders may be pickup. */
   deliveryAddress?: string;

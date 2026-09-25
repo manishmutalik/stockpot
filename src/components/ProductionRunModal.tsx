@@ -2,8 +2,16 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, ChevronDown, ChevronUp, Calendar, Package, Factory, Plus, Trash2 } from 'lucide-react';
 
 /**
- * Describes why a production batch was made.
- * Determines whether finished-goods stock should be incremented after logging.
+ * Describes why a production batch was made. Currently determines whether
+ * finished-goods stock is incremented after logging (see STOCK_PURPOSES in
+ * useProductionActions.logProductionRun).
+ *
+ * Being retired from new production runs: going forward, every run adds to
+ * stock regardless of purpose — what an item is used for (sold to a
+ * customer, kept as personal use, etc.) is decided later, when it's
+ * consumed from stock, not at bake time. This type and PURPOSE_OPTIONS
+ * below stay only so ProductionRun.purpose can still be read on runs
+ * logged before that change.
  */
 export type ProductionPurpose = 'customer_order' | 'market_stock' | 'sampling' | 'personal_use' | 'other';
 
@@ -18,6 +26,8 @@ export interface ProductionRun {
   remainingQuantity?: number; // Added for FIFO stock deduction
   quantityYield?: number;  // Sellable units after waste. Defaults to quantityProduced if not set.
   date: string;            // YYYY-MM-DD
+  /** See ProductionPurpose above — required on existing records, no longer
+   * set by new production-run logging once that change lands. */
   purpose: ProductionPurpose;
   notes?: string;
   costTotal: number;       // Material cost snapshotted at creation time (not live-calculated)
