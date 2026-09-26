@@ -238,6 +238,31 @@ export function useIntegrations(
   };
 
   /**
+   * Claims finished-goods stock for a batch of newly-imported orders, the
+   * same way addOrderGroup does for orders created locally — these
+   * represent sales that already happened on Shopify/Odoo, so local stock
+   * needs to reflect them too, not just the order records.
+   *
+   * Unlike addOrderGroup, this never rejects: there's no "not enough
+   * stock" to reject when the sale already happened externally, so each
+   * item's stock is clamped at 0 instead. Quantities are combined per
+   * menu item first, since more than one imported line item can reference
+   * the same one.
+   */
+  const claimFinishedGoodsStock = async (userId: string, importedOrders: Order[]) => {
+    const claimedByItem = new Map<string, number>();
+    for (const order of importedOrders) {
+      claimedByItem.set(order.menuItemId, (claimedByItem.get(order.menuItemId) ?? 0) + order.quantity);
+    }
+    for (const [menuItemId, claimed] of claimedByItem) {
+      const item = menu.find(m => m.id === menuItemId);
+      if (!item) continue;
+      const current = item.finishedGoodsStock ?? 0;
+      await setDoc(doc(db, 'users', userId, 'menu', menuItemId), { finishedGoodsStock: Math.max(0, current - claimed) }, { merge: true });
+    }
+  };
+
+  /**
    * Fetches orders from Shopify for `orderDate`, matches line items to the local
    * menu by exact name (case-insensitive), and writes matched orders to Firestore
    * at `users/{userId}/orders`. Unmatched items are reported in an alert.
@@ -292,6 +317,7 @@ export function useIntegrations(
         for (const order of newOrders) {
           await setDoc(doc(db, 'users', userId, 'orders', order.id), order);
         }
+        await claimFinishedGoodsStock(userId, newOrders);
         showAlert("Import Successful", `Imported ${matchedCount} items from ${shopifyOrders.length} Shopify orders.`);
       } else {
         const uniqueUnmatched = Array.from(new Set(unmatchedItems));
@@ -364,6 +390,7 @@ export function useIntegrations(
           for (const order of newOrders) {
             await setDoc(doc(db, 'users', userId, 'orders', order.id), order);
           }
+          await claimFinishedGoodsStock(userId, newOrders);
 
           let msg = `Successfully imported ${matchedCount} items from ${odooOrders.length} Odoo orders.`;
           if (unmatchedItems.length > 0) {

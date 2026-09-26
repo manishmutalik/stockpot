@@ -311,6 +311,7 @@ import { UNIT_CONVERSIONS, convertAmount, CURRENCIES } from './utils/conversions
 import { splitSaleForGst, calculateMaterialGstPaid } from './utils/gstCalculations';
 import { attributeDeliveryFieldByGroup } from './utils/orderClustering';
 import { getBatchesNeedingAttention } from './utils/stockAging';
+import { getExperimentMaterialUsage } from './utils/experimentMaterialUsage';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
 
@@ -904,14 +905,6 @@ function BakeryApp() {
     discardReason, setDiscardReason, handleDiscard,
   } = useWastageActions(materials, menu, showAlert);
 
-  // Orders and production runs filtered to the currently selected summary date range.
-  // Depended on by financials, chartData, and the Summary tab tables.
-  const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      return order.date >= summaryDateStart && order.date <= summaryDateEnd;
-    });
-  }, [orders, summaryDateStart, summaryDateEnd]);
-
   const filteredProductionRuns = useMemo(() => {
     return productionRuns.filter(r => r.date >= summaryDateStart && r.date <= summaryDateEnd);
   }, [productionRuns, summaryDateStart, summaryDateEnd]);
@@ -921,74 +914,27 @@ function BakeryApp() {
     return filteredProductionRuns.reduce((sum, r) => sum + (r.costTotal || 0), 0);
   }, [filteredProductionRuns]);
 
-  // Aggregated material usage across ALL orders and experiments (not range-filtered).
-  // Used to compute remaining inventory displayed on the Inventory tab.
-  const inventoryUsage = useMemo(() => {
-    const usage: Record<string, number> = {};
+  // Aggregated material usage from experiments (not range-filtered). Used
+  // to compute remaining inventory displayed on the Inventory tab.
+  //
+  // Orders no longer factor in here as of the production-run/order
+  // redesign: raw materials are deducted exactly once, at production time
+  // (see logProductionRun) — an order only ever claims finished-goods
+  // stock (a separate field), fulfilled or not, so it never touches raw
+  // materials. Experiments are the one case that still needs this
+  // projection: logging an experiment's material list never deducts
+  // `initialStock` for real, so its usage stays a pending draw until the
+  // material is actually restocked/adjusted by hand.
+  const inventoryUsage = useMemo(
+    () => getExperimentMaterialUsage(experiments, materials),
+    [materials, experiments]
+  );
 
-    // Only unfulfilled orders count here. A fulfilled order's ingredients
-    // were already deducted for real from `initialStock` (see fulfillOrder /
-    // logProductionRun), so counting them again here would double-subtract
-    // the same usage — once for real, once as a phantom projection.
-    orders.filter(order => !order.fulfilled).forEach(order => {
-      const item = menu.find(m => m.id === order.menuItemId);
-      if (item) {
-        item.recipe.forEach(req => {
-          const mat = materials.find(m => m.id === req.materialId);
-          if (mat) {
-            const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-            usage[req.materialId] = (usage[req.materialId] || 0) + (convertedAmount * order.quantity);
-          }
-        });
-      }
-    });
-
-    experiments.forEach(exp => {
-      exp.materials.forEach(req => {
-        const mat = materials.find(m => m.id === req.materialId);
-        if (mat) {
-          const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-          usage[req.materialId] = (usage[req.materialId] || 0) + convertedAmount;
-        }
-      });
-    });
-
-    return usage;
-  }, [orders, menu, materials, experiments]);
-
-  // Aggregated material usage filtered to the summary date range.
-  // Used by the inventory usage table in the Summary tab.
+  // Same as inventoryUsage, filtered to the summary date range.
   const summaryInventoryUsage = useMemo(() => {
-    const usage: Record<string, number> = {};
-
-    // Same fix as inventoryUsage above: only unfulfilled orders represent
-    // pending, not-yet-deducted usage.
-    filteredOrders.filter(order => !order.fulfilled).forEach(order => {
-      const item = menu.find(m => m.id === order.menuItemId);
-      if (item) {
-        item.recipe.forEach(req => {
-          const mat = materials.find(m => m.id === req.materialId);
-          if (mat) {
-            const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-            usage[req.materialId] = (usage[req.materialId] || 0) + (convertedAmount * order.quantity);
-          }
-        });
-      }
-    });
-
     const rangeExperiments = experiments.filter(e => e.date >= summaryDateStart && e.date <= summaryDateEnd);
-    rangeExperiments.forEach(exp => {
-      exp.materials.forEach(req => {
-        const mat = materials.find(m => m.id === req.materialId);
-        if (mat) {
-          const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-          usage[req.materialId] = (usage[req.materialId] || 0) + convertedAmount;
-        }
-      });
-    });
-
-    return usage;
-  }, [filteredOrders, menu, materials, experiments, summaryDateStart, summaryDateEnd]);
+    return getExperimentMaterialUsage(rangeExperiments, materials);
+  }, [materials, experiments, summaryDateStart, summaryDateEnd]);
 
   // Current on-hand stock after deducting all recorded usage.
   // `remaining` is displayed as the live stock level on the Inventory tab.

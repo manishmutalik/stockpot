@@ -226,6 +226,13 @@ export function useProductionActions(
 
         batch.delete(doc(db, 'users', userId, 'productionRuns', runId));
 
+        // A linked order here is always one of the old auto-created
+        // "customer order" orders (see logProductionRun's history) — it
+        // never claimed stock on its own the way addOrderGroup does today,
+        // since it was created pre-fulfilled and the run's own addition
+        // above already accounts for the full quantity. So this is a plain
+        // delete, not deleteOrder(): restoring stock for it too would
+        // over-credit by quantity it never actually held.
         const linkedOrder = orders.find(o => o.productionRunId === runId);
         if (linkedOrder) {
           batch.delete(doc(db, 'users', userId, 'orders', linkedOrder.id));

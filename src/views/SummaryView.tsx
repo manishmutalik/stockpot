@@ -333,7 +333,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                   <div className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px]">Cost of Goods Sold</div>
                   <div className="text-2xl font-sans font-bold text-rose-600 truncate">{currency.symbol}{financials.orderExpenses.toFixed(2)}</div>
                   <div className="text-[10px] text-stone-400 mt-2 uppercase font-bold tracking-wider">
-                    Cost of fulfilled orders
+                    Materials cost for orders in this period
                   </div>
                 </div>
                 <div className="bg-amber-50 p-6 rounded-[10px] sm:rounded-[15px] border border-amber-100 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
