@@ -16,7 +16,7 @@
  * pattern as the other extracted hooks).
  */
 import type React from 'react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { auth, db, doc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { RawMaterial, MenuItem } from '../types';
@@ -29,6 +29,10 @@ export type DiscardTarget = {
   maxQty: number;
   unit: string;
   costPerUnit: number;
+  /** Pre-fills the Reason field for a quick action (e.g. Market Stock's
+   * "Personal Use"/"Sampling" buttons) instead of leaving it blank for
+   * freeform entry — still editable, just not starting empty. */
+  presetReason?: string;
 };
 
 export function useWastageActions(
@@ -39,6 +43,13 @@ export function useWastageActions(
   const [discardTarget, setDiscardTarget] = useState<DiscardTarget | null>(null);
   const [discardQty, setDiscardQty] = useState('');
   const [discardReason, setDiscardReason] = useState('');
+
+  // Seeds the Reason field from the target's presetReason (or clears it)
+  // every time a new discard target is opened, so a leftover reason from a
+  // previous item/flow can never leak into the next one.
+  useEffect(() => {
+    setDiscardReason(discardTarget?.presetReason ?? '');
+  }, [discardTarget]);
 
   const handleDiscard = async (e: React.FormEvent) => {
     e.preventDefault();

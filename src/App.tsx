@@ -56,7 +56,9 @@ import {
   X,
   Salad,
   Search,
-  Loader2
+  Loader2,
+  Home,
+  Gift
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { apiFetch } from './utils/apiClient';
@@ -85,7 +87,7 @@ const WastageView = React.lazy(() => import('./views/WastageView').then(m => ({ 
 const SettingsView = React.lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })));
 
 import { IngredientSelectorModal } from './components/IngredientSelectorModal';
-import { ProductionRunModal, ProductionRun, ProductionPurpose } from './components/ProductionRunModal';
+import { ProductionRunModal, ProductionRun } from './components/ProductionRunModal';
 import { AddOrderModal } from './components/AddOrderModal';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -308,6 +310,8 @@ const INITIAL_MENU: MenuItem[] = [
 import { UNIT_CONVERSIONS, convertAmount, CURRENCIES } from './utils/conversions';
 import { splitSaleForGst, calculateMaterialGstPaid } from './utils/gstCalculations';
 import { attributeDeliveryFieldByGroup } from './utils/orderClustering';
+import { getBatchesNeedingAttention } from './utils/stockAging';
+import { getExperimentMaterialUsage } from './utils/experimentMaterialUsage';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
 
@@ -876,14 +880,13 @@ function BakeryApp() {
   // ── Order Actions ────────────────────────────────────────────────────────────
   // Extracted to src/hooks/useOrderActions.ts as part of the Phase 4 breakup.
   const {
-    addOrder, addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders,
-  } = useOrderActions(menu, orders, materials, productionRuns, orderDate, showConfirm, showAlert);
+    addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders,
+  } = useOrderActions(menu, orders, orderDate, showConfirm, showAlert);
 
   // ── Production Run Actions ───────────────────────────────────────────────────
   // Extracted to src/hooks/useProductionActions.ts as part of the Phase 4 breakup.
   const {
     logProductionRun, logProductionRunSession, deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
-    runsNeedingOrderBackfill, backfillMissingOrders,
   } = useProductionActions(menu, materials, productionRuns, orders, showAlert);
 
   // ── Experiment Actions ───────────────────────────────────────────────────────
@@ -902,14 +905,6 @@ function BakeryApp() {
     discardReason, setDiscardReason, handleDiscard,
   } = useWastageActions(materials, menu, showAlert);
 
-  // Orders and production runs filtered to the currently selected summary date range.
-  // Depended on by financials, chartData, and the Summary tab tables.
-  const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      return order.date >= summaryDateStart && order.date <= summaryDateEnd;
-    });
-  }, [orders, summaryDateStart, summaryDateEnd]);
-
   const filteredProductionRuns = useMemo(() => {
     return productionRuns.filter(r => r.date >= summaryDateStart && r.date <= summaryDateEnd);
   }, [productionRuns, summaryDateStart, summaryDateEnd]);
@@ -919,74 +914,27 @@ function BakeryApp() {
     return filteredProductionRuns.reduce((sum, r) => sum + (r.costTotal || 0), 0);
   }, [filteredProductionRuns]);
 
-  // Aggregated material usage across ALL orders and experiments (not range-filtered).
-  // Used to compute remaining inventory displayed on the Inventory tab.
-  const inventoryUsage = useMemo(() => {
-    const usage: Record<string, number> = {};
+  // Aggregated material usage from experiments (not range-filtered). Used
+  // to compute remaining inventory displayed on the Inventory tab.
+  //
+  // Orders no longer factor in here as of the production-run/order
+  // redesign: raw materials are deducted exactly once, at production time
+  // (see logProductionRun) — an order only ever claims finished-goods
+  // stock (a separate field), fulfilled or not, so it never touches raw
+  // materials. Experiments are the one case that still needs this
+  // projection: logging an experiment's material list never deducts
+  // `initialStock` for real, so its usage stays a pending draw until the
+  // material is actually restocked/adjusted by hand.
+  const inventoryUsage = useMemo(
+    () => getExperimentMaterialUsage(experiments, materials),
+    [materials, experiments]
+  );
 
-    // Only unfulfilled orders count here. A fulfilled order's ingredients
-    // were already deducted for real from `initialStock` (see fulfillOrder /
-    // logProductionRun), so counting them again here would double-subtract
-    // the same usage — once for real, once as a phantom projection.
-    orders.filter(order => !order.fulfilled).forEach(order => {
-      const item = menu.find(m => m.id === order.menuItemId);
-      if (item) {
-        item.recipe.forEach(req => {
-          const mat = materials.find(m => m.id === req.materialId);
-          if (mat) {
-            const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-            usage[req.materialId] = (usage[req.materialId] || 0) + (convertedAmount * order.quantity);
-          }
-        });
-      }
-    });
-
-    experiments.forEach(exp => {
-      exp.materials.forEach(req => {
-        const mat = materials.find(m => m.id === req.materialId);
-        if (mat) {
-          const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-          usage[req.materialId] = (usage[req.materialId] || 0) + convertedAmount;
-        }
-      });
-    });
-
-    return usage;
-  }, [orders, menu, materials, experiments]);
-
-  // Aggregated material usage filtered to the summary date range.
-  // Used by the inventory usage table in the Summary tab.
+  // Same as inventoryUsage, filtered to the summary date range.
   const summaryInventoryUsage = useMemo(() => {
-    const usage: Record<string, number> = {};
-
-    // Same fix as inventoryUsage above: only unfulfilled orders represent
-    // pending, not-yet-deducted usage.
-    filteredOrders.filter(order => !order.fulfilled).forEach(order => {
-      const item = menu.find(m => m.id === order.menuItemId);
-      if (item) {
-        item.recipe.forEach(req => {
-          const mat = materials.find(m => m.id === req.materialId);
-          if (mat) {
-            const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-            usage[req.materialId] = (usage[req.materialId] || 0) + (convertedAmount * order.quantity);
-          }
-        });
-      }
-    });
-
     const rangeExperiments = experiments.filter(e => e.date >= summaryDateStart && e.date <= summaryDateEnd);
-    rangeExperiments.forEach(exp => {
-      exp.materials.forEach(req => {
-        const mat = materials.find(m => m.id === req.materialId);
-        if (mat) {
-          const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-          usage[req.materialId] = (usage[req.materialId] || 0) + convertedAmount;
-        }
-      });
-    });
-
-    return usage;
-  }, [filteredOrders, menu, materials, experiments, summaryDateStart, summaryDateEnd]);
+    return getExperimentMaterialUsage(rangeExperiments, materials);
+  }, [materials, experiments, summaryDateStart, summaryDateEnd]);
 
   // Current on-hand stock after deducting all recorded usage.
   // `remaining` is displayed as the live stock level on the Inventory tab.
@@ -1351,11 +1299,12 @@ function BakeryApp() {
   };
 
   // ─── Computed Values (useMemo) ──────────────────────────────────────────────────────
-  const expiredBatches = useMemo(() => {
+  // Unsold batches needing a freshness check today — aging (no known expiry
+  // and sitting a couple of days, or close to a known expiry) or already
+  // expired. See src/utils/stockAging.ts for the tiering rules.
+  const agingBatches = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
-    return productionRuns.filter(r => 
-      (r.remainingQuantity ?? 0) > 0 && r.expiryDate && r.expiryDate <= today
-    );
+    return getBatchesNeedingAttention(productionRuns, today);
   }, [productionRuns]);
 
   // Aggregated income/expenses/profit for the currently selected date range.
@@ -1644,8 +1593,8 @@ function BakeryApp() {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
-    addOrder, addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
+    addOrderGroup, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,
     billing, openBillingPortal, isOpeningPortal, startCheckout, isStartingCheckout,
@@ -1739,23 +1688,25 @@ function BakeryApp() {
             </div>
             
             <div className="flex items-center gap-2 sm:gap-6 min-w-0 shrink">
-                            {expiredBatches.length > 0 && !isExpiredAlertDismissed && (
+                            {agingBatches.length > 0 && !isExpiredAlertDismissed && (() => {
+                const hasExpired = agingBatches.some(b => b.urgency === 'expired');
+                return (
                 <div className="relative group shrink-0 z-50">
-                  <button 
-                    className="relative p-2 sm:p-2.5 text-rose-500 bg-rose-50 rounded-xl hover:bg-rose-100 transition-all shadow-sm shadow-rose-500/5"
+                  <button
+                    className={`relative p-2 sm:p-2.5 rounded-xl transition-all shadow-sm ${hasExpired ? 'text-rose-500 bg-rose-50 hover:bg-rose-100 shadow-rose-500/5' : 'text-amber-600 bg-amber-50 hover:bg-amber-100 shadow-amber-500/5'}`}
                   >
                     <AlertCircle size={20} className="sm:w-[22px] sm:h-[22px] group-hover:scale-110 transition-transform" />
-                    <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] sm:text-[10px] font-bold w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                      {expiredBatches.length}
+                    <span className={`absolute -top-1 -right-1 text-white text-[9px] sm:text-[10px] font-bold w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm ${hasExpired ? 'bg-rose-600' : 'bg-amber-600'}`}>
+                      {agingBatches.length}
                     </span>
                   </button>
                   <div className="absolute top-full right-0 sm:-left-32 mt-2 w-64 bg-white border border-stone-200 shadow-xl rounded-xl p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none group-hover:pointer-events-auto origin-top-right sm:origin-top scale-95 group-hover:scale-100">
                     <div className="flex justify-between items-center mb-2 pb-2 border-b border-stone-100">
-                      <span className="text-xs font-bold text-rose-600">Expired Batches</span>
+                      <span className={`text-xs font-bold ${hasExpired ? 'text-rose-600' : 'text-amber-600'}`}>Freshness Alerts</span>
                       <button onClick={() => setIsExpiredAlertDismissed(true)} className="text-[10px] text-stone-400 hover:text-stone-600">Dismiss</button>
                     </div>
                     <ul className="flex flex-col gap-2 max-h-60 overflow-y-auto">
-                      {expiredBatches.map(batch => {
+                      {agingBatches.map(({ run: batch, urgency }) => {
                         const recipe = menu.find(m => m.id === batch.recipeId);
                         // Other items from the same multi-item session (see
                         // productionSessionId), so discarding one bad batch is
@@ -1766,12 +1717,18 @@ function BakeryApp() {
                               .filter(r => r.productionSessionId === batch.productionSessionId && r.id !== batch.id)
                               .map(r => menu.find(m => m.id === r.recipeId)?.name || 'Unknown')
                           : [];
+                        const tone = urgency === 'expired' ? 'rose' : 'amber';
                         return (
                           <li key={batch.id} className="flex flex-col gap-0.5 text-xs">
                             <div className="flex justify-between items-center gap-2">
-                              <span className="font-bold text-stone-700 truncate pr-2">{recipe?.name || 'Unknown'}</span>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded shrink-0 ${tone === 'rose' ? 'bg-rose-100 text-rose-600' : 'bg-amber-100 text-amber-700'}`}>
+                                  {urgency === 'expired' ? 'Expired' : 'Check freshness'}
+                                </span>
+                                <span className="font-bold text-stone-700 truncate">{recipe?.name || 'Unknown'}</span>
+                              </div>
                               <div className="flex items-center gap-1.5 shrink-0">
-                                <span className="text-rose-500 font-medium whitespace-nowrap bg-rose-50 px-1.5 py-0.5 rounded">
+                                <span className={`font-medium whitespace-nowrap px-1.5 py-0.5 rounded ${tone === 'rose' ? 'text-rose-500 bg-rose-50' : 'text-amber-600 bg-amber-50'}`}>
                                   Qty: {batch.remainingQuantity}
                                 </span>
                                 <button
@@ -1779,7 +1736,7 @@ function BakeryApp() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (window.confirm(`Discard ${batch.remainingQuantity} unit(s) of "${recipe?.name || 'this item'}"? This will be logged as wastage.`)) {
-                                      handleDiscardBatch(batch);
+                                      handleDiscardBatch(batch, urgency === 'expired' ? 'Expired' : 'Aging Stock');
                                     }
                                   }}
                                   className="p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
@@ -1798,7 +1755,7 @@ function BakeryApp() {
                         );
                       })}
                     </ul>
-                    <button 
+                    <button
                       onMouseDown={() => { setActiveTab('production'); setIsExpiredAlertDismissed(true); }}
                       onClick={() => { setActiveTab('production'); setIsExpiredAlertDismissed(true); }}
                       className="mt-3 w-full block text-[10px] font-bold text-primary uppercase tracking-widest hover:text-primary-dark transition-colors text-center"
@@ -1807,7 +1764,8 @@ function BakeryApp() {
                     </button>
                   </div>
                 </div>
-              )}
+                );
+              })()}
               {lowStockItems.length > 0 && !isAlertDismissed && (
                 <div className="relative group shrink-0 z-50">
                   <button 
@@ -1983,12 +1941,21 @@ function BakeryApp() {
               className="relative w-full max-w-md bg-white rounded-[10px] sm:rounded-[15px] shadow-2xl overflow-y-auto max-h-[90vh] border border-stone-200/50"
             >
               <div className="p-8">
-                <div className="w-16 h-16 bg-rose-50 rounded-xl flex items-center justify-center mb-6">
-                  <Trash2 size={32} className="text-rose-500" />
+                <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-6 ${
+                  discardTarget.presetReason === 'Personal Use' ? 'bg-amber-50' :
+                  discardTarget.presetReason === 'Sampling' ? 'bg-purple-50' : 'bg-rose-50'
+                }`}>
+                  {discardTarget.presetReason === 'Personal Use' ? <Home size={32} className="text-amber-600" /> :
+                   discardTarget.presetReason === 'Sampling' ? <Gift size={32} className="text-purple-600" /> :
+                   <Trash2 size={32} className="text-rose-500" />}
                 </div>
-                <h3 className="text-2xl font-bold text-stone-800 mb-2">Discard {discardTarget.name}</h3>
+                <h3 className="text-2xl font-bold text-stone-800 mb-2">
+                  {discardTarget.presetReason ? `${discardTarget.presetReason}: ${discardTarget.name}` : `Discard ${discardTarget.name}`}
+                </h3>
                 <p className="text-stone-500 text-sm font-sans italic mb-6">
-                  Log wasted stock and track cost. Max: {discardTarget.maxQty} {discardTarget.unit}
+                  {discardTarget.presetReason
+                    ? `Log this as ${discardTarget.presetReason.toLowerCase()} — excluded from income. Max: ${discardTarget.maxQty} ${discardTarget.unit}`
+                    : `Log wasted stock and track cost. Max: ${discardTarget.maxQty} ${discardTarget.unit}`}
                 </p>
 
                 <form onSubmit={handleDiscard}>
@@ -2028,9 +1995,13 @@ function BakeryApp() {
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-6 py-4 rounded-xl text-xs font-bold text-white bg-rose-500 hover:bg-rose-600 transition-colors uppercase tracking-widest shadow-lg shadow-rose-500/20"
+                      className={`flex-1 px-6 py-4 rounded-xl text-xs font-bold text-white transition-colors uppercase tracking-widest shadow-lg ${
+                        discardTarget.presetReason === 'Personal Use' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20' :
+                        discardTarget.presetReason === 'Sampling' ? 'bg-purple-500 hover:bg-purple-600 shadow-purple-500/20' :
+                        'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20'
+                      }`}
                     >
-                      Confirm Discard
+                      {discardTarget.presetReason ? `Confirm ${discardTarget.presetReason}` : 'Confirm Discard'}
                     </button>
                   </div>
                 </form>

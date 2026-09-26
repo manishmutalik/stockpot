@@ -1,5 +1,53 @@
 # Changelog
 
+## Production-run/order redesign: stock as the source of truth
+
+Live use of the multi-item feature below surfaced a deeper mismatch:
+production runs were tagged with a "purpose" at bake time (customer order /
+market stock / sampling / personal use), but real bakeries decide what a
+batch is for *after* baking, at order or consumption time. This redesign
+makes `finishedGoodsStock` the single hard cap everything else reads from,
+instead of a purpose picker deciding whether stock even exists.
+
+- **Production logging**: the purpose picker is gone — a run is just
+  recipe + quantity, and every run adds to stock. The old "customer order"
+  auto-link (and its one-time backfill tool) is retired for new runs;
+  `purpose` stays on existing records for historical display only, and
+  deleting an old run still reverses stock correctly whether or not it
+  used to add any (see LEGACY_STOCK_PURPOSES).
+- **Orders are hard-capped to stock, claimed at creation**: adding an order
+  (now a single "Add Order" button — the separate "Multi-Item Order"
+  button is gone) validates the requested quantity against
+  `finishedGoodsStock` and claims it atomically with the order, instead of
+  a later "Fulfill" step doing the deduction. `fulfillOrder` is now a plain
+  completion status with no inventory effect, and its old raw-material
+  fallback is gone — if there isn't enough stock, the fix is logging
+  another production run. Editing an order's item/quantity inline
+  re-balances the claim; deleting an order (one at a time or via Reset)
+  restores it. Shopify/Odoo-imported orders claim stock the same way,
+  clamped at 0 rather than rejected, since an external sale can't be
+  un-sold.
+- **Market Stock**: the old "Finished Goods In Stock" chip list is now a
+  proper section with three actions per item — Discard (unchanged),
+  and new "Personal Use"/"Sampling" quick actions that route through the
+  existing wastage-log mechanism (already excluded from income) with a
+  preset, editable reason.
+- **Freshness alerts**: a new pure urgency tiering (`fresh`/`aging`/
+  `expired`) in `stockAging.ts` extends the old expiry-only alert to also
+  flag batches with no known expiry that have simply been sitting a
+  couple of days, surfaced in both the header alert and Market Stock.
+  UI-only for now, but built as the one detection function a future push
+  channel can reuse unchanged.
+- **Regression fix**: `finishedGoodsStock` now being claimed at order
+  creation (not fulfillment) made a raw-material-usage projection in the
+  Inventory tab stale — it was projecting future material draw for
+  unfulfilled orders, which can no longer happen since materials are
+  deducted exactly once, at production time. Left uncorrected it would
+  have under-reported remaining raw-material stock and could trigger false
+  low-stock alerts. Fixed by dropping orders from that projection
+  entirely (experiments still correctly count, since they never deduct
+  real stock).
+
 ## Multi-item orders & production runs
 
 A customer order is often for several different items ("2 cakes and 3

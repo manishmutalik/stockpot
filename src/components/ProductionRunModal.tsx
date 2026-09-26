@@ -2,8 +2,16 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, ChevronDown, ChevronUp, Calendar, Package, Factory, Plus, Trash2 } from 'lucide-react';
 
 /**
- * Describes why a production batch was made.
- * Determines whether finished-goods stock should be incremented after logging.
+ * Describes why a production batch was made. Currently determines whether
+ * finished-goods stock is incremented after logging (see STOCK_PURPOSES in
+ * useProductionActions.logProductionRun).
+ *
+ * Being retired from new production runs: going forward, every run adds to
+ * stock regardless of purpose — what an item is used for (sold to a
+ * customer, kept as personal use, etc.) is decided later, when it's
+ * consumed from stock, not at bake time. This type and PURPOSE_OPTIONS
+ * below stay only so ProductionRun.purpose can still be read on runs
+ * logged before that change.
  */
 export type ProductionPurpose = 'customer_order' | 'market_stock' | 'sampling' | 'personal_use' | 'other';
 
@@ -18,7 +26,9 @@ export interface ProductionRun {
   remainingQuantity?: number; // Added for FIFO stock deduction
   quantityYield?: number;  // Sellable units after waste. Defaults to quantityProduced if not set.
   date: string;            // YYYY-MM-DD
-  purpose: ProductionPurpose;
+  /** See ProductionPurpose above — set on existing records, no longer
+   * written by new production-run logging. */
+  purpose?: ProductionPurpose;
   notes?: string;
   costTotal: number;       // Material cost snapshotted at creation time (not live-calculated)
   createdAt: number;       // Unix ms timestamp
@@ -60,7 +70,7 @@ interface ProductionRunModalProps {
    * it back in if a retry is needed.
    */
   onSave: (
-    rows: Omit<ProductionRun, 'id' | 'createdAt' | 'productionSessionId'>[],
+    rows: Omit<ProductionRun, 'id' | 'createdAt' | 'productionSessionId' | 'purpose'>[],
     existingSessionId?: string
   ) => Promise<{ succeededCount: number; failedIndex: number | null; sessionId?: string }>;
   currency: { symbol: string };
@@ -70,17 +80,6 @@ interface ProductionRow {
   recipeId: string;
   quantity: number;
 }
-
-// ─── Purpose Options ──────────────────────────────────────────────────────────
-// `addsStock: true` → the run will increment finishedGoodsStock for the menu item.
-// `addsStock: false` → consumed internally; no stock delta is recorded.
-const PURPOSE_OPTIONS: { value: ProductionPurpose; label: string; emoji: string; addsStock: boolean }[] = [
-  { value: 'market_stock',    label: 'Market Stock',   emoji: '🛒', addsStock: true  },
-  { value: 'customer_order',  label: 'Customer Order', emoji: '📦', addsStock: true  },
-  { value: 'sampling',        label: 'Sampling',       emoji: '🎁', addsStock: false },
-  { value: 'personal_use',    label: 'Personal Use',   emoji: '🏠', addsStock: false },
-  { value: 'other',           label: 'Other',          emoji: '✳️', addsStock: true  },
-];
 
 // ─── Unit Conversion Utility ───────────────────────────────────────────────────
 /**
@@ -124,7 +123,6 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   const today = new Date().toISOString().split('T')[0]; // default date = today (YYYY-MM-DD)
   const [rows,       setRows]       = useState<ProductionRow[]>([EMPTY_ROW(menu)]);
   const [date,       setDate]       = useState(today);
-  const [purpose,    setPurpose]    = useState<ProductionPurpose>('market_stock');
   const [showYield,  setShowYield]  = useState(false);
   const [yieldQty,   setYieldQty]   = useState<number | ''>('');
   const [notes,      setNotes]      = useState('');
@@ -154,8 +152,6 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   }, [isOpen, menu]);
 
   // ─── Derived Values ─────────────────────────────────────────────────────────
-  const purposeInfo = PURPOSE_OPTIONS.find(p => p.value === purpose);
-
   /**
    * Live material-cost estimate per row (recipe × that row's quantity).
    * Each recipe ingredient amount is unit-converted to match the raw-material's
@@ -202,7 +198,6 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   const resetForm = () => {
     setRows([EMPTY_ROW(menu)]);
     setDate(today);
-    setPurpose('market_stock');
     setShowYield(false);
     setYieldQty('');
     setNotes('');
@@ -246,7 +241,6 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
         quantityProduced: row.quantity,
         quantityYield: effectiveYield ?? row.quantity,
         date,
-        purpose,
         notes: notes.trim() || undefined,
         costTotal: parseFloat(rowCosts[i].toFixed(2)), // snapshot rounded to 2 dp
       }));
@@ -363,30 +357,6 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
             />
           </div>
 
-          {/* Purpose */}
-          <div>
-            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2 block">Purpose</label>
-            <div className="grid grid-cols-2 gap-2">
-              {PURPOSE_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setPurpose(opt.value)}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left transition-all ${
-                    purpose === opt.value
-                      ? 'bg-amber-50 border-amber-300 text-amber-800'
-                      : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
-                  }`}
-                >
-                  <span className="text-base">{opt.emoji}</span>
-                  <div>
-                    <div className="text-[11px] font-bold">{opt.label}</div>
-                    <div className="text-[9px] text-stone-400">{opt.addsStock ? 'Adds to stock' : 'No stock added'}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Yield toggle (collapsible) — only meaningful for a single item; with
               multiple items a single "sellable units" number can't represent
               per-item waste. Use the Production Log's per-item Discard action
@@ -443,12 +413,6 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
               <div className="text-xl font-bold font-serif text-stone-800 mt-0.5">
                 {currency.symbol}{costTotal.toFixed(2)}
               </div>
-              {purposeInfo && !purposeInfo.addsStock && (
-                <div className="text-[10px] text-amber-600 mt-1 font-bold">ℹ️ No finished goods will be added (purpose: {purposeInfo.label})</div>
-              )}
-              {purpose === 'customer_order' && rows.length > 1 && (
-                <div className="text-[10px] text-amber-600 mt-1 font-bold">ℹ️ Each item will create its own separate order in the Orders tab</div>
-              )}
             </div>
             <Package size={28} className="text-amber-300" />
           </div>

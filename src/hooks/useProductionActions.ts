@@ -14,7 +14,6 @@
  * by the shared Firestore listener in App.tsx and passed in as read-only
  * parameters (same pattern as the other extracted hooks).
  */
-import { useMemo } from 'react';
 import { auth, db, doc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { deductIngredients } from '../utils/inventoryDeduction';
@@ -32,11 +31,13 @@ export function useProductionActions(
    * Records a production run in Firestore using an atomic `writeBatch`.
    * All operations either succeed together or fail together — no partial writes:
    *  1. Deducts raw materials from inventory.
-   *  2. Increments `finishedGoodsStock` on the menu item (if purpose allows).
+   *  2. Increments `finishedGoodsStock` on the menu item — every run adds to
+   *     available stock; what it's eventually used for (sold, personal use,
+   *     etc.) is decided later, when it's consumed from stock.
    *  3. Writes the run document to `users/{userId}/productionRuns/{id}`.
    */
   const logProductionRun = async (
-    runData: Omit<ProductionRun, 'id' | 'createdAt'>,
+    runData: Omit<ProductionRun, 'id' | 'createdAt' | 'purpose'>,
     options?: { silent?: boolean } // silent: true skips the success alert (used by logProductionRunSession for multi-item sessions, which shows one consolidated alert instead of one per item)
   ) => {
     if (!auth.currentUser) return;
@@ -69,7 +70,6 @@ export function useProductionActions(
       remainingQuantity: yieldAmt,
       ...(expiryDate && { expiryDate }),
       date: runData.date,
-      purpose: runData.purpose,
       costTotal: runData.costTotal,
       createdAt: Date.now(),
     };
@@ -83,34 +83,14 @@ export function useProductionActions(
       // 1. Deduct raw materials (added to batch, not committed yet)
       await deductIngredients(userId, materials, recipeItem.recipe, runData.quantityProduced, batch);
 
-      // 2. Add finished goods (if purpose warrants it)
-      const STOCK_PURPOSES: ProductionPurpose[] = ['customer_order', 'market_stock', 'other'];
-      if (STOCK_PURPOSES.includes(runData.purpose)) {
-        const effectiveYield = runData.quantityYield ?? runData.quantityProduced;
-        const currentStock = recipeItem.finishedGoodsStock ?? 0;
-        batch.set(
-          doc(db, 'users', userId, 'menu', runData.recipeId),
-          { finishedGoodsStock: currentStock + effectiveYield },
-          { merge: true }
-        );
-      }
-
-      // 2.5. If this run was made for a specific customer order, also create
-      // a linked Order so it shows up in the Orders tab. Marked `fulfilled`
-      // immediately, since the inventory/stock effects above already cover
-      // it — otherwise a later "Fulfill" click on this same order would
-      // deduct inventory a second time for the same units.
-      if (runData.purpose === 'customer_order') {
-        const orderId = Math.random().toString(36).substr(2, 9);
-        batch.set(doc(db, 'users', userId, 'orders', orderId), {
-          id: orderId,
-          menuItemId: runData.recipeId,
-          quantity: runData.quantityProduced,
-          date: runData.date,
-          fulfilled: true,
-          productionRunId: id,
-        } as Order);
-      }
+      // 2. Add finished goods — every production run adds to available stock.
+      const effectiveYield = runData.quantityYield ?? runData.quantityProduced;
+      const currentStock = recipeItem.finishedGoodsStock ?? 0;
+      batch.set(
+        doc(db, 'users', userId, 'menu', runData.recipeId),
+        { finishedGoodsStock: currentStock + effectiveYield },
+        { merge: true }
+      );
 
       // 3. Persist the run record
       batch.set(doc(db, 'users', userId, 'productionRuns', id), run);
@@ -118,8 +98,7 @@ export function useProductionActions(
       await batch.commit();
 
       if (!options?.silent) {
-        const orderNote = runData.purpose === 'customer_order' ? ' A matching order was added to the Orders tab.' : '';
-        showAlert('Production Run Logged', `Recorded ${runData.quantityProduced} unit(s) of ${recipeItem.name}. Raw materials deducted.${orderNote}`);
+        showAlert('Production Run Logged', `Recorded ${runData.quantityProduced} unit(s) of ${recipeItem.name}. Raw materials deducted.`);
       }
     } catch (err: any) {
       console.error('logProductionRun error:', err);
@@ -167,7 +146,7 @@ export function useProductionActions(
    *          as `existingSessionId` on a retry.
    */
   const logProductionRunSession = async (
-    rows: Omit<ProductionRun, 'id' | 'createdAt' | 'productionSessionId'>[],
+    rows: Omit<ProductionRun, 'id' | 'createdAt' | 'productionSessionId' | 'purpose'>[],
     existingSessionId?: string
   ): Promise<{ succeededCount: number; failedIndex: number | null; sessionId?: string }> => {
     if (rows.length === 0) return { succeededCount: 0, failedIndex: null };
@@ -196,15 +175,25 @@ export function useProductionActions(
   };
 
   /**
+   * Legacy purposes that added to finished-goods stock under the old
+   * purpose-gated logging (see logProductionRun's history) — 'sampling' and
+   * 'personal_use' runs never incremented stock, so reversing them must not
+   * decrement it either. A run with no `purpose` at all is a new-style run,
+   * which always added to stock, so it's always reversed.
+   */
+  const LEGACY_STOCK_PURPOSES: ProductionPurpose[] = ['customer_order', 'market_stock', 'other'];
+
+  /**
    * Deletes a production run after confirmation using an atomic `writeBatch`,
    * then reverses its inventory effects. All-or-nothing:
    *  1. Restores raw materials using `deductIngredients` with a negative multiplier.
-   *  2. Decrements `finishedGoodsStock` (clamped to 0) on the menu item.
+   *  2. Decrements `finishedGoodsStock` (clamped to 0) on the menu item, if
+   *     this run added to it in the first place (see LEGACY_STOCK_PURPOSES).
    *  3. Deletes the run document from Firestore.
    *  4. Deletes the linked Order too, if this run was logged as a customer
-   *     order (see logProductionRun) — otherwise deleting the run would
-   *     leave an orphaned, already-fulfilled order behind with nothing
-   *     backing it.
+   *     order (see logProductionRun's history) — otherwise deleting the run
+   *     would leave an orphaned, already-fulfilled order behind with
+   *     nothing backing it.
    */
   const deleteProductionRun = async (
     runId: string,
@@ -223,8 +212,8 @@ export function useProductionActions(
         if (item) {
           await deductIngredients(userId, materials, item.recipe, -run.quantityProduced, batch);
 
-          const STOCK_PURPOSES: ProductionPurpose[] = ['customer_order', 'market_stock', 'other'];
-          if (STOCK_PURPOSES.includes(run.purpose)) {
+          const addedStockAtCreation = !run.purpose || LEGACY_STOCK_PURPOSES.includes(run.purpose);
+          if (addedStockAtCreation) {
             const effectiveYield = run.quantityYield ?? run.quantityProduced;
             const currentStock = item.finishedGoodsStock ?? 0;
             batch.set(
@@ -237,6 +226,13 @@ export function useProductionActions(
 
         batch.delete(doc(db, 'users', userId, 'productionRuns', runId));
 
+        // A linked order here is always one of the old auto-created
+        // "customer order" orders (see logProductionRun's history) — it
+        // never claimed stock on its own the way addOrderGroup does today,
+        // since it was created pre-fulfilled and the run's own addition
+        // above already accounts for the full quantity. So this is a plain
+        // delete, not deleteOrder(): restoring stock for it too would
+        // over-credit by quantity it never actually held.
         const linkedOrder = orders.find(o => o.productionRunId === runId);
         if (linkedOrder) {
           batch.delete(doc(db, 'users', userId, 'orders', linkedOrder.id));
@@ -278,10 +274,14 @@ export function useProductionActions(
   };
 
   /**
-   * Discards an expired production batch: logs it as wastage, zeroes the
-   * run's remaining quantity, and decrements finished-goods stock.
+   * Discards a production batch flagged by the freshness alert: logs it as
+   * wastage, zeroes the run's remaining quantity, and decrements
+   * finished-goods stock. `reason` defaults to 'Expired' but the caller
+   * should pass the batch's actual urgency (see stockAging.ts) — the alert
+   * now also lists batches that are merely aging, not yet past a known
+   * expiry, so hardcoding 'Expired' would misdescribe those.
    */
-  const handleDiscardBatch = async (batch: ProductionRun) => {
+  const handleDiscardBatch = async (batch: ProductionRun, reason: string = 'Expired') => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const qty = batch.remainingQuantity ?? 0;
@@ -304,7 +304,7 @@ export function useProductionActions(
         quantity: qty,
         cost: proratedCost,
         date: new Date().toISOString().split('T')[0],
-        reason: 'Expired'
+        reason
       });
 
       batchOp.set(
@@ -327,60 +327,11 @@ export function useProductionActions(
     }
   };
 
-  /**
-   * Production runs tagged "Customer Order" that don't yet have a linked
-   * Order — i.e. runs logged before the auto-linking in logProductionRun()
-   * existed. Used to show/hide the one-time "Backfill Missing Orders"
-   * button: once the list is empty, there's nothing left to backfill and
-   * the button naturally disappears.
-   */
-  const runsNeedingOrderBackfill = useMemo(
-    () => productionRuns.filter(
-      r => r.purpose === 'customer_order' && !orders.some(o => o.productionRunId === r.id)
-    ),
-    [productionRuns, orders]
-  );
-
-  /**
-   * One-time catch-up action: creates the missing linked Order for every
-   * existing "Customer Order" production run that predates the auto-linking
-   * feature. Unlike logProductionRun, this does NOT touch inventory —
-   * materials/finished-goods stock were already correctly adjusted when
-   * each run was originally logged, so this only creates the missing Order
-   * records, marked pre-fulfilled for the same reason as the live path.
-   */
-  const backfillMissingOrders = async () => {
-    if (!auth.currentUser || runsNeedingOrderBackfill.length === 0) return;
-    const userId = auth.currentUser.uid;
-
-    try {
-      const batch = writeBatch(db);
-      for (const run of runsNeedingOrderBackfill) {
-        const orderId = Math.random().toString(36).substr(2, 9);
-        batch.set(doc(db, 'users', userId, 'orders', orderId), {
-          id: orderId,
-          menuItemId: run.recipeId,
-          quantity: run.quantityProduced,
-          date: run.date,
-          fulfilled: true,
-          productionRunId: run.id,
-        } as Order);
-      }
-      await batch.commit();
-      showAlert('Backfill Complete', `Added ${runsNeedingOrderBackfill.length} missing order(s) to the Orders tab.`);
-    } catch (err: any) {
-      console.error('backfillMissingOrders error:', err);
-      showAlert('Error', `Failed to backfill orders: ${err?.message || 'Unknown error'}`);
-    }
-  };
-
   return {
     logProductionRun,
     logProductionRunSession,
     deleteProductionRun,
     deleteProductionRunSession,
     handleDiscardBatch,
-    runsNeedingOrderBackfill,
-    backfillMissingOrders,
   };
 }

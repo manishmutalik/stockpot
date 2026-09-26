@@ -6,6 +6,7 @@ interface MenuItem {
   name: string;
   emoji?: string;
   sellingPrice: number;
+  finishedGoodsStock?: number;
 }
 
 export interface OrderLineItem {
@@ -107,6 +108,23 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency }: AddOr
       return;
     }
 
+    // Stock is a hard cap — combine quantities first, since the same item
+    // can appear in more than one row and each row passing individually
+    // doesn't mean their total fits what's actually available.
+    const requestedByItem = new Map<string, number>();
+    for (const li of lineItems) {
+      requestedByItem.set(li.menuItemId, (requestedByItem.get(li.menuItemId) ?? 0) + li.quantity);
+    }
+    for (const [menuItemId, requested] of requestedByItem) {
+      const item = menu.find(m => m.id === menuItemId);
+      const available = item?.finishedGoodsStock ?? 0;
+      if (requested > available) {
+        setInvalidRowIndex(lineItems.findIndex(li => li.menuItemId === menuItemId));
+        setError(`Only ${available} unit(s) of "${item?.name}" in stock — this order needs ${requested}.`);
+        return;
+      }
+    }
+
     setIsSaving(true);
     try {
       await onSave(
@@ -161,7 +179,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency }: AddOr
                   >
                     <option value="" disabled>Select an item...</option>
                     {menu.map(item => (
-                      <option key={item.id} value={item.id}>{item.emoji ? `${item.emoji} ` : ''}{item.name}</option>
+                      <option key={item.id} value={item.id}>{item.emoji ? `${item.emoji} ` : ''}{item.name} ({item.finishedGoodsStock ?? 0} in stock)</option>
                     ))}
                   </select>
                   <input

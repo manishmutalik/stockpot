@@ -9,7 +9,7 @@ import {
   DollarSign, Globe, Calendar, Filter, ArrowLeft, ArrowRight, Clock, Settings, Settings2,
   Layers, UserCog, Puzzle, User as UserIcon, LogOut, Image, Palette, Store, Mail, Phone,
   MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
-  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X
+  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X, Home, Gift
 } from 'lucide-react';
 import { AppViewProps, MenuItem } from '../types';
 import { IngredientSelectorModal } from '../components/IngredientSelectorModal';
@@ -17,7 +17,11 @@ import { ProductionRunModal, ProductionRun } from '../components/ProductionRunMo
 import { CURRENCIES, INITIAL_MATERIALS } from '../App';
 import { UNIT_CONVERSIONS } from '../App';
 import { clusterProductionRunsBySession } from '../utils/productionRunClustering';
+import { getWorstUrgencyForItem } from '../utils/stockAging';
 
+// Historical display only — new production runs no longer set `purpose`
+// (see ProductionRun.purpose); these labels/colors only render for runs
+// logged before that change.
 const PURPOSE_LABELS: Record<string, string> = {
   market_stock: '🛒 Market Stock',
   customer_order: '📦 Customer Order',
@@ -57,9 +61,13 @@ const ProductionRunRow: React.FC<{
       <td className="px-6 py-4 text-sm font-bold text-stone-800">{recipe?.name || 'Unknown'}</td>
       <td className="px-6 py-4 text-sm text-stone-600">{run.expiryDate ? new Date(run.expiryDate).toLocaleDateString() : '-'}</td>
       <td className="px-6 py-4">
-        <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${PURPOSE_COLORS[run.purpose] || 'bg-stone-100 text-stone-600'}`}>
-          {PURPOSE_LABELS[run.purpose] || run.purpose}
-        </span>
+        {run.purpose ? (
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${PURPOSE_COLORS[run.purpose] || 'bg-stone-100 text-stone-600'}`}>
+            {PURPOSE_LABELS[run.purpose] || run.purpose}
+          </span>
+        ) : (
+          <span className="text-stone-300">—</span>
+        )}
       </td>
       <td className="px-6 py-4 text-right text-sm font-bold text-stone-700">{run.quantityProduced}</td>
       <td className="px-6 py-4 text-right text-sm text-stone-600">
@@ -86,7 +94,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     materials, setMaterials, categories, setCategories, menu, setMenu, orders, setOrders,
     experiments, setExperiments, productionRuns, setProductionRuns, wastageLogs, setWastageLogs,
     isProductionRunModalOpen, setIsProductionRunModalOpen, productionFilterRecipe, setProductionFilterRecipe,
-    productionFilterPurpose, setProductionFilterPurpose, activeTab, setActiveTab, activeSettingsTab,
+    activeTab, setActiveTab, activeSettingsTab,
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
@@ -102,12 +110,23 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch, runsNeedingOrderBackfill, backfillMissingOrders,
-    addOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
+    updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, restockMaterial, setRestockMaterial,
     showSaveFeedback, saveDay,
     updateCurrency, handleLogout, isListening, transcript, convertAmount
   } = props;
+
+  // Material cost per unit for one menu item, at current material prices —
+  // shared by every Market Stock action below (Personal Use, Sampling,
+  // Discard) since they all log the same kind of wastage entry.
+  const costPerUnitFor = (item: MenuItem) => item.recipe.reduce((total, req) => {
+    const mat = materials.find(m => m.id === req.materialId);
+    if (!mat) return total;
+    const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
+    return total + (convertedAmount * (mat.costPerUnit || 0));
+  }, 0);
+  const today = new Date().toISOString().split('T')[0];
 
   return (
     <motion.div
@@ -124,20 +143,6 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                   <p className="text-stone-500 text-sm italic font-sans">Record production runs and manage finished goods stock.</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {runsNeedingOrderBackfill.length > 0 && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Add ${runsNeedingOrderBackfill.length} missing order(s) to the Orders tab for customer-order production runs logged before this feature existed?`)) {
-                          backfillMissingOrders();
-                        }
-                      }}
-                      title="Add missing orders for older Customer Order production runs"
-                      className="flex items-center gap-2 bg-white border border-amber-300 text-amber-700 hover:bg-amber-50 px-4 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all active:scale-95"
-                    >
-                      <RefreshCw size={14} />
-                      Backfill {runsNeedingOrderBackfill.length} Missing Order{runsNeedingOrderBackfill.length === 1 ? '' : 's'}
-                    </button>
-                  )}
                   <button
                     onClick={() => setIsProductionRunModalOpen(true)}
                     className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-amber-200 active:scale-95"
@@ -171,46 +176,64 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                 </div>
               </div>
 
-              {/* Finished Goods Stock */}
+              {/* Market Stock — what's left to sell after orders have claimed their share */}
               {menu.some(m => (m.finishedGoodsStock ?? 0) > 0) && (
                 <div className="bg-white rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm overflow-hidden">
                   <div className="px-4 sm:px-8 py-5 border-b border-stone-100 flex items-center gap-3">
                     <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
                       <Package size={18} />
                     </div>
-                    <h3 className="text-base font-bold text-stone-800">Finished Goods In Stock</h3>
+                    <div>
+                      <h3 className="text-base font-bold text-stone-800">Market Stock</h3>
+                      <p className="text-xs text-stone-400 italic">What's left to sell — mark it used or discard it here.</p>
+                    </div>
                   </div>
-                  <div className="px-4 sm:px-8 py-5 flex flex-wrap gap-3">
-                    {menu.filter(m => (m.finishedGoodsStock ?? 0) > 0).map(item => (
-                      <div key={item.id} className="flex items-center gap-2 bg-stone-50 border border-stone-100 rounded-xl pl-4 pr-2 py-1.5">
-                        <span className="text-sm font-bold text-stone-700">{item.name}</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${(item.finishedGoodsStock ?? 0) <= 5 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                          {item.finishedGoodsStock} units
-                        </span>
-                        <button
-                          onClick={() => {
-                            const cost = item.recipe.reduce((total, req) => {
-                              const mat = materials.find(m => m.id === req.materialId);
-                              if (!mat) return total;
-                              const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-                              return total + (convertedAmount * (mat.costPerUnit || 0));
-                            }, 0);
-                            setDiscardTarget({
-                              id: item.id,
-                              name: item.name,
-                              type: 'recipe',
-                              maxQty: item.finishedGoodsStock ?? 0,
-                              unit: 'pcs',
-                              costPerUnit: cost,
-                            });
-                          }}
-                          className="p-1.5 ml-1 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center"
-                          title="Discard / log as wastage"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    ))}
+                  <div className="px-4 sm:px-8 py-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {menu.filter(m => (m.finishedGoodsStock ?? 0) > 0).map(item => {
+                      const stock = item.finishedGoodsStock ?? 0;
+                      const baseTarget = { id: item.id, name: item.name, type: 'recipe' as const, maxQty: stock, unit: 'pcs', costPerUnit: costPerUnitFor(item) };
+                      const urgency = getWorstUrgencyForItem(item.id, productionRuns, today);
+                      return (
+                        <div key={item.id} className="flex items-center justify-between gap-2 bg-stone-50 border border-stone-100 rounded-xl pl-4 pr-2 py-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold text-stone-700 truncate">{item.name}</div>
+                            <div className="flex items-center flex-wrap gap-1 mt-0.5">
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${stock <= 5 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {stock} units
+                              </span>
+                              {urgency !== 'fresh' && (
+                                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${urgency === 'expired' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  <Clock size={10} /> {urgency === 'expired' ? 'Expired batch' : 'Check freshness'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              onClick={() => setDiscardTarget({ ...baseTarget, presetReason: 'Personal Use' })}
+                              className="p-1.5 text-stone-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors flex items-center justify-center"
+                              title="Mark as Personal Use"
+                            >
+                              <Home size={14} />
+                            </button>
+                            <button
+                              onClick={() => setDiscardTarget({ ...baseTarget, presetReason: 'Sampling' })}
+                              className="p-1.5 text-stone-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center justify-center"
+                              title="Mark as Sampling"
+                            >
+                              <Gift size={14} />
+                            </button>
+                            <button
+                              onClick={() => setDiscardTarget(baseTarget)}
+                              className="p-1.5 text-stone-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center"
+                              title="Discard / log as wastage"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -225,24 +248,12 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                   <option value="">All Recipes</option>
                   {menu.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
-                <select
-                  value={productionFilterPurpose}
-                  onChange={e => setProductionFilterPurpose(e.target.value)}
-                  className="bg-white border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold text-stone-600 outline-none focus:ring-2 focus:ring-amber-400/30"
-                >
-                  <option value="">All Purposes</option>
-                  <option value="market_stock">🛒 Market Stock</option>
-                  <option value="customer_order">📦 Customer Order</option>
-                  <option value="sampling">🎁 Sampling</option>
-                  <option value="personal_use">🏠 Personal Use</option>
-                  <option value="other">✳️ Other</option>
-                </select>
               </div>
 
               {/* Runs List */}
               {(() => {
                 const filtered = [...productionRuns]
-                  .filter(r => (!productionFilterRecipe || r.recipeId === productionFilterRecipe) && (!productionFilterPurpose || r.purpose === productionFilterPurpose))
+                  .filter(r => !productionFilterRecipe || r.recipeId === productionFilterRecipe)
                   .sort((a, b) => b.createdAt - a.createdAt);
 
                 if (filtered.length === 0) {

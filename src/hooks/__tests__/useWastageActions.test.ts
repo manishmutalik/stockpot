@@ -58,4 +58,56 @@ describe('useWastageActions', () => {
     expect(showAlert).not.toHaveBeenCalled();
     expect(batchCommit).not.toHaveBeenCalled();
   });
+
+  it('seeds the Reason field from presetReason when a target carries one (Market Stock quick actions)', () => {
+    const showAlert = vi.fn();
+    const { result } = renderHook(() => useWastageActions(materials, menu, showAlert));
+
+    act(() => {
+      result.current.setDiscardTarget({
+        id: 'cake', name: 'Cake', type: 'recipe', maxQty: 5, unit: 'pcs', costPerUnit: 3, presetReason: 'Personal Use',
+      });
+    });
+
+    expect(result.current.discardReason).toBe('Personal Use');
+  });
+
+  it('clears any leftover reason when a new target has no presetReason', () => {
+    const showAlert = vi.fn();
+    const { result } = renderHook(() => useWastageActions(materials, menu, showAlert));
+
+    act(() => {
+      result.current.setDiscardTarget({
+        id: 'cake', name: 'Cake', type: 'recipe', maxQty: 5, unit: 'pcs', costPerUnit: 3, presetReason: 'Sampling',
+      });
+    });
+    expect(result.current.discardReason).toBe('Sampling');
+
+    act(() => {
+      result.current.setDiscardTarget({
+        id: 'flour', name: 'Flour', type: 'material', maxQty: 10, unit: 'kg', costPerUnit: 2,
+      });
+    });
+
+    expect(result.current.discardReason).toBe('');
+  });
+
+  it('logs the preset reason on the wastage entry when the quick action is confirmed', async () => {
+    const showAlert = vi.fn();
+    const { result } = renderHook(() => useWastageActions(materials, menu, showAlert));
+
+    act(() => {
+      result.current.setDiscardTarget({
+        id: 'cake', name: 'Cake', type: 'recipe', maxQty: 5, unit: 'pcs', costPerUnit: 3, presetReason: 'Sampling',
+      });
+      result.current.setDiscardQty('2');
+    });
+
+    await act(async () => {
+      await result.current.handleDiscard({ preventDefault: () => {} } as any);
+    });
+
+    const wastageLogCall = batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('wastageLogs'));
+    expect(wastageLogCall[1].reason).toBe('Sampling');
+  });
 });

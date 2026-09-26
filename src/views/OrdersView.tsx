@@ -109,6 +109,13 @@ const OrderRow: React.FC<{
   toggleDeliveryDetails: (orderId: string) => void;
   currencySymbol: string;
 }> = ({ order, menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol }) => {
+  // Stock available for a given menu item, from this order's point of view:
+  // its own current item gets its already-claimed quantity added back in,
+  // since that's this same order's claim being resized, not new stock.
+  const availableFor = (item: MenuItem) => (item.finishedGoodsStock ?? 0) + (item.id === order.menuItemId ? order.quantity : 0);
+  const currentItem = menu.find(m => m.id === order.menuItemId);
+  const maxQty = currentItem ? availableFor(currentItem) : undefined;
+
   return (
     <div className="group p-3 bg-stone-50/50 rounded-xl border border-stone-100 hover:border-primary/20 transition-all">
       {/* Mobile: stacked card layout */}
@@ -119,11 +126,11 @@ const OrderRow: React.FC<{
           className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm"
         >
           <option value="" disabled>Select Item</option>
-          {menu.map(m => <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name}</option>)}
+          {menu.map(m => <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name} ({availableFor(m)} in stock)</option>)}
         </select>
         <div className="flex items-center gap-2">
           <input
-            type="number" min="1"
+            type="number" min="1" max={maxQty}
             value={order.quantity ?? 0}
             onChange={(e) => updateOrder(order.id, 'quantity', parseInt(e.target.value) || 0)}
             className="w-20 bg-white border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 outline-none shadow-sm text-center"
@@ -139,12 +146,12 @@ const OrderRow: React.FC<{
             <button
               onClick={() => fulfillOrder(order)}
               className="p-2.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors shrink-0"
-              title="Fulfill Order (deduct inventory)"
+              title="Mark Fulfilled"
             >
               <CheckCircle2 size={18} />
             </button>
           ) : (
-            <span className="p-2.5 text-emerald-500 shrink-0" title="Order fulfilled — inventory deducted">
+            <span className="p-2.5 text-emerald-500 shrink-0" title="Order fulfilled">
               <CheckCircle2 size={18} fill="currentColor" className="text-emerald-100" />
             </span>
           )}
@@ -185,12 +192,12 @@ const OrderRow: React.FC<{
             className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm transition-all"
           >
             <option value="" disabled>Select Item</option>
-            {menu.map(m => <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name}</option>)}
+            {menu.map(m => <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name} ({availableFor(m)} in stock)</option>)}
           </select>
         </div>
         <div className="col-span-2">
           <input
-            type="number" min="1"
+            type="number" min="1" max={maxQty}
             value={order.quantity ?? 0}
             onChange={(e) => updateOrder(order.id, 'quantity', parseInt(e.target.value) || 0)}
             className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-sm font-mono font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm transition-all"
@@ -226,12 +233,12 @@ const OrderRow: React.FC<{
             <button
               onClick={() => fulfillOrder(order)}
               className="text-stone-300 hover:text-emerald-500 transition-colors p-2 hover:bg-emerald-50 rounded-xl opacity-0 group-hover:opacity-100"
-              title="Fulfill Order (deduct inventory)"
+              title="Mark Fulfilled"
             >
               <CheckCircle2 size={18} />
             </button>
           ) : (
-            <span className="text-emerald-500 p-2" title="Order fulfilled — inventory deducted">
+            <span className="text-emerald-500 p-2" title="Order fulfilled">
               <CheckCircle2 size={18} fill="currentColor" className="text-emerald-100" />
             </span>
           )}
@@ -286,7 +293,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, handleDiscardBatch, addOrder, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
+    deleteProductionRun, handleDiscardBatch, fulfillOrder, updateOrder, deleteOrder, resetOrders, saveSettings,
     isAddOrderModalOpen, setIsAddOrderModalOpen,
     handleRestock, restockMaterial, setRestockMaterial,
     showSaveFeedback, saveDay,
@@ -351,26 +358,15 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
 
                   <div className="h-8 w-px bg-stone-200 hidden lg:block" />
 
-                  {/* Add Order Button */}
+                  {/* Add Order Button — handles both a single item and several at once */}
                   <button
-                    onClick={addOrder}
+                    onClick={() => setIsAddOrderModalOpen(true)}
                     disabled={menu.length === 0}
-                    title="Quickly add a single blank order to edit inline"
+                    title="Add a customer order — one item or several, with customer details"
                     className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-primary/20 transform active:scale-95 disabled:opacity-50"
                   >
                     <Plus size={18} />
                     Add Order
-                  </button>
-
-                  {/* Multi-Item Order Button */}
-                  <button
-                    onClick={() => setIsAddOrderModalOpen(true)}
-                    disabled={menu.length === 0}
-                    title="Add a customer order with several items and customer details in one form"
-                    className="flex items-center gap-2 bg-white border border-primary/30 text-primary hover:bg-primary/5 px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-sm transform active:scale-95 disabled:opacity-50"
-                  >
-                    <ShoppingBag size={16} />
-                    Multi-Item Order
                   </button>
 
                   {shopifyStatus.connected && (
@@ -440,7 +436,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                         <h3 className="text-xl font-sans font-bold text-stone-800 mb-2">No orders in this range</h3>
                         <p className="text-stone-500 text-sm mb-8 italic font-sans">Try changing the date range or add a new order.</p>
                         <button
-                          onClick={addOrder}
+                          onClick={() => setIsAddOrderModalOpen(true)}
                           disabled={menu.length === 0}
                           className="inline-flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-8 py-3 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-primary/20 transform active:scale-95 disabled:opacity-50"
                         >

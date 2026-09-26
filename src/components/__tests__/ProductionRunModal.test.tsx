@@ -62,7 +62,7 @@ describe('ProductionRunModal — multi-item logging', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it('submits one payload row per item, with shared date/purpose/notes and per-row quantity', async () => {
+  it('submits one payload row per item, with shared date/notes and per-row quantity, and no purpose field', async () => {
     const onSave = vi.fn().mockResolvedValue({ succeededCount: 2, failedIndex: null, sessionId: 'sess1' });
     renderModal(onSave);
 
@@ -82,7 +82,8 @@ describe('ProductionRunModal — multi-item logging', () => {
     expect(rows[0]).toMatchObject({ recipeId: 'cake', quantityProduced: 3, quantityYield: 3 });
     expect(rows[1]).toMatchObject({ recipeId: 'cookie', quantityProduced: 7, quantityYield: 7 });
     expect(rows[0].date).toBe(rows[1].date); // shared session-level date
-    expect(rows[0].purpose).toBe(rows[1].purpose); // shared session-level purpose
+    expect(rows[0]).not.toHaveProperty('purpose');
+    expect(rows[1]).not.toHaveProperty('purpose');
     expect(existingSessionId).toBeUndefined(); // first attempt, no prior session to resume
   });
 
