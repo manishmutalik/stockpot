@@ -72,6 +72,18 @@ describe('handleDiscardBatch (wired to the expired-batches dropdown)', () => {
 
     expect(batchCommit).not.toHaveBeenCalled();
   });
+
+  it('logs the caller-supplied reason instead of the default, for a batch that is aging but not yet expired', async () => {
+    const showAlert = vi.fn();
+    const { result } = renderHook(() =>
+      useProductionActions(menu, materials, [expiredBatch], [], showAlert)
+    );
+
+    await result.current.handleDiscardBatch(expiredBatch, 'Aging Stock');
+
+    const wastageLogCall = batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('wastageLogs'));
+    expect(wastageLogCall[1].reason).toBe('Aging Stock');
+  });
 });
 
 describe('logProductionRun — every run adds to stock, no purpose tagging', () => {

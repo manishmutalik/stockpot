@@ -17,6 +17,7 @@ import { ProductionRunModal, ProductionRun } from '../components/ProductionRunMo
 import { CURRENCIES, INITIAL_MATERIALS } from '../App';
 import { UNIT_CONVERSIONS } from '../App';
 import { clusterProductionRunsBySession } from '../utils/productionRunClustering';
+import { getWorstUrgencyForItem } from '../utils/stockAging';
 
 // Historical display only — new production runs no longer set `purpose`
 // (see ProductionRun.purpose); these labels/colors only render for runs
@@ -125,6 +126,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
     return total + (convertedAmount * (mat.costPerUnit || 0));
   }, 0);
+  const today = new Date().toISOString().split('T')[0];
 
   return (
     <motion.div
@@ -190,13 +192,21 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                     {menu.filter(m => (m.finishedGoodsStock ?? 0) > 0).map(item => {
                       const stock = item.finishedGoodsStock ?? 0;
                       const baseTarget = { id: item.id, name: item.name, type: 'recipe' as const, maxQty: stock, unit: 'pcs', costPerUnit: costPerUnitFor(item) };
+                      const urgency = getWorstUrgencyForItem(item.id, productionRuns, today);
                       return (
                         <div key={item.id} className="flex items-center justify-between gap-2 bg-stone-50 border border-stone-100 rounded-xl pl-4 pr-2 py-2">
                           <div className="min-w-0">
                             <div className="text-sm font-bold text-stone-700 truncate">{item.name}</div>
-                            <span className={`inline-block mt-0.5 text-xs font-bold px-2 py-0.5 rounded-full ${stock <= 5 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                              {stock} units
-                            </span>
+                            <div className="flex items-center flex-wrap gap-1 mt-0.5">
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${stock <= 5 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                {stock} units
+                              </span>
+                              {urgency !== 'fresh' && (
+                                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${urgency === 'expired' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  <Clock size={10} /> {urgency === 'expired' ? 'Expired batch' : 'Check freshness'}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-0.5 shrink-0">
                             <button

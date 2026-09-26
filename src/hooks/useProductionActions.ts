@@ -267,10 +267,14 @@ export function useProductionActions(
   };
 
   /**
-   * Discards an expired production batch: logs it as wastage, zeroes the
-   * run's remaining quantity, and decrements finished-goods stock.
+   * Discards a production batch flagged by the freshness alert: logs it as
+   * wastage, zeroes the run's remaining quantity, and decrements
+   * finished-goods stock. `reason` defaults to 'Expired' but the caller
+   * should pass the batch's actual urgency (see stockAging.ts) — the alert
+   * now also lists batches that are merely aging, not yet past a known
+   * expiry, so hardcoding 'Expired' would misdescribe those.
    */
-  const handleDiscardBatch = async (batch: ProductionRun) => {
+  const handleDiscardBatch = async (batch: ProductionRun, reason: string = 'Expired') => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const qty = batch.remainingQuantity ?? 0;
@@ -293,7 +297,7 @@ export function useProductionActions(
         quantity: qty,
         cost: proratedCost,
         date: new Date().toISOString().split('T')[0],
-        reason: 'Expired'
+        reason
       });
 
       batchOp.set(
