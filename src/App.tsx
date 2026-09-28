@@ -463,6 +463,15 @@ function BakeryApp() {
   // Add Order modal state — the modal itself (AddOrderModal) owns its form
   // fields, same as ProductionRunModal; App.tsx only needs to control visibility.
   const [isAddOrderModalOpen, setIsAddOrderModalOpen] = useState(false);
+  // Set when the modal is opened from Market Stock's "Add to Order" action
+  // (see openAddOrderModalFor below) so the modal starts pre-filled with
+  // that specific item instead of the menu's first item. Cleared whenever
+  // the modal closes so a later plain "Add Order" click starts blank again.
+  const [addOrderPresetItemId, setAddOrderPresetItemId] = useState<string | null>(null);
+  const openAddOrderModalFor = (menuItemId: string) => {
+    setAddOrderPresetItemId(menuItemId);
+    setIsAddOrderModalOpen(true);
+  };
   const [summaryRefDate, setSummaryRefDate] = useState(new Date().toISOString().split('T')[0]);
   const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
   const [inventorySortBy, setInventorySortBy] = useState<'name' | 'stock' | 'cost' | 'date'>('name');
@@ -1582,6 +1591,7 @@ function BakeryApp() {
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
+    openAddOrderModalFor,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
@@ -1903,10 +1913,11 @@ function BakeryApp() {
         />
         <AddOrderModal
           isOpen={isAddOrderModalOpen}
-          onClose={() => setIsAddOrderModalOpen(false)}
+          onClose={() => { setIsAddOrderModalOpen(false); setAddOrderPresetItemId(null); }}
           menu={menu}
           onSave={addOrderGroup}
           currency={currency}
+          presetMenuItemId={addOrderPresetItemId}
         />
         <IngredientSelectorModal
           isOpen={isIngredientSelectorOpen}

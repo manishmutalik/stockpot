@@ -265,6 +265,9 @@ export interface AppViewProps {
   
   isAddOrderModalOpen: boolean;
   setIsAddOrderModalOpen: (b: boolean) => void;
+  /** Opens the Add Order modal pre-filled with this menu item as the first
+   * (only) line item — used by Market Stock's "Add to Order" action. */
+  openAddOrderModalFor: (menuItemId: string) => void;
   addOrderGroup: (
     common: { date: string; customerName?: string; customerPhone?: string },
     lineItems: { menuItemId: string; quantity: number }[]

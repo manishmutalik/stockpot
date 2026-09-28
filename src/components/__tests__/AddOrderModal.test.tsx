@@ -8,10 +8,10 @@ const menu = [
 ];
 const currency = { symbol: '$' };
 
-function renderModal(onSave = vi.fn().mockResolvedValue(undefined)) {
+function renderModal(onSave = vi.fn().mockResolvedValue(undefined), presetMenuItemId?: string | null) {
   const onClose = vi.fn();
   render(
-    <AddOrderModal isOpen={true} onClose={onClose} menu={menu as any} onSave={onSave} currency={currency} />
+    <AddOrderModal isOpen={true} onClose={onClose} menu={menu as any} onSave={onSave} currency={currency} presetMenuItemId={presetMenuItemId} />
   );
   return { onSave, onClose };
 }
@@ -123,5 +123,27 @@ describe('AddOrderModal', () => {
 
     expect(await screen.findByText('Failed to add order. Please try again.')).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  describe('presetMenuItemId (Market Stock\'s "Add to Order" action)', () => {
+    it('opens with a single row pre-filled to the preset item instead of the menu\'s first item', async () => {
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      renderModal(onSave, 'cookie');
+
+      const select = screen.getByRole('combobox') as HTMLSelectElement;
+      expect(select.value).toBe('cookie');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add Order' }));
+
+      await vi.waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      const [, lineItems] = onSave.mock.calls[0];
+      expect(lineItems).toEqual([{ menuItemId: 'cookie', quantity: 1 }]);
+    });
+
+    it('still defaults to the first menu item when no preset is given', () => {
+      renderModal(vi.fn(), undefined);
+      const select = screen.getByRole('combobox') as HTMLSelectElement;
+      expect(select.value).toBe('cake');
+    });
   });
 });

@@ -28,6 +28,10 @@ interface AddOrderModalProps {
     common: { date: string; customerName?: string; customerPhone?: string },
     lineItems: OrderLineItem[]
   ) => Promise<void>;
+  /** When set, the modal opens with a single line item pre-filled to this
+   * menu item instead of defaulting to the first one — used by Market
+   * Stock's "Add to Order" action. */
+  presetMenuItemId?: string | null;
 }
 
 const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderLineItem => ({ menuItemId: menu[0]?.id || '', quantity: 1 });
@@ -42,8 +46,9 @@ const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderLineItem => ({ menuItemId: menu
  * @param menu    - List of menu items available to select.
  * @param onSave  - Async callback that persists all line items; see AddOrderModalProps.
  * @param currency - Locale currency config; only `symbol` is used for display.
+ * @param presetMenuItemId - See AddOrderModalProps.
  */
-export function AddOrderModal({ isOpen, onClose, menu, onSave, currency }: AddOrderModalProps) {
+export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId }: AddOrderModalProps) {
   const today = new Date().toISOString().split('T')[0];
   const [date,          setDate]          = useState(today);
   const [customerName,  setCustomerName]  = useState('');
@@ -56,13 +61,22 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency }: AddOr
   // Re-sync every row's selected item against the *current* menu whenever
   // the modal opens — same reasoning as ProductionRunModal's equivalent
   // effect: menu can still be loading when a row's default was first set.
+  //
+  // A presetMenuItemId (Market Stock's "Add to Order" action) instead
+  // replaces whatever was there with a single fresh row for that item —
+  // opening "Order this" shouldn't carry over rows left from an unrelated
+  // earlier attempt.
   useEffect(() => {
     if (!isOpen) return;
+    if (presetMenuItemId) {
+      setLineItems([{ menuItemId: presetMenuItemId, quantity: 1 }]);
+      return;
+    }
     setLineItems(prev => prev.map(li =>
       menu.some(m => m.id === li.menuItemId) ? li : { ...li, menuItemId: menu[0]?.id || '' }
     ));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, menu]);
+  }, [isOpen, menu, presetMenuItemId]);
 
   const totalValue = useMemo(() => lineItems.reduce((sum, li) => {
     const item = menu.find(m => m.id === li.menuItemId);
