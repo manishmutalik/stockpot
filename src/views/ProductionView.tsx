@@ -98,6 +98,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
+    openAddOrderModalFor,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
@@ -209,6 +210,13 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                             </div>
                           </div>
                           <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              onClick={() => openAddOrderModalFor(item.id)}
+                              className="p-1.5 text-stone-400 hover:text-primary hover:bg-primary/5 rounded-lg transition-colors flex items-center justify-center"
+                              title="Add to an Order"
+                            >
+                              <ShoppingBag size={14} />
+                            </button>
                             <button
                               onClick={() => setDiscardTarget({ ...baseTarget, presetReason: 'Personal Use' })}
                               className="p-1.5 text-stone-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors flex items-center justify-center"
