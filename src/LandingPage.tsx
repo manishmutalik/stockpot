@@ -1,10 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { 
-  ArrowRight, 
-  ChefHat, 
-  TrendingUp, 
+import {
+  ArrowRight,
+  TrendingUp,
   Box, 
   Clock, 
   CheckCircle2, 
@@ -18,8 +17,8 @@ const LandingPage: React.FC = () => {
       {/* Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white/70 backdrop-blur-md border-b border-stone-200/50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3 text-amber-600">
-            <ChefHat size={32} strokeWidth={2.5} />
+          <div className="flex items-center gap-3">
+            <img src="/logo-icon.png" alt="Stockpot" className="w-8 h-8" />
             <span className="font-serif text-2xl font-bold tracking-tight text-stone-900">Stockpot</span>
           </div>
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-stone-600">

@@ -1337,7 +1337,8 @@ function BakeryApp() {
     return (
       <div className="min-h-screen bg-stone-50 flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <img src="/logo-icon.png" alt="Stockpot" className="w-12 h-12" />
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
           <p className="text-stone-500 font-medium font-sans italic">Loading Stockpot...</p>
         </div>
       </div>
@@ -1356,10 +1357,7 @@ function BakeryApp() {
           className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200 shadow-xl max-w-md w-full"
         >
           <div className="flex flex-col items-center mb-8">
-            <div className="bg-primary p-4 rounded-xl text-white mb-4 shadow-lg shadow-primary/20">
-              <Utensils size={32} />
-            </div>
-            <h2 className="text-2xl font-bold text-stone-800 font-sans">Stockpot</h2>
+            <img src="/logo-full.png" alt="Stockpot" className="h-16 w-auto mb-4" />
             <p className="text-stone-500 text-sm text-center mt-2 font-sans italic">Manage your inventory, recipes, and margins securely in the cloud.</p>
           </div>
 
