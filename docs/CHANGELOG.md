@@ -1,5 +1,30 @@
 # Changelog
 
+## Weight <-> volume unit conversion
+
+Recipes and raw materials could mix weight (g/kg) and volume (ml/l) units
+freely — e.g. a recipe requirement in ml for a material stocked in kg —
+but `convertAmount` only ever handled conversions within the same family
+and silently left the amount unchanged for any other pair, quietly
+understating or overstating cost and usage.
+
+- `UNIT_CONVERSIONS` (src/utils/conversions.ts) now converts weight <->
+  volume assuming 1g = 1ml (water's density). Exact for water, a
+  reasonable approximation for many kitchen liquids, but not accurate for
+  anything meaningfully denser or lighter than water (oil, honey, syrup,
+  etc.) — chosen as a simple, no-setup default over adding a per-material
+  density field.
+- `ProductionRunModal`'s cost preview had its own separate, duplicated
+  conversion function with the same weight/volume gap (and no cross-family
+  handling at all) — replaced with the shared `convertAmount` so the
+  preview matches what actually gets saved and what every other cost
+  calculation in the app uses.
+- The Inventory tab's material unit-switcher (which recomputes stock/cost
+  when a material's unit changes) reads from the same table, so switching
+  a material between weight and volume units now converts its stock
+  correctly too, instead of only relabeling the unit and leaving the
+  numbers as-is.
+
 ## Stockpot logo
 
 Added the real Stockpot logo (previously the landing page and login screen
