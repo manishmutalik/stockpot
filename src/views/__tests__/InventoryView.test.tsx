@@ -1,0 +1,166 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import { InventoryView } from '../InventoryView';
+
+const daysFromNow = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; };
+
+const mk = (id: string, name: string, over: Record<string, any> = {}) => ({
+  id, name, unit: 'kg', initialStock: 10, remaining: 10, used: 0, costPerUnit: 10,
+  category: 'Raw Materials', threshold: 2, dateAdded: '2026-01-01', ...over,
+});
+
+const flour = mk('flour', 'Bread Flour');
+const almonds = mk('almonds', 'Almonds', { initialStock: 0.003, remaining: 0.003, threshold: 0.05, costPerUnit: 840 });
+const yeast = mk('yeast', 'Yeast', { unit: 'g', initialStock: 2.4, remaining: 2.4, threshold: 2, category: 'Pantry' });
+const milk = mk('milk', 'Milk', { unit: 'l', expiryDate: daysFromNow(-1) });
+
+function makeProps(overrides: Record<string, any> = {}) {
+  const items = overrides.items ?? [flour, almonds, yeast, milk];
+  return {
+    remainingInventory: items,
+    sortedRemainingInventory: items,
+    lowStockItems: items.filter((i: any) => i.threshold > 0 && i.remaining <= i.threshold),
+    categories: ['Raw Materials', 'Pantry'],
+    settings: { name: 'Test Bakery', gstApplicable: false },
+    currency: { code: 'USD', symbol: '$' },
+    inventorySortBy: 'name',
+    inventorySortOrder: 'asc',
+    isRefreshing: false,
+    lastSynced: new Date(),
+    patchMaterial: vi.fn(),
+    updateMaterial: vi.fn(),
+    deleteMaterial: vi.fn(),
+    setRestockMaterial: vi.fn(),
+    setRestockExpiryDate: vi.fn(),
+    setDiscardTarget: vi.fn(),
+    openNutritionEditor: vi.fn(),
+    setAddMaterialCategory: vi.fn(),
+    setShowAddMaterialModal: vi.fn(),
+    setInventorySortBy: vi.fn(),
+    setInventorySortOrder: vi.fn(),
+    handleDownloadTemplate: vi.fn(),
+    handleImportCSV: vi.fn(),
+    refreshData: vi.fn(),
+    ...overrides,
+  } as any;
+}
+
+describe('InventoryView', () => {
+  it('spotlights the material furthest below its threshold and restocks it', () => {
+    const props = makeProps();
+    render(<InventoryView {...props} />);
+    expect(screen.getByText('CRITICAL STOCK ALERT')).toBeTruthy();
+    expect(screen.getByText('-94% Par')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Restock' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Restock Bread Flour' }));
+    expect(props.setRestockMaterial).toHaveBeenLastCalledWith(flour);
+    expect(props.setRestockMaterial).toHaveBeenCalledWith(almonds);
+    expect(props.setRestockExpiryDate).toHaveBeenCalledWith('');
+  });
+
+  it('shows a healthy state and value total when nothing is low', () => {
+    render(<InventoryView {...makeProps({ items: [flour, milk] })} />);
+    expect(screen.getByText('All stocked up')).toBeTruthy();
+    // (10 + 10) kg/l at $10
+    expect(screen.getByText('$200.00')).toBeTruthy();
+  });
+
+  it('labels rows Low Stock / Reorder Soon / In Stock from the threshold', () => {
+    render(<InventoryView {...makeProps()} />);
+    const row = (name: string) => screen.getByLabelText(`Name of ${name}`).closest('tr')!;
+    expect(within(row('Almonds')).getByText('Low Stock')).toBeTruthy();
+    expect(within(row('Yeast')).getByText('Reorder Soon')).toBeTruthy();
+    expect(within(row('Bread Flour')).getByText('In Stock')).toBeTruthy();
+    expect(within(row('Milk')).getByText('Expired')).toBeTruthy();
+  });
+
+  it('searches by name and filters by category, status and unit', () => {
+    render(<InventoryView {...makeProps()} />);
+    fireEvent.change(screen.getByLabelText('Search materials'), { target: { value: 'flo' } });
+    expect(screen.queryByLabelText('Name of Almonds')).toBeNull();
+    expect(screen.getByLabelText('Name of Bread Flour')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Search materials'), { target: { value: '' } });
+
+    fireEvent.change(screen.getByLabelText('Filter by category'), { target: { value: 'Pantry' } });
+    expect(screen.getByLabelText('Name of Yeast')).toBeTruthy();
+    expect(screen.queryByLabelText('Name of Bread Flour')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Filter by category'), { target: { value: 'all' } });
+
+    fireEvent.change(screen.getByLabelText('Filter by status'), { target: { value: 'low' } });
+    expect(screen.getByLabelText('Name of Almonds')).toBeTruthy();
+    expect(screen.queryByLabelText('Name of Yeast')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Filter by status'), { target: { value: 'expiry' } });
+    expect(screen.getByLabelText('Name of Milk')).toBeTruthy();
+    expect(screen.queryByLabelText('Name of Almonds')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Filter by status'), { target: { value: 'all' } });
+
+    fireEvent.change(screen.getByLabelText('Filter by unit'), { target: { value: 'g' } });
+    expect(screen.getByLabelText('Name of Yeast')).toBeTruthy();
+    expect(screen.queryByLabelText('Name of Milk')).toBeNull();
+  });
+
+  it('says so when filters match nothing', () => {
+    render(<InventoryView {...makeProps()} />);
+    fireEvent.change(screen.getByLabelText('Search materials'), { target: { value: 'zzz' } });
+    expect(screen.getByText('No materials match these filters.')).toBeTruthy();
+  });
+
+  it('paginates long lists', () => {
+    const many = Array.from({ length: 20 }, (_, i) => mk(`m${i}`, `Item ${String(i).padStart(2, '0')}`));
+    render(<InventoryView {...makeProps({ items: many })} />);
+    expect(screen.getByLabelText('Name of Item 00')).toBeTruthy();
+    expect(screen.queryByLabelText('Name of Item 15')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Next page'));
+    expect(screen.getByLabelText('Name of Item 15')).toBeTruthy();
+    expect(screen.queryByLabelText('Name of Item 00')).toBeNull();
+  });
+
+  it('keeps inline editing wired to the same handlers', () => {
+    const props = makeProps();
+    render(<InventoryView {...props} />);
+    fireEvent.change(screen.getByLabelText('Current stock of Bread Flour'), { target: { value: '12' } });
+    expect(props.updateMaterial).toHaveBeenCalledWith('flour', 'initialStock', 12);
+    fireEvent.change(screen.getByLabelText('Threshold of Bread Flour'), { target: { value: '3' } });
+    expect(props.updateMaterial).toHaveBeenCalledWith('flour', 'threshold', 3);
+    fireEvent.change(screen.getByLabelText('Category of Bread Flour'), { target: { value: 'Pantry' } });
+    expect(props.updateMaterial).toHaveBeenCalledWith('flour', 'category', 'Pantry');
+    fireEvent.click(screen.getByLabelText('Delete Bread Flour'));
+    expect(props.deleteMaterial).toHaveBeenCalledWith('flour');
+  });
+
+  it('converts stock, cost and threshold together when the unit changes', () => {
+    const props = makeProps();
+    render(<InventoryView {...props} />);
+    fireEvent.change(screen.getByLabelText('Unit of Bread Flour'), { target: { value: 'g' } });
+    expect(props.patchMaterial).toHaveBeenCalledWith('flour', {
+      unit: 'g', initialStock: 10000, costPerUnit: 0.01, threshold: 2000,
+    });
+  });
+
+  it('adds and imports into the category being browsed', () => {
+    const props = makeProps();
+    render(<InventoryView {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: /Add Item/ }));
+    expect(props.setAddMaterialCategory).toHaveBeenLastCalledWith('Raw Materials');
+    fireEvent.change(screen.getByLabelText('Filter by category'), { target: { value: 'Pantry' } });
+    fireEvent.click(screen.getByRole('button', { name: /Add Item/ }));
+    expect(props.setAddMaterialCategory).toHaveBeenLastCalledWith('Pantry');
+    expect(props.setShowAddMaterialModal).toHaveBeenCalledWith(true);
+  });
+
+  it('shows the GST column only when GST is enabled', () => {
+    const { rerender } = render(<InventoryView {...makeProps()} />);
+    expect(screen.queryByLabelText('GST rate of Bread Flour')).toBeNull();
+    rerender(<InventoryView {...makeProps({ settings: { name: 'B', gstApplicable: true } })} />);
+    expect(screen.getByLabelText('GST rate of Bread Flour')).toBeTruthy();
+  });
+
+  it('keeps materials in unlisted categories visible and reassignable', () => {
+    const stray = mk('stray', 'Mystery', { category: 'Old Category' });
+    render(<InventoryView {...makeProps({ items: [flour, stray] })} />);
+    expect(screen.getByLabelText('Name of Mystery')).toBeTruthy();
+    const picker = screen.getByLabelText('Category of Mystery') as HTMLSelectElement;
+    expect(picker.value).toBe('Old Category');
+  });
+});
