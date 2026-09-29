@@ -1,5 +1,33 @@
 # Changelog
 
+## Inventory redesign ("Kitchen Operations Platform" skin)
+
+The Inventory tab now follows the same Stitch design as the dashboard. Only
+real data is shown: the mockup's vendor names, bin codes, week-over-week
+value change, cold-store/dry-store cards and SKU-code column have no
+counterpart in the app and were left out rather than faked.
+
+- **Header cards**: a "Critical Stock Alert" card spotlights the material
+  furthest below its threshold (with a Restock button that opens the
+  existing restock flow; a green "All stocked up" card when nothing is
+  low), plus Tracked SKUs, Under Threshold and Raw Inventory Value
+  (stock on hand x cost per unit).
+- **One searchable table** replaces the per-category tables: search by
+  name, filter by category / status / unit, sort, and 15-row pages. A
+  Category column (editable) replaces the old "Uncategorized Items"
+  section, so materials with an unlisted category stay visible and can be
+  reassigned.
+- **Status pills** — Low Stock (same rule as the header alert: threshold
+  > 0 and stock at/below it), Reorder Soon (within 25% above the threshold)
+  and In Stock — plus a Total Value column. Rules live in
+  `src/utils/inventoryStatus.ts`.
+- **Unchanged behaviour**: inline editing of name, stock, threshold, cost,
+  GST %, unit (with the same stock/cost/threshold conversion) and expiry;
+  Restock, Nutrition, Discard and Delete actions.
+- **Add Item / Import CSV** now target the category currently selected in
+  the filter (or the first category when viewing "All Categories"), since
+  there are no per-category sections any more.
+
 ## Dashboard redesign ("Kitchen Operations Platform" skin)
 
 Re-skinned the dashboard and the app shell around it from a Stitch design
