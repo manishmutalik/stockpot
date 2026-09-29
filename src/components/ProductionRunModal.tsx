@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { X, ChevronDown, ChevronUp, Calendar, Package, Factory, Plus, Trash2 } from 'lucide-react';
+import { convertAmount } from '../utils/conversions';
 
 /**
  * Describes why a production batch was made. Currently determines whether
@@ -81,28 +82,6 @@ interface ProductionRow {
   quantity: number;
 }
 
-// ─── Unit Conversion Utility ───────────────────────────────────────────────────
-/**
- * Converts a measurement `amount` from one unit to another.
- * Handles g↔kg and ml↔L conversions. All other unit pairs are returned as-is,
- * so callers must ensure both units are within the same measurement family.
- *
- * @param amount   - The numeric quantity to convert.
- * @param fromUnit - The source unit string (case-insensitive).
- * @param toUnit   - The target unit string (case-insensitive).
- * @returns The converted amount, or the original amount if no conversion rule matches.
- */
-function convertToBaseUnit(amount: number, fromUnit: string, toUnit: string): number {
-  const from = fromUnit.toLowerCase();
-  const to   = toUnit.toLowerCase();
-  if (from === to) return amount;                      // same unit — no-op
-  if (from === 'g'  && to === 'kg') return amount / 1000;
-  if (from === 'kg' && to === 'g')  return amount * 1000;
-  if (from === 'ml' && to === 'l')  return amount / 1000;
-  if (from === 'l'  && to === 'ml') return amount * 1000;
-  return amount; // incompatible units — return unchanged to avoid silent data corruption
-}
-
 const EMPTY_ROW = (menu: MenuItem[]): ProductionRow => ({ recipeId: menu[0]?.id || '', quantity: 1 });
 
 /**
@@ -164,7 +143,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
       const mat = materials.find(m => m.id === req.materialId);
       if (!mat) return sum; // skip ingredients whose material record is missing
       // Convert recipe unit (e.g. 'g') → material's stored unit (e.g. 'kg') before costing
-      const convertedAmt = convertToBaseUnit(req.amount, req.unit || 'g', mat.unit);
+      const convertedAmt = convertAmount(req.amount, req.unit || 'g', mat.unit);
       return sum + convertedAmt * mat.costPerUnit * row.quantity;
     }, 0);
   }), [rows, menu, materials]);

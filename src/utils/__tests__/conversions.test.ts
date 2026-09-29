@@ -27,6 +27,29 @@ describe('convertAmount', () => {
     expect(convertAmount(10, 'pcs', 'kg')).toBe(10);
   });
 
+  // Weight <-> volume assumes 1g = 1ml (water's density) — see UNIT_CONVERSIONS'
+  // doc comment for why, and its limits for anything denser/lighter than water.
+  it('converts g to ml at a 1:1 ratio', () => {
+    expect(convertAmount(250, 'g', 'ml')).toBe(250);
+  });
+
+  it('converts ml to g at a 1:1 ratio', () => {
+    expect(convertAmount(250, 'ml', 'g')).toBe(250);
+  });
+
+  it('converts kg to l at a 1:1 ratio', () => {
+    expect(convertAmount(2, 'kg', 'l')).toBe(2);
+  });
+
+  it('converts l to kg at a 1:1 ratio', () => {
+    expect(convertAmount(1.5, 'l', 'kg')).toBe(1.5);
+  });
+
+  it('converts across both unit and family (g to l, kg to ml)', () => {
+    expect(convertAmount(500, 'g', 'l')).toBe(0.5);
+    expect(convertAmount(2, 'kg', 'ml')).toBe(2000);
+  });
+
   it('returns the amount unchanged when either unit is missing', () => {
     expect(convertAmount(10, '', 'g')).toBe(10);
     expect(convertAmount(10, 'g', '')).toBe(10);

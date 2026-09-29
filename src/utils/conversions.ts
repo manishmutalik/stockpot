@@ -11,12 +11,22 @@
  * Nested lookup table for converting between supported measurement units.
  * Outer key: source unit; inner key: target unit; value: multiplication factor.
  * Units outside these families (e.g. custom strings) are passed through unchanged.
+ *
+ * Weight (g/kg) and volume (ml/l) are cross-convertible assuming 1g = 1ml —
+ * i.e. a density of 1 g/ml, water's density. This is exact for water and a
+ * reasonable approximation for many kitchen liquids, but not accurate for
+ * anything meaningfully denser or lighter than water (oil, honey, syrup,
+ * etc.) — costs/usage for those will be off by however much their real
+ * density differs from 1. Chosen as a simple, no-setup default rather than
+ * requiring a per-material density; a recipe or raw material that needs to
+ * be exact about a specific liquid's density should keep both sides of
+ * that ingredient in the same unit family instead.
  */
 export const UNIT_CONVERSIONS: Record<string, Record<string, number>> = {
-  g: { g: 1, kg: 0.001 },
-  kg: { g: 1000, kg: 1 },
-  ml: { ml: 1, l: 0.001 },
-  l: { ml: 1000, l: 1 },
+  g:  { g: 1,    kg: 0.001, ml: 1,    l: 0.001 },
+  kg: { g: 1000, kg: 1,     ml: 1000, l: 1 },
+  ml: { ml: 1,   l: 0.001,  g: 1,     kg: 0.001 },
+  l:  { ml: 1000, l: 1,     g: 1000,  kg: 1 },
   pcs: { pcs: 1 }
 };
 
