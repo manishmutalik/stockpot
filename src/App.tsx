@@ -58,7 +58,9 @@ import {
   Search,
   Loader2,
   Home,
-  Gift
+  Gift,
+  LayoutDashboard,
+  BookOpen
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { apiFetch } from './utils/apiClient';
@@ -336,9 +338,8 @@ export default function App() {
 export type TabId = 'inventory' | 'menu' | 'orders' | 'experiments' | 'production' | 'summary' | 'settings' | 'wastage';
 
 /**
- * Renders a styled sidebar tab navigation button.
- * Uses Framer Motion's `layoutId="activeSidebarTab"` to animate the active
- * underline sliding between tabs.
+ * Renders a styled sidebar tab navigation button; the active tab is a solid
+ * teal pill.
  *
  * Hoisted to module scope (was previously defined inside BakeryApp's render
  * body, which created a new component function on every render — React then
@@ -354,26 +355,21 @@ function SidebarTabButton({ id, label, icon: Icon, activeTab, setActiveTab, hasL
   setActiveTab: (id: TabId) => void;
   hasLowStockAlert: boolean;
 }) {
+  const isActive = activeTab === id;
   return (
     <button
       onClick={() => setActiveTab(id)}
-      className={`relative flex items-center gap-3 px-4 py-3 w-full rounded-xl text-sm font-bold transition-all group ${
-        activeTab === id 
-          ? 'bg-amber-50 text-amber-600 shadow-sm border border-amber-100/50' 
-          : 'text-stone-500 hover:text-stone-800 hover:bg-stone-50'
+      aria-current={isActive ? 'page' : undefined}
+      className={`relative flex items-center gap-3 px-4 py-2.5 w-full rounded-lg text-sm transition-colors ${
+        isActive
+          ? 'bg-primary text-white font-semibold shadow-sm'
+          : 'text-muted font-medium hover:bg-accent hover:text-ink'
       }`}
     >
-      <Icon size={20} className={`transition-transform duration-300 ${activeTab === id ? 'scale-110' : 'group-hover:scale-110'}`} />
+      <Icon size={20} strokeWidth={isActive ? 2.25 : 2} />
       <span>{label}</span>
       {id === 'inventory' && hasLowStockAlert && (
-        <span className="absolute right-4 w-2 h-2 bg-rose-500 rounded-full" />
-      )}
-      {activeTab === id && (
-        <motion.div 
-          layoutId="activeSidebarTab"
-          className="absolute left-0 w-1 h-8 bg-amber-500 rounded-r-full"
-          transition={{ type: "spring", stiffness: 380, damping: 30 }}
-        />
+        <span className={`absolute right-4 w-2 h-2 rounded-full ${isActive ? 'bg-white' : 'bg-coral'}`} />
       )}
     </button>
   );
@@ -391,29 +387,22 @@ function BottomNavButton({ id, label, icon: Icon, activeTab, setActiveTab, hasLo
   setActiveTab: (id: TabId) => void;
   hasLowStockAlert: boolean;
 }) {
+  const isActive = activeTab === id;
   return (
     <button
       onClick={() => setActiveTab(id)}
-      className={`flex flex-col items-center justify-center gap-1 flex-1 min-w-0 px-1 py-2 rounded-xl transition-all relative ${
-        activeTab === id 
-          ? 'text-amber-600' 
-          : 'text-stone-400 hover:text-stone-600'
+      aria-current={isActive ? 'page' : undefined}
+      className={`flex flex-col items-center justify-center gap-0.5 flex-1 min-w-0 px-0.5 py-1.5 transition-colors ${
+        isActive ? 'text-primary' : 'text-muted hover:text-ink'
       }`}
     >
-      <div className="relative">
-        <Icon size={22} className={`transition-transform duration-300 ${activeTab === id ? '-translate-y-1' : ''}`} />
+      <div className={`relative flex items-center justify-center w-10 h-7 rounded-full transition-colors ${isActive ? 'bg-accent' : ''}`}>
+        <Icon size={20} strokeWidth={isActive ? 2.25 : 2} />
         {id === 'inventory' && hasLowStockAlert && (
-          <span className="absolute -top-1 -right-1 w-2 h-2 bg-rose-500 rounded-full border-2 border-white" />
+          <span className="absolute top-0 right-1 w-2 h-2 bg-coral rounded-full border-2 border-white" />
         )}
       </div>
-      <span className="text-[10px] font-bold tracking-wide">{label}</span>
-      {activeTab === id && (
-        <motion.div 
-          layoutId="activeBottomTab"
-          className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-1 bg-amber-500 rounded-b-full"
-          transition={{ type: "spring", stiffness: 380, damping: 30 }}
-        />
-      )}
+      <span className={`text-[10px] tracking-wide ${isActive ? 'font-bold' : 'font-medium'}`}>{label}</span>
     </button>
   );
 }
@@ -1609,44 +1598,56 @@ function BakeryApp() {
   };
 
   return (
-    <div className="min-h-screen bg-surface text-stone-900 font-sans flex flex-col md:flex-row-reverse pb-20 md:pb-0">
+    <div className="min-h-screen bg-surface text-ink font-sans flex flex-col md:flex-row pb-20 md:pb-0">
       
-      {/* Desktop Right Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 lg:w-72 border-l border-stone-200/50 bg-white/80 backdrop-blur-md sticky top-0 h-screen overflow-y-auto shrink-0 shadow-[-4px_0_24px_rgba(0,0,0,0.02)] pt-6 z-40">
-        {menu.length > 0 && (activeTab === 'summary' || activeTab === 'production') && (
-          <div className="px-6 mb-8">
-            <button 
+      {/* Desktop Left Sidebar */}
+      <aside className="hidden md:flex flex-col w-64 lg:w-72 bg-white shadow-[1px_0_8px_rgba(0,0,0,0.04)] sticky top-0 h-screen overflow-y-auto shrink-0 z-40">
+        <div className="h-16 px-6 flex items-center gap-3 shrink-0">
+          <img src="/logo-icon.png" alt="" className="w-9 h-9" />
+          <span className="text-base font-bold tracking-tight text-ink">STOCKPOT</span>
+        </div>
+
+        {menu.length > 0 && activeTab === 'production' && (
+          <div className="px-4 pt-2 pb-4">
+            <button
               onClick={() => setIsProductionRunModalOpen(true)}
-              className="w-full flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white p-4 rounded-xl shadow-lg shadow-amber-500/20 transition-all active:scale-95 font-bold"
+              className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-4 py-3 rounded-lg transition-colors active:scale-[0.98] text-sm font-semibold"
             >
-              <Factory size={20} />
+              <Factory size={18} />
               New Production Run
             </button>
           </div>
         )}
-        
-        <div className="px-4 flex-1">
-          <h2 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-2 mb-3">Menu</h2>
+
+        <div className="px-4 py-2 flex-1">
           <nav className="flex flex-col gap-1 relative">
-            <SidebarTabButton id="summary" label="Dashboard" icon={Calculator} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
-            <SidebarTabButton id="inventory" label="Inventory" icon={Package} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
+            <SidebarTabButton id="summary" label="Dashboard" icon={LayoutDashboard} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
+            <SidebarTabButton id="inventory" label="Stock / Inventory" icon={Package} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
             <SidebarTabButton id="orders" label="Orders" icon={ClipboardList} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
-            <SidebarTabButton id="production" label="Production" icon={Factory} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
-            <SidebarTabButton id="menu" label="Recipes" icon={Utensils} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
-            <SidebarTabButton id="experiments" label="R&D" icon={FlaskConical} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
+            <SidebarTabButton id="production" label="Production Runs" icon={Factory} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
+            <SidebarTabButton id="menu" label="Recipes & Menus" icon={BookOpen} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
+            <SidebarTabButton id="experiments" label="R&D Lab" icon={FlaskConical} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
             <SidebarTabButton id="wastage" label="Wastage" icon={Trash2} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
           </nav>
         </div>
 
-        <div className="p-4 mt-auto border-t border-stone-200/50">
+        <div className="p-4 mt-auto flex flex-col gap-2">
           <SidebarTabButton id="settings" label="Settings" icon={Settings} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
+          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-stone-50 min-w-0">
+            {settings.logo ? (
+              <img src={settings.logo} alt="" className="w-6 h-6 rounded-md object-cover shrink-0" />
+            ) : (
+              <Store size={16} className="text-muted shrink-0" />
+            )}
+            <span className="text-xs font-semibold text-ink truncate">{settings.name || 'My Bakery'}</span>
+          </div>
         </div>
       </aside>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 relative">
         {/* Header */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-stone-200/50 sticky top-0 z-30">
+        <header className="bg-white/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] sticky top-0 z-30">
         {/* Notifications */}
         <div className="fixed top-24 right-4 z-50 flex flex-col gap-2 pointer-events-none">
           <AnimatePresence>
@@ -1673,42 +1674,41 @@ function BakeryApp() {
           </AnimatePresence>
         </div>
 
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+        <div className="px-4 sm:px-6 lg:px-10">
+          <div className="flex items-center h-16 gap-3">
+            {/* Brand — mobile only; on desktop the sidebar carries it. Shows the
+                bakery's own logo/name when set, otherwise Stockpot's. */}
+            <div className="md:hidden flex items-center gap-2 min-w-0 shrink">
               {settings.logo ? (
-                <div className="relative group shrink-0">
-                  <img src={settings.logo} alt="Logo" className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl object-cover border-2 border-stone-100 shadow-sm transition-transform group-hover:scale-105" />
-                  <div className="absolute inset-0 rounded-xl ring-1 ring-inset ring-black/5" />
-                </div>
+                <img src={settings.logo} alt="" className="w-9 h-9 rounded-xl object-cover shrink-0" />
               ) : (
-                <div className="bg-primary p-2 sm:p-3 rounded-xl text-white shadow-lg shadow-primary/20 shrink-0">
-                  <Utensils size={24} className="sm:w-[28px] sm:h-[28px]" />
-                </div>
+                <img src="/logo-icon.png" alt="" className="w-9 h-9 shrink-0" />
               )}
-              <div className="min-w-0">
-                <h1 className="text-lg sm:text-xl font-sans font-bold tracking-tight text-stone-900 leading-tight truncate">{settings.name || 'Stockpot'}</h1>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Live Dashboard</span>
+              <div className="min-w-0 leading-none">
+                <h1 className="text-base font-bold tracking-tight text-ink truncate">{settings.name || 'STOCKPOT'}</h1>
+                <div className="flex items-center gap-1 mt-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-margin animate-pulse" />
+                  <span className="text-[9.5px] font-semibold tracking-wider text-muted uppercase whitespace-nowrap">Live dashboard</span>
                 </div>
               </div>
             </div>
-            
-            <div className="flex items-center gap-2 sm:gap-6 min-w-0 shrink">
+
+            {/* Alerts — pushed right on mobile, left-aligned on desktop */}
+            <div className="flex items-center gap-2 ml-auto md:ml-0 min-w-0">
                             {agingBatches.length > 0 && !isExpiredAlertDismissed && (() => {
                 const hasExpired = agingBatches.some(b => b.urgency === 'expired');
                 return (
                 <div className="relative group shrink-0 z-50">
                   <button
-                    className={`relative p-2 sm:p-2.5 rounded-xl transition-all shadow-sm ${hasExpired ? 'text-rose-500 bg-rose-50 hover:bg-rose-100 shadow-rose-500/5' : 'text-amber-600 bg-amber-50 hover:bg-amber-100 shadow-amber-500/5'}`}
+                    className={`relative h-8 w-8 xl:w-auto xl:px-3 flex items-center justify-center gap-1.5 rounded-full text-xs font-semibold transition-colors ${hasExpired ? 'bg-coral text-white hover:bg-coral/90' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}
                   >
-                    <AlertCircle size={20} className="sm:w-[22px] sm:h-[22px] group-hover:scale-110 transition-transform" />
-                    <span className={`absolute -top-1 -right-1 text-white text-[9px] sm:text-[10px] font-bold w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm ${hasExpired ? 'bg-rose-600' : 'bg-amber-600'}`}>
+                    <AlertCircle size={16} />
+                    <span className="hidden xl:inline whitespace-nowrap">{hasExpired ? 'Expired stock' : 'Check freshness'}: {agingBatches.length} batch{agingBatches.length === 1 ? '' : 'es'}</span>
+                    <span className={`xl:hidden absolute -top-1 -right-1 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center ${hasExpired ? 'bg-coral' : 'bg-amber-600'}`}>
                       {agingBatches.length}
                     </span>
                   </button>
-                  <div className="absolute top-full right-0 sm:-left-32 mt-2 w-64 bg-white border border-stone-200 shadow-xl rounded-xl p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none group-hover:pointer-events-auto origin-top-right sm:origin-top scale-95 group-hover:scale-100">
+                  <div className="absolute top-full right-0 md:right-auto md:left-0 mt-2 w-64 bg-white shadow-[0_20px_40px_-8px_rgba(43,49,61,0.16)] rounded-[14px] p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none group-hover:pointer-events-auto origin-top-right md:origin-top-left scale-95 group-hover:scale-100">
                     <div className="flex justify-between items-center mb-2 pb-2 border-b border-stone-100">
                       <span className={`text-xs font-bold ${hasExpired ? 'text-rose-600' : 'text-amber-600'}`}>Freshness Alerts</span>
                       <button onClick={() => setIsExpiredAlertDismissed(true)} className="text-[10px] text-stone-400 hover:text-stone-600">Dismiss</button>
@@ -1776,17 +1776,18 @@ function BakeryApp() {
               })()}
               {lowStockItems.length > 0 && !isAlertDismissed && (
                 <div className="relative group shrink-0 z-50">
-                  <button 
-                    className="relative p-2 sm:p-2.5 text-rose-500 bg-rose-50 rounded-xl hover:bg-rose-100 transition-all shadow-sm shadow-rose-500/5"
+                  <button
+                    className="relative h-8 w-8 xl:w-auto xl:px-3 flex items-center justify-center gap-1.5 rounded-full text-xs font-semibold transition-colors bg-coral/10 text-coral hover:bg-coral/15"
                   >
-                    <AlertCircle size={20} className="sm:w-[22px] sm:h-[22px] group-hover:scale-110 transition-transform" />
-                    <span className="absolute -top-1 -right-1 bg-rose-600 text-white text-[9px] sm:text-[10px] font-bold w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                    <AlertCircle size={16} />
+                    <span className="hidden xl:inline whitespace-nowrap">Low Stock: {lowStockItems.length} item{lowStockItems.length === 1 ? '' : 's'}</span>
+                    <span className="xl:hidden absolute -top-1 -right-1 bg-coral text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
                       {lowStockItems.length}
                     </span>
                   </button>
-                  <div className="absolute top-full right-0 sm:-left-32 mt-2 w-64 bg-white border border-stone-200 shadow-xl rounded-xl p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none group-hover:pointer-events-auto origin-top-right sm:origin-top scale-95 group-hover:scale-100">
+                  <div className="absolute top-full right-0 md:right-auto md:left-0 mt-2 w-64 bg-white shadow-[0_20px_40px_-8px_rgba(43,49,61,0.16)] rounded-[14px] p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all pointer-events-none group-hover:pointer-events-auto origin-top-right md:origin-top-left scale-95 group-hover:scale-100">
                     <div className="flex justify-between items-center mb-2 pb-2 border-b border-stone-100">
-                      <span className="text-xs font-bold text-rose-600">Low Stock Alerts</span>
+                      <span className="text-xs font-bold text-coral">Low Stock Alerts</span>
                       <button onClick={() => setIsAlertDismissed(true)} className="text-[10px] text-stone-400 hover:text-stone-600">Dismiss</button>
                     </div>
                     <ul className="flex flex-col gap-2 max-h-60 overflow-y-auto">
@@ -1809,49 +1810,48 @@ function BakeryApp() {
                   </div>
                 </div>
               )}
+            </div>
 
-              <div className="flex items-center gap-2 sm:gap-4">
-                <div className="flex items-center gap-1 sm:gap-2 bg-stone-50 border border-stone-200 rounded-xl px-2 sm:px-3 py-1 sm:py-1.5 shrink-0">
-                  <Globe size={14} className="text-stone-400 hidden sm:block" />
-                  <select 
-                    value={currency.code}
-                    onChange={(e) => {
-                      const selected = CURRENCIES.find(c => c.code === e.target.value);
-                      if (selected) updateCurrency(selected);
-                    }}
-                    className="bg-transparent border-none focus:ring-0 text-xs font-bold text-stone-600 cursor-pointer appearance-none pr-4 max-w-[60px] sm:max-w-none text-ellipsis"
-                  >
-                    {CURRENCIES.map(c => (
-                      <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
-                    ))}
-                  </select>
-                </div>
+            {/* Currency, signed-in user, sign out */}
+            <div className="flex items-center gap-2 sm:gap-3 md:ml-auto shrink-0">
+              <div className="flex items-center gap-1 bg-stone-50 hover:bg-stone-100 transition-colors rounded-lg px-2 sm:px-3 py-1.5 shrink-0">
+                <Globe size={14} className="text-primary hidden sm:block" />
+                <select
+                  value={currency.code}
+                  onChange={(e) => {
+                    const selected = CURRENCIES.find(c => c.code === e.target.value);
+                    if (selected) updateCurrency(selected);
+                  }}
+                  className="bg-transparent border-none focus:ring-0 text-xs font-mono font-semibold text-ink cursor-pointer appearance-none pr-1 max-w-[78px] sm:max-w-none text-ellipsis"
+                >
+                  {CURRENCIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>
+                  ))}
+                </select>
               </div>
 
-              <div className="flex items-center gap-2 sm:gap-3 pl-2 sm:pl-6 border-l border-stone-200 shrink-0">
-                <div className="text-right hidden sm:block">
-                  <div className="text-sm font-bold text-stone-800 leading-none mb-1 font-sans">{user?.name}</div>
-                  <div className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{user?.email}</div>
+              <div className="flex items-center gap-2.5 sm:pl-3">
+                <div className="hidden sm:flex w-8 h-8 rounded-full bg-primary text-white items-center justify-center font-bold text-sm shrink-0" title={user?.email}>
+                  {user?.name?.charAt(0)?.toUpperCase() || 'B'}
                 </div>
-                <div className="relative group">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-sm shadow-sm">
-                    {user?.name?.charAt(0) || 'B'}
-                  </div>
-                  <button 
-                    onClick={handleLogout}
-                    className="absolute -bottom-1 -right-1 p-1.5 bg-white text-stone-400 hover:text-rose-600 border border-stone-200 rounded-lg transition-all shadow-sm hover:shadow-md"
-                    title="Log Out"
-                  >
-                    <LogOut size={12} />
-                  </button>
+                <div className="hidden xl:flex flex-col text-left leading-tight min-w-0">
+                  <span className="text-xs font-semibold text-ink truncate max-w-[10rem]">{user?.name}</span>
+                  <span className="font-mono text-[11px] text-muted truncate max-w-[10rem]">{user?.email}</span>
                 </div>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg text-muted hover:bg-coral/10 hover:text-coral transition-colors"
+                  title="Log Out"
+                >
+                  <LogOut size={18} />
+                </button>
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 w-full px-3 py-8 sm:px-4 lg:px-6">
+      <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 py-6 sm:px-6 lg:px-10">
         <React.Suspense fallback={
           <div className="flex flex-col items-center justify-center gap-4 py-24">
             <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
@@ -2515,7 +2515,7 @@ function BakeryApp() {
           <div className="fixed bottom-24 right-4 z-50">
             <button 
               onClick={() => setIsProductionRunModalOpen(true)}
-              className="w-14 h-14 bg-amber-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-amber-500/30 transition-transform active:scale-95 border-2 border-white"
+              className="w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center shadow-[0_8px_24px_rgba(0,121,123,0.3)] transition-transform active:scale-95"
             >
               <Factory size={24} />
             </button>
@@ -2523,12 +2523,12 @@ function BakeryApp() {
         )}
 
         {/* Scrollable Bottom Nav */}
-        <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-stone-200/50 z-50 flex items-center pb-[env(safe-area-inset-bottom,8px)] pt-1 shadow-[0_-4px_24px_rgba(0,0,0,0.04)]">
-          <BottomNavButton id="summary" label="Home" icon={Calculator} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
+        <nav className="fixed bottom-0 left-0 right-0 bg-white z-50 flex items-center pb-[env(safe-area-inset-bottom,8px)] pt-1 shadow-[0_-4px_24px_rgba(43,49,61,0.06)]">
+          <BottomNavButton id="summary" label="Home" icon={LayoutDashboard} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
           <BottomNavButton id="inventory" label="Stock" icon={Package} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
           <BottomNavButton id="orders" label="Orders" icon={ClipboardList} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
           <BottomNavButton id="production" label="Runs" icon={Factory} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
-          <BottomNavButton id="menu" label="Recipes" icon={Utensils} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
+          <BottomNavButton id="menu" label="Recipes" icon={BookOpen} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
           <BottomNavButton id="experiments" label="R&D" icon={FlaskConical} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
           <BottomNavButton id="wastage" label="Waste" icon={Trash2} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
           <BottomNavButton id="settings" label="More" icon={Settings} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
