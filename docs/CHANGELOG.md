@@ -1,5 +1,19 @@
 # Changelog
 
+## Stockpot logo
+
+Added the real Stockpot logo (previously the landing page and login screen
+used generic lucide icons — ChefHat, Utensils — as placeholders).
+
+- `public/logo-icon.png`: the pot mark alone, square, transparent
+  background — used as the browser favicon, the landing page nav, and the
+  initial loading screen.
+- `public/logo-full.png`: pot mark + "STOCKPOT" wordmark — used on the
+  login/sign-up screen in place of the old icon-in-a-box + text heading.
+- Left the app's own "Recipes" tab icon and the per-bakery logo shown once
+  signed in (`settings.logo`, the bakery's own branding) unchanged — those
+  are a different thing from Stockpot's own product identity.
+
 ## Production-run/order redesign: stock as the source of truth
 
 Live use of the multi-item feature below surfaced a deeper mismatch:
