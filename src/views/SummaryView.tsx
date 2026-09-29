@@ -1,53 +1,81 @@
 import React, { useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+import { motion } from 'motion/react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine
 } from 'recharts';
-import { 
-  Plus, Trash2, ChevronRight, ChevronDown, Package, Utensils, ClipboardList, Calculator,
-  Save, RotateCcw, CheckCircle2, Info, Database, RefreshCw, Copy,
-  DollarSign, Globe, Calendar, Filter, ArrowLeft, ArrowRight, Clock, Settings, Settings2,
-  Layers, UserCog, Puzzle, User as UserIcon, LogOut, Image, Palette, Store, Mail, Phone,
-  MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
-  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X, Percent
+import {
+  ArrowRight, Calculator, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Factory,
+  Package, Percent, Plus, Trash2, TrendingUp, Truck, TriangleAlert
 } from 'lucide-react';
 import { AppViewProps } from '../types';
-import { IngredientSelectorModal } from '../components/IngredientSelectorModal';
-import { ProductionRunModal } from '../components/ProductionRunModal';
-import { CURRENCIES, INITIAL_MATERIALS } from '../App';
-import { UNIT_CONVERSIONS } from '../App';
+import { getBatchesNeedingAttention, getStockUrgency } from '../utils/stockAging';
+import type { ProductionRun } from '../components/ProductionRunModal';
 
+type Tone = 'slate' | 'teal' | 'coral';
+
+const TONES: Record<Tone, { label: string; value: string; tile: string; foot: string; footValue: string }> = {
+  slate: { label: 'text-muted', value: 'text-ink', tile: 'bg-stone-100 text-muted', foot: 'bg-stone-50', footValue: 'text-ink' },
+  teal: { label: 'text-muted', value: 'text-ink', tile: 'bg-primary/10 text-primary', foot: 'bg-stone-50', footValue: 'text-primary' },
+  coral: { label: 'text-coral', value: 'text-coral', tile: 'bg-coral/10 text-coral', foot: 'bg-coral/5', footValue: 'text-coral' },
+};
+
+/**
+ * One headline figure: label + big mono number + icon tile, with a tinted
+ * footer strip carrying a supporting stat ("7 runs in period", "31.2% of
+ * income"). Numbers use the mono face so columns of cards line up.
+ */
+const MetricCard: React.FC<{
+  label: string;
+  value: string;
+  icon: React.ElementType;
+  tone: Tone;
+  footLeft: string;
+  footRight?: string | null;
+}> = ({ label, value, icon: Icon, tone, footLeft, footRight }) => {
+  const t = TONES[tone];
+  return (
+    <div className="surface-card overflow-hidden flex flex-col min-w-0">
+      <div className="p-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className={`text-[11px] font-semibold uppercase tracking-wider ${t.label}`}>{label}</div>
+          <div className={`mt-2 font-mono text-xl md:text-[22px] font-semibold tracking-tight truncate ${t.value}`}>{value}</div>
+        </div>
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${t.tile}`}>
+          <Icon size={20} />
+        </div>
+      </div>
+      <div className={`mt-auto px-4 py-2.5 flex items-center justify-between gap-2 font-mono text-[11px] uppercase ${t.foot}`}>
+        <span className="text-muted truncate">{footLeft}</span>
+        {footRight && <span className={`font-semibold whitespace-nowrap ${t.footValue}`}>{footRight}</span>}
+      </div>
+    </div>
+  );
+};
+
+/** Status pill for one production run: what's left of it and how fresh. */
+function runStatus(run: ProductionRun, today: string): { label: string; cls: string } {
+  const remaining = run.remainingQuantity ?? 0;
+  if (remaining <= 0) return { label: 'Sold out', cls: 'bg-stone-100 text-muted' };
+  const urgency = getStockUrgency(run, today);
+  if (urgency === 'expired') return { label: `Expired · ${remaining} left`, cls: 'bg-coral/10 text-coral' };
+  if (urgency === 'aging') return { label: `Check freshness · ${remaining} left`, cls: 'bg-amber-100 text-amber-700' };
+  return { label: `In stock · ${remaining} left`, cls: 'bg-margin/10 text-margin' };
+}
 
 export const SummaryView: React.FC<AppViewProps> = (props) => {
-  // Destructure all props to make variables available in the scope
-  const { patchMaterial, setRestockExpiryDate, shopifyStatus, importShopifyOrders, isImportingShopify, odooStatus, importOdooOrders, isImportingOdoo,
-    materials, setMaterials, categories, setCategories, menu, setMenu, orders, setOrders,
-    experiments, setExperiments, productionRuns, setProductionRuns, wastageLogs, setWastageLogs,
-    isProductionRunModalOpen, setIsProductionRunModalOpen, productionFilterRecipe, setProductionFilterRecipe,
-    productionFilterPurpose, setProductionFilterPurpose, activeTab, setActiveTab, activeSettingsTab,
-    setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
-    setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
-    setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
-    summaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
-    setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
-    setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
-    user, isAlertDismissed, setIsAlertDismissed, isExpiredAlertDismissed, setIsExpiredAlertDismissed,
-    inventoryUsage, lowStockItems,
-    summaryFinancials, activeOrdersCount, averageOrderValue, financials, chartData, handleRangeChange,
-    refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
-    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock,
-    addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
-    removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
-    addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, handleDiscardBatch, updateOrder, deleteOrder, resetOrders, saveSettings,
-    handleRestock, restockMaterial, setRestockMaterial,
-    showSaveFeedback, saveDay,
-    updateCurrency, handleLogout, isListening, transcript, convertAmount
+  const {
+    materials, menu, orders, productionRuns, wastageLogs,
+    summaryRange, summaryDateStart, summaryDateEnd, setSummaryDateStart, setSummaryDateEnd, summaryRefDate,
+    handleRangeChange, financials, chartData, currency, settings, lowStockItems, lastSynced,
+    setActiveTab, setIsProductionRunModalOpen, setRestockMaterial,
   } = props;
 
-  // Derived, date-range-filtered views used by the summary cards below.
-  // Mirrors the same `date >= start && date <= end` filtering pattern used
-  // elsewhere in the app (e.g. App.tsx's own order/production filtering).
+  const fmt = (n: number) =>
+    `${n < 0 ? '-' : ''}${currency.symbol}${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Derived, date-range-filtered views used by the cards below.
   const filteredOrders = useMemo(
     () => orders.filter(o => o.date >= summaryDateStart && o.date <= summaryDateEnd),
     [orders, summaryDateStart, summaryDateEnd]
@@ -64,356 +92,483 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     () => wastageLogs.filter(w => w.date >= summaryDateStart && w.date <= summaryDateEnd),
     [wastageLogs, summaryDateStart, summaryDateEnd]
   );
+  const recentRuns = useMemo(
+    () => [...filteredProductionRuns].sort((a, b) => b.createdAt - a.createdAt).slice(0, 5),
+    [filteredProductionRuns]
+  );
+  const freshnessAlerts = useMemo(
+    () => getBatchesNeedingAttention(productionRuns, today),
+    [productionRuns, today]
+  );
+
+  const itemsSold = filteredOrders.reduce((acc, o) => acc + o.quantity, 0);
+  // A courier delivery is one physical trip: orders sharing an orderGroupId count once.
+  const courierDeliveries = useMemo(
+    () => new Set(filteredOrders.filter(o => o.deliveryMethod === 'third_party').map(o => o.orderGroupId || o.id)).size,
+    [filteredOrders]
+  );
+  const income = financials.income;
+  const ofIncome = (n: number) => (income > 0 ? `${((n / income) * 100).toFixed(1)}% of income` : null);
+  const margin = income > 0 ? (financials.profit / income) * 100 : null;
+  const avgRunCost = filteredProductionRuns.length > 0 ? totalProductionCost / filteredProductionRuns.length : 0;
+  const hasChartData = !chartData.every(d => d.income === 0 && d.expenses === 0 && d.profit === 0);
+  const expiredCount = freshnessAlerts.filter(a => a.urgency === 'expired').length;
+
+  const shiftPeriod = (direction: 1 | -1) => {
+    const d = new Date(summaryRefDate);
+    if (summaryRange === 'daily') d.setDate(d.getDate() + direction);
+    else if (summaryRange === 'weekly') d.setDate(d.getDate() + 7 * direction);
+    else if (summaryRange === 'monthly') d.setMonth(d.getMonth() + direction);
+    handleRangeChange(summaryRange, d.toISOString().split('T')[0]);
+  };
 
   return (
     <motion.div
-              key="summary"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-8 pb-20"
-            >
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
-                <div>
-                  <h2 className="text-3xl font-sans font-bold text-stone-800">Performance Summary</h2>
-                  <p className="text-stone-500 text-sm italic font-sans">Financials and inventory usage for the selected period.</p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 bg-stone-100/50 p-1 rounded-xl border border-stone-200/50">
-                  {(['daily', 'weekly', 'monthly', 'custom'] as const).map((range) => (
-                    <button
-                      key={range}
-                      onClick={() => handleRangeChange(range)}
-                      className={`px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
-                        summaryRange === range 
-                          ? 'bg-white text-primary shadow-sm' 
-                          : 'text-stone-400 hover:text-stone-600'
-                      }`}
-                    >
-                      {range}
-                    </button>
-                  ))}
-                </div>
+      key="summary"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="space-y-4 lg:space-y-6 pb-20"
+    >
+      {/* Title + period controls */}
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div className="min-w-0">
+          <div className="font-mono text-[11px] uppercase tracking-wider text-muted mb-1">
+            {settings.name || 'Stockpot'} <span className="mx-1">/</span> Analytics
+          </div>
+          <h2 className="text-[28px] md:text-4xl font-bold tracking-[-0.03em] text-ink leading-tight md:whitespace-nowrap">Performance Summary</h2>
+          <p className="text-sm text-muted mt-1">Financials and inventory usage for the selected period.</p>
+        </div>
+
+        <div className="surface-card p-1.5 flex flex-wrap items-center gap-2 ml-auto">
+          <div className="flex items-center bg-stone-100/70 p-1 rounded-lg">
+            {(['daily', 'weekly', 'monthly', 'custom'] as const).map((range) => (
+              <button
+                key={range}
+                onClick={() => handleRangeChange(range)}
+                className={`px-3 py-1.5 rounded-md text-xs capitalize transition-colors ${
+                  summaryRange === range
+                    ? 'bg-white text-primary font-bold shadow-sm'
+                    : 'text-muted font-medium hover:text-ink'
+                }`}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
+
+          {summaryRange !== 'custom' ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                onClick={() => shiftPeriod(-1)}
+                title="Previous period"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-muted hover:bg-accent hover:text-primary transition-colors"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-stone-50 rounded-lg font-mono text-[11px] font-semibold text-ink tracking-tight whitespace-nowrap">
+                <Calendar size={14} className="text-primary shrink-0" />
+                <span>{summaryDateStart} → {summaryDateEnd}</span>
               </div>
+              <button
+                onClick={() => shiftPeriod(1)}
+                title="Next period"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-muted hover:bg-accent hover:text-primary transition-colors"
+              >
+                <ChevronRight size={18} />
+              </button>
+              <input
+                type="date"
+                value={summaryRefDate}
+                onChange={(e) => handleRangeChange(summaryRange, e.target.value)}
+                title="Jump to a date"
+                className="bg-stone-50 rounded-lg border-none px-2.5 py-1.5 font-mono text-[11px] font-semibold text-ink cursor-pointer focus:ring-2 focus:ring-primary/30"
+              />
+              <button
+                onClick={() => handleRangeChange(summaryRange, today)}
+                className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold tracking-wider hover:bg-primary-dark transition-colors"
+              >
+                TODAY
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                From
+                <input
+                  type="date"
+                  value={summaryDateStart}
+                  onChange={(e) => setSummaryDateStart(e.target.value)}
+                  className="bg-stone-50 rounded-lg border-none px-2.5 py-1.5 font-mono text-[11px] font-semibold text-ink focus:ring-2 focus:ring-primary/30"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
+                To
+                <input
+                  type="date"
+                  value={summaryDateEnd}
+                  onChange={(e) => setSummaryDateEnd(e.target.value)}
+                  className="bg-stone-50 rounded-lg border-none px-2.5 py-1.5 font-mono text-[11px] font-semibold text-ink focus:ring-2 focus:ring-primary/30"
+                />
+              </label>
+            </div>
+          )}
+        </div>
+      </div>
 
-              {(materials.length === 0 || menu.length === 0 || orders.length === 0) && (
-                <div className="bg-white p-6 md:p-8 rounded-[10px] sm:rounded-[15px] border border-amber-200/50 shadow-sm relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-bl-full -mr-16 -mt-16 z-0" />
-                  <div className="relative z-10">
-                    <h3 className="text-xl font-bold text-stone-800 mb-2">Welcome to Stockpot! 👋</h3>
-                    <p className="text-stone-500 text-sm mb-8">Let's get your business set up in 3 simple steps:</p>
-                    
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-colors ${materials.length > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-stone-100 text-stone-400'}`}>
-                          {materials.length > 0 ? '✓' : '1'}
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-bold text-stone-700">Add Materials</div>
-                          <div className="text-xs text-stone-500">Add ingredients to your stock (Stock tab)</div>
-                        </div>
-                        {materials.length === 0 && <button onClick={() => setActiveTab('inventory')} className="text-xs uppercase font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 px-4 py-2 rounded-xl transition-colors">Go</button>}
-                      </div>
-                      
-                      <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-colors ${menu.length > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-stone-100 text-stone-400'}`}>
-                          {menu.length > 0 ? '✓' : '2'}
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-bold text-stone-700">Build Recipes</div>
-                          <div className="text-xs text-stone-500">Create products with costs attached (Recipes tab)</div>
-                        </div>
-                        {menu.length === 0 && materials.length > 0 && <button onClick={() => setActiveTab('menu')} className="text-xs uppercase font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 px-4 py-2 rounded-xl transition-colors">Go</button>}
-                      </div>
-
-                      <div className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-colors ${orders.length > 0 ? 'bg-emerald-100 text-emerald-600' : 'bg-stone-100 text-stone-400'}`}>
-                          {orders.length > 0 ? '✓' : '3'}
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-bold text-stone-700">Log an Order</div>
-                          <div className="text-xs text-stone-500">Record a sale to track your profit (Orders tab)</div>
-                        </div>
-                        {orders.length === 0 && menu.length > 0 && <button onClick={() => setActiveTab('orders')} className="text-xs uppercase font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 px-4 py-2 rounded-xl transition-colors">Go</button>}
-                      </div>
-                    </div>
+      {/* First-run onboarding */}
+      {(materials.length === 0 || menu.length === 0 || orders.length === 0) && (
+        <div className="surface-card p-6 md:p-8 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-accent rounded-bl-full -mr-16 -mt-16" />
+          <div className="relative">
+            <h3 className="text-xl font-bold text-ink mb-1">Welcome to Stockpot! 👋</h3>
+            <p className="text-sm text-muted mb-6">Let's get your business set up in 3 simple steps:</p>
+            <div className="space-y-5">
+              {[
+                { done: materials.length > 0, n: '1', title: 'Add Materials', hint: 'Add ingredients to your stock (Stock tab)', tab: 'inventory' as const, show: materials.length === 0 },
+                { done: menu.length > 0, n: '2', title: 'Build Recipes', hint: 'Create products with costs attached (Recipes tab)', tab: 'menu' as const, show: menu.length === 0 && materials.length > 0 },
+                { done: orders.length > 0, n: '3', title: 'Log an Order', hint: 'Record a sale to track your profit (Orders tab)', tab: 'orders' as const, show: orders.length === 0 && menu.length > 0 },
+              ].map(step => (
+                <div key={step.n} className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg transition-colors ${step.done ? 'bg-margin/15 text-margin' : 'bg-stone-100 text-muted'}`}>
+                    {step.done ? '✓' : step.n}
                   </div>
-                </div>
-              )}
-
-              {summaryRange !== 'custom' && (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm">
-                  <div className="flex items-center gap-3 text-stone-400 text-[10px] font-bold uppercase tracking-widest">
-                    <Clock size={16} className="text-primary/40" />
-                    <span>Period: <span className="text-stone-600">{summaryDateStart}</span> to <span className="text-stone-600">{summaryDateEnd}</span></span>
+                  <div className="flex-1">
+                    <div className="font-semibold text-ink">{step.title}</div>
+                    <div className="text-xs text-muted">{step.hint}</div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1 bg-stone-50 border border-stone-100 rounded-xl p-1">
-                      <button 
-                        onClick={() => {
-                          const d = new Date(summaryRefDate);
-                          if (summaryRange === 'daily') d.setDate(d.getDate() - 1);
-                          else if (summaryRange === 'weekly') d.setDate(d.getDate() - 7);
-                          else if (summaryRange === 'monthly') d.setMonth(d.getMonth() - 1);
-                          handleRangeChange(summaryRange, d.toISOString().split('T')[0]);
-                        }}
-                        className="p-2 text-stone-400 hover:text-primary hover:bg-white rounded-lg transition-all shadow-sm"
-                      >
-                        <ArrowLeft size={16} />
-                      </button>
-                      <div className="flex items-center gap-2 px-3">
-                        <Calendar size={14} className="text-primary/40" />
-                        <input 
-                          type="date" 
-                          value={summaryRefDate}
-                          onChange={(e) => handleRangeChange(summaryRange, e.target.value)}
-                          className="bg-transparent border-none focus:ring-0 text-sm font-bold text-stone-700 p-0 cursor-pointer"
-                        />
-                      </div>
-                      <button 
-                        onClick={() => {
-                          const d = new Date(summaryRefDate);
-                          if (summaryRange === 'daily') d.setDate(d.getDate() + 1);
-                          else if (summaryRange === 'weekly') d.setDate(d.getDate() + 7);
-                          else if (summaryRange === 'monthly') d.setMonth(d.getMonth() + 1);
-                          handleRangeChange(summaryRange, d.toISOString().split('T')[0]);
-                        }}
-                        className="p-2 text-stone-400 hover:text-primary hover:bg-white rounded-lg transition-all shadow-sm"
-                      >
-                        <ArrowRight size={16} />
-                      </button>
-                    </div>
-                    <button 
-                      onClick={() => handleRangeChange(summaryRange, new Date().toISOString().split('T')[0])}
-                      className="text-[10px] font-bold text-primary uppercase tracking-widest hover:text-primary-dark transition-colors px-2"
-                    >
-                      Today
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {summaryRange === 'custom' && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  className="flex flex-wrap items-center gap-3 sm:gap-6 bg-white p-5 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">From</span>
-                    <input 
-                      type="date" 
-                      value={summaryDateStart}
-                      onChange={(e) => setSummaryDateStart(e.target.value)}
-                      className="bg-stone-50 border border-stone-100 rounded-xl px-4 py-2 text-sm font-bold text-stone-700 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                    />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">To</span>
-                    <input 
-                      type="date" 
-                      value={summaryDateEnd}
-                      onChange={(e) => setSummaryDateEnd(e.target.value)}
-                      className="bg-stone-50 border border-stone-100 rounded-xl px-4 py-2 text-sm font-bold text-stone-700 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                    />
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Charts Section */}
-              <div className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm space-y-8">
-                <div className="flex items-center justify-between border-b border-stone-100 pb-6">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-emerald-500/10 p-3 rounded-xl text-emerald-600">
-                      <TrendingUp size={24} />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-sans font-bold text-stone-800">Financial Trends</h3>
-                      <p className="text-[10px] text-stone-400 uppercase tracking-widest font-bold mt-0.5">Revenue vs Expenses vs Profitability</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="h-[350px] w-full">
-                  {chartData.every(d => d.income === 0 && d.expenses === 0 && d.profit === 0) ? (
-                    <div className="h-full w-full flex flex-col items-center justify-center text-stone-400 bg-stone-50/50 rounded-xl border border-dashed border-stone-200">
-                      <Calculator size={48} className="mb-4 text-stone-200" />
-                      <p className="font-sans italic">No financial data for this period.</p>
-                    </div>
-                  ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.15}/>
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.15}/>
-                          <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#8B5E3C" stopOpacity={0.15}/>
-                          <stop offset="95%" stopColor="#8B5E3C" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
-                      <XAxis 
-                        dataKey="name" 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fontSize: 10, fill: '#a8a29e', fontWeight: 700 }}
-                        dy={15}
-                      />
-                      <YAxis 
-                        axisLine={false} 
-                        tickLine={false} 
-                        tick={{ fontSize: 10, fill: '#a8a29e', fontWeight: 700 }}
-                        tickFormatter={(value) => `${currency.symbol}${value}`}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#fff', 
-                          borderRadius: '24px', 
-                          border: '1px solid #f5f5f4',
-                          boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.05)',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          padding: '16px'
-                        }}
-                        itemStyle={{ padding: '4px 0' }}
-                        cursor={{ stroke: '#e7e5e4', strokeWidth: 2 }}
-                      />
-                      <Legend 
-                        verticalAlign="top" 
-                        align="right" 
-                        height={48}
-                        iconType="circle"
-                        wrapperStyle={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#78716c' }}
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="income" 
-                        stroke="#10b981" 
-                        strokeWidth={4}
-                        fillOpacity={1} 
-                        fill="url(#colorIncome)" 
-                        name="Income"
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="expenses" 
-                        stroke="#f43f5e" 
-                        strokeWidth={4}
-                        fillOpacity={1} 
-                        fill="url(#colorExpenses)" 
-                        name="Expenses"
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="profit" 
-                        stroke="#8B5E3C" 
-                        strokeWidth={4}
-                        fillOpacity={1} 
-                        fill="url(#colorProfit)" 
-                        name="Profit"
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  {step.show && (
+                    <button onClick={() => setActiveTab(step.tab)} className="text-xs uppercase font-bold text-primary bg-primary/10 hover:bg-primary/15 px-4 py-2 rounded-lg transition-colors">Go</button>
                   )}
                 </div>
-              </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6">
-                <div className="bg-white p-6 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
-                  <div className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px]">Total Income</div>
-                  <div className="text-2xl font-sans font-bold text-emerald-600 truncate">{currency.symbol}{financials.income}</div>
-                  <div className="text-[10px] text-stone-400 mt-2 uppercase font-bold tracking-wider">From {filteredOrders.reduce((acc, o) => acc + o.quantity, 0)} items sold</div>
-                </div>
-                <div className="bg-white p-6 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
-                  <div className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px]">Cost of Goods Sold</div>
-                  <div className="text-2xl font-sans font-bold text-rose-600 truncate">{currency.symbol}{financials.orderExpenses.toFixed(2)}</div>
-                  <div className="text-[10px] text-stone-400 mt-2 uppercase font-bold tracking-wider">
-                    Materials cost for orders in this period
-                  </div>
-                </div>
-                <div className="bg-amber-50 p-6 rounded-[10px] sm:rounded-[15px] border border-amber-100 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
-                  <div className="text-amber-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px] flex items-center gap-1.5">
-                    <Factory size={11} /> Production Cost
-                  </div>
-                  <div className="text-2xl font-sans font-bold text-amber-700 truncate">{currency.symbol}{totalProductionCost.toFixed(2)}</div>
-                  <div className="text-[10px] text-amber-500 mt-2 uppercase font-bold tracking-wider">
-                    {filteredProductionRuns.length} run{filteredProductionRuns.length !== 1 ? 's' : ''} in period
-                  </div>
-                </div>
-                <div className="bg-sky-50 p-6 rounded-[10px] sm:rounded-[15px] border border-sky-100 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
-                  <div className="text-sky-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px] flex items-center gap-1.5">
-                    <MapPin size={11} /> Delivery Expenses
-                  </div>
-                  <div className="text-2xl font-sans font-bold text-sky-700 truncate">{currency.symbol}{financials.deliveryExpenses.toFixed(2)}</div>
-                  <div className="text-[10px] text-sky-500 mt-2 uppercase font-bold tracking-wider">
-                    Paid to third-party couriers
-                  </div>
-                </div>
-                <div className="bg-rose-50 p-6 rounded-[10px] sm:rounded-[15px] border border-rose-100 shadow-sm group hover:shadow-md transition-all flex flex-col min-w-0">
-                  <div className="text-rose-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px] flex items-center gap-1.5">
-                    <Trash2 size={11} /> Wastage
-                  </div>
-                  <div className="text-2xl font-sans font-bold text-rose-700 truncate">{currency.symbol}{financials.wastageExpenses.toFixed(2)}</div>
-                  <div className="text-[10px] text-rose-500 mt-2 uppercase font-bold tracking-wider">
-                    {filteredWastageLogs.length} log{filteredWastageLogs.length !== 1 ? 's' : ''} in period
-                  </div>
-                </div>
-                <div className="bg-primary/5 p-6 rounded-[10px] sm:rounded-[15px] border border-primary/20 shadow-lg shadow-primary/5 group hover:shadow-primary/10 transition-all flex flex-col min-w-0">
-                  <div className="text-primary/60 text-[10px] font-bold uppercase tracking-widest mb-3 min-h-[28px]">Net Profit</div>
-                  <div className="text-2xl font-sans font-bold text-primary truncate">{currency.symbol}{financials.profit.toFixed(2)}</div>
-                  <div className="text-[10px] text-primary/40 mt-2 uppercase font-bold tracking-wider">
-                    {financials.income > 0 ? `${((financials.profit / financials.income) * 100).toFixed(1)}% margin` : 'No sales yet'}
-                    {financials.experimentExpenses > 0 && <span className="block mt-1">Operating Exp: {currency.symbol}{financials.experimentExpenses.toFixed(2)} R&amp;D</span>}
-                    {financials.wastageExpenses > 0 && <span className="block mt-1">Wastage: {currency.symbol}{financials.wastageExpenses.toFixed(2)}</span>}
-                  </div>
-                </div>
-              </div>
+      {/* Headline figures */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+        <MetricCard
+          label="Cost of Goods Sold"
+          value={fmt(financials.orderExpenses)}
+          icon={Package}
+          tone="slate"
+          footLeft="Materials cost"
+          footRight={ofIncome(financials.orderExpenses)}
+        />
+        <MetricCard
+          label="Production Cost"
+          value={fmt(totalProductionCost)}
+          icon={Factory}
+          tone="teal"
+          footLeft={`${filteredProductionRuns.length} run${filteredProductionRuns.length !== 1 ? 's' : ''} in period`}
+          footRight={filteredProductionRuns.length > 0 ? `${fmt(avgRunCost)} / run` : null}
+        />
+        <MetricCard
+          label="Delivery Expenses"
+          value={fmt(financials.deliveryExpenses)}
+          icon={Truck}
+          tone="slate"
+          footLeft="3rd-party couriers"
+          footRight={courierDeliveries > 0 ? `${courierDeliveries} deliver${courierDeliveries === 1 ? 'y' : 'ies'}` : null}
+        />
+        <MetricCard
+          label="Wastage"
+          value={fmt(financials.wastageExpenses)}
+          icon={Trash2}
+          tone="coral"
+          footLeft={`${filteredWastageLogs.length} log${filteredWastageLogs.length !== 1 ? 's' : ''} in period`}
+          footRight={ofIncome(financials.wastageExpenses)}
+        />
+      </div>
 
-              {settings.gstApplicable && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-violet-50 p-8 rounded-[10px] sm:rounded-[15px] border border-violet-100 shadow-sm group hover:shadow-md transition-all">
-                    <div className="text-violet-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                      <Percent size={11} /> GST Collected
-                    </div>
-                    <div className="text-4xl font-sans font-bold text-violet-700">{currency.symbol}{financials.gstCollected.toFixed(2)}</div>
-                    <div className="text-[10px] text-violet-500 mt-2 uppercase font-bold tracking-wider">
-                      Output tax on sales in period
-                    </div>
-                  </div>
-                  <div className="bg-orange-50 p-8 rounded-[10px] sm:rounded-[15px] border border-orange-100 shadow-sm group hover:shadow-md transition-all">
-                    <div className="text-orange-600/70 text-[10px] font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5">
-                      <Percent size={11} /> GST Paid
-                    </div>
-                    <div className="text-4xl font-sans font-bold text-orange-700">{currency.symbol}{financials.gstPaid.toFixed(2)}</div>
-                    <div className="text-[10px] text-orange-500 mt-2 uppercase font-bold tracking-wider">
-                      Input tax on materials used
-                    </div>
-                  </div>
+      {settings.gstApplicable && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
+          <MetricCard label="GST Collected" value={fmt(financials.gstCollected)} icon={Percent} tone="teal" footLeft="Output tax on sales in period" />
+          <MetricCard label="GST Paid" value={fmt(financials.gstPaid)} icon={Percent} tone="slate" footLeft="Input tax on materials used" />
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
+        {/* LEFT: trends + production */}
+        <div className="lg:col-span-8 space-y-4 lg:space-y-6 min-w-0">
+          <div className="surface-card p-5 md:p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <TrendingUp size={20} />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold tracking-tight text-ink">Financial Trends</h3>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Revenue vs expenses vs profitability</p>
+              </div>
+            </div>
+
+            <div className="h-[300px] md:h-[340px] w-full">
+              {!hasChartData ? (
+                <div className="h-full w-full flex flex-col items-center justify-center text-muted bg-stone-50 rounded-xl">
+                  <Calculator size={44} className="mb-3 text-stone-300" />
+                  <p className="text-sm">No financial data for this period.</p>
                 </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barGap={3} barCategoryGap="24%">
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#dfe7e7" />
+                    <XAxis
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: '#5A5A5A', fontWeight: 600 }}
+                      dy={8}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      width={56}
+                      tick={{ fontSize: 10, fill: '#5A5A5A', fontFamily: 'JetBrains Mono, monospace' }}
+                      tickFormatter={(value) => `${currency.symbol}${value}`}
+                    />
+                    <ReferenceLine y={0} stroke="#bdc9c8" />
+                    <Tooltip
+                      formatter={(value) => fmt(Number(value))}
+                      contentStyle={{
+                        backgroundColor: '#fff',
+                        borderRadius: '12px',
+                        border: 'none',
+                        boxShadow: '0 20px 40px -8px rgba(43, 49, 61, 0.16)',
+                        fontSize: '12px',
+                        fontWeight: 600,
+                        padding: '12px 14px',
+                      }}
+                      itemStyle={{ padding: '2px 0' }}
+                      cursor={{ fill: 'rgba(0, 121, 123, 0.05)' }}
+                    />
+                    <Legend
+                      verticalAlign="top"
+                      align="right"
+                      height={36}
+                      iconType="circle"
+                      wrapperStyle={{ fontSize: '11px', fontWeight: 600, color: '#5A5A5A' }}
+                    />
+                    <Bar dataKey="expenses" name="Expenses" fill="#E4536B" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="income" name="Income" fill="#00797B" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="profit" name="Net Profit" fill="#006143" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               )}
+            </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm">
-                  <div className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-3">Orders in Period</div>
-                  <div className="text-4xl font-sans font-bold text-stone-800">{filteredOrders.length}</div>
-                  <div className="text-[10px] text-stone-400 mt-2 uppercase font-bold tracking-wider">{filteredOrders.reduce((acc, o) => acc + o.quantity, 0)} items sold</div>
-                </div>
-                <div className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm">
-                  <div className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-3">Items on Menu</div>
-                  <div className="text-4xl font-sans font-bold text-stone-800">{menu.length}</div>
-                </div>
-                <div className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm">
-                  <div className="text-stone-400 text-[10px] font-bold uppercase tracking-widest mb-3">Dates with Data</div>
-                  <div className="text-4xl font-sans font-bold text-stone-800">
-                    {[...new Set(orders.map(o => o.date))].length}
+            <div className="mt-4 flex items-center gap-2 text-xs text-muted">
+              <span className="w-1.5 h-1.5 rounded-full bg-margin" />
+              <span>Live ledger synced{lastSynced ? ` · Updated ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+            </div>
+          </div>
+
+          <div className="surface-card p-5 md:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div className="min-w-0">
+                <h3 className="text-xl font-semibold tracking-tight text-ink">Recent Production Runs</h3>
+                <p className="text-sm text-muted">Batch yield, cost and freshness in the selected period.</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('production')}
+                  className="px-3 py-2 rounded-lg bg-stone-50 text-muted hover:text-ink text-xs font-semibold whitespace-nowrap transition-colors"
+                >
+                  View all
+                </button>
+                {menu.length > 0 && (
+                  <button
+                    onClick={() => setIsProductionRunModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white text-xs font-semibold whitespace-nowrap hover:bg-primary-dark transition-colors"
+                  >
+                    <Plus size={16} /> Log Production Run
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {recentRuns.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted bg-stone-50 rounded-xl">
+                No production runs in this period.
+              </div>
+            ) : (
+              <div className="overflow-x-auto -mx-1">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-stone-50 text-[11px] uppercase tracking-wider text-muted">
+                      <th className="px-3 py-2.5 font-semibold rounded-l-lg">Recipe</th>
+                      <th className="px-3 py-2.5 font-semibold hidden sm:table-cell">Status</th>
+                      <th className="px-3 py-2.5 font-semibold text-right hidden xl:table-cell">Produced</th>
+                      <th className="px-3 py-2.5 font-semibold text-right">Yield</th>
+                      <th className="px-3 py-2.5 font-semibold text-right rounded-r-lg">Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentRuns.map(run => {
+                      const status = runStatus(run, today);
+                      const sellable = run.quantityYield ?? run.quantityProduced;
+                      const yieldPct = run.quantityProduced > 0 ? (sellable / run.quantityProduced) * 100 : 100;
+                      return (
+                        <tr key={run.id} className="border-t border-stone-100 hover:bg-accent/60 transition-colors">
+                          <td className="px-3 py-3">
+                            <div className="text-sm font-semibold text-ink">{menu.find(m => m.id === run.recipeId)?.name || 'Unknown'}</div>
+                            <div className="font-mono text-[11px] text-muted">{run.date}</div>
+                            <span className={`sm:hidden inline-block mt-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${status.cls}`}>{status.label}</span>
+                          </td>
+                          <td className="px-3 py-3 hidden sm:table-cell">
+                            <span className={`inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${status.cls}`}>{status.label}</span>
+                          </td>
+                          <td className="px-3 py-3 text-right font-mono text-sm text-ink hidden xl:table-cell">{run.quantityProduced}</td>
+                          <td className={`px-3 py-3 text-right font-mono text-sm font-semibold ${yieldPct < 90 ? 'text-coral' : 'text-margin'}`}>{yieldPct.toFixed(0)}%</td>
+                          <td className="px-3 py-3 text-right font-mono text-sm text-ink">{fmt(run.costTotal || 0)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT: profit, low stock, freshness */}
+        <div className="lg:col-span-4 space-y-4 lg:space-y-6 min-w-0">
+          <div className="surface-card p-5 md:p-6 relative overflow-hidden">
+            <div className="absolute -right-16 -bottom-16 w-56 h-56 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+            <div className="relative">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Net Profit</div>
+                {margin !== null && (
+                  <span className={`px-2.5 py-1 rounded-full font-mono text-[11px] font-bold ${margin >= 0 ? 'bg-margin/12 text-margin' : 'bg-coral/10 text-coral'}`}>
+                    {margin.toFixed(1)}% margin
+                  </span>
+                )}
+              </div>
+              <div className={`mt-3 font-mono text-[32px] leading-none font-semibold tracking-tight ${financials.profit < 0 ? 'text-coral' : 'text-ink'}`}>
+                {fmt(financials.profit)}
+              </div>
+              <p className="text-sm text-muted mt-2">Income after materials, delivery and wastage.</p>
+
+              <div className="mt-4 rounded-xl bg-stone-50 p-4 space-y-2.5 text-sm">
+                {[
+                  { dot: 'bg-primary', label: 'Gross income', value: fmt(income), cls: 'text-ink' },
+                  { dot: 'bg-coral', label: 'Materials (COGS)', value: `-${fmt(financials.orderExpenses)}`, cls: 'text-ink' },
+                  { dot: 'bg-muted', label: 'Third-party couriers', value: `-${fmt(financials.deliveryExpenses)}`, cls: 'text-ink' },
+                  { dot: 'bg-coral', label: 'Logged wastage', value: `-${fmt(financials.wastageExpenses)}`, cls: 'text-coral' },
+                ].map(row => (
+                  <div key={row.label} className="flex items-center justify-between gap-3">
+                    <span className={`flex items-center gap-2 ${row.cls === 'text-coral' ? 'text-coral' : 'text-muted'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${row.dot}`} />
+                      {row.label}
+                    </span>
+                    <span className={`font-mono text-[13px] ${row.cls}`}>{row.value}</span>
                   </div>
+                ))}
+                <div className="pt-2.5 mt-1 border-t border-stone-200 flex items-center justify-between">
+                  <span className="font-semibold text-ink">Retained bottomline</span>
+                  <span className={`font-mono font-semibold ${margin !== null && margin < 0 ? 'text-coral' : 'text-margin'}`}>
+                    {margin !== null ? `${margin.toFixed(1)}%` : '—'}
+                  </span>
                 </div>
               </div>
-            </motion.div>
+
+              <div className="mt-3 font-mono text-[11px] uppercase tracking-wider text-muted space-y-1">
+                <div>{filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''} · {itemsSold} item{itemsSold !== 1 ? 's' : ''} sold</div>
+                {income === 0 && <div>No sales yet</div>}
+                {financials.experimentExpenses > 0 && <div>Operating Exp: {fmt(financials.experimentExpenses)} R&amp;D</div>}
+              </div>
+            </div>
+          </div>
+
+          <div className="surface-card p-5 md:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${lowStockItems.length > 0 ? 'bg-coral/10 text-coral' : 'bg-margin/10 text-margin'}`}>
+                  {lowStockItems.length > 0 ? <TriangleAlert size={20} /> : <CheckCircle2 size={20} />}
+                </div>
+                <h3 className="text-base font-semibold text-ink truncate">
+                  Low Stock <span className="font-mono">({lowStockItems.length})</span>
+                </h3>
+              </div>
+              {lowStockItems.length > 0 && (
+                <span className="px-2.5 py-1 rounded-full bg-coral text-white text-[10px] font-bold tracking-wider">RESTOCK</span>
+              )}
+            </div>
+
+            {lowStockItems.length === 0 ? (
+              <p className="text-sm text-muted mt-3">Every material is above its low-stock threshold.</p>
+            ) : (
+              <>
+                <p className="text-xs text-muted mt-3">Materials at or below their threshold.</p>
+                <div className="mt-3 space-y-2">
+                  {lowStockItems.slice(0, 4).map(item => (
+                    <div key={item.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-stone-50">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-ink truncate">{item.name}</div>
+                        <div className="font-mono text-[11px] mt-0.5">
+                          <span className="font-semibold text-coral">{parseFloat(Number(item.remaining).toFixed(2))} {item.unit} left</span>
+                          <span className="text-muted"> · Threshold {item.threshold} {item.unit}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setRestockMaterial(materials.find(m => m.id === item.id) ?? item)}
+                        className="px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-dark transition-colors shrink-0"
+                      >
+                        Restock
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center justify-between text-xs">
+                  <span className="text-muted">{lowStockItems.length > 4 ? `+${lowStockItems.length - 4} more flagged` : ''}</span>
+                  <button onClick={() => setActiveTab('inventory')} className="flex items-center gap-1 font-semibold text-primary hover:text-primary-dark transition-colors">
+                    Open Inventory <ArrowRight size={14} />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {freshnessAlerts.length > 0 && (
+            <div className="surface-card p-5 md:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${expiredCount > 0 ? 'bg-coral/10 text-coral' : 'bg-amber-100 text-amber-700'}`}>
+                    <Clock size={20} />
+                  </div>
+                  <h3 className="text-base font-semibold text-ink truncate">
+                    Freshness <span className="font-mono">({freshnessAlerts.length})</span>
+                  </h3>
+                </div>
+                {expiredCount > 0 && (
+                  <span className="px-2.5 py-1 rounded-full bg-coral text-white text-[10px] font-bold tracking-wider">EXPIRED</span>
+                )}
+              </div>
+              <p className="text-xs text-muted mt-3">Unsold batches to check or discard.</p>
+              <div className="mt-3 space-y-2">
+                {freshnessAlerts.slice(0, 3).map(({ run, urgency }) => (
+                  <div key={run.id} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-stone-50">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-ink truncate">{menu.find(m => m.id === run.recipeId)?.name || 'Unknown'}</div>
+                      <div className="font-mono text-[11px] text-muted mt-0.5">{run.remainingQuantity} left · made {run.date}</div>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap shrink-0 ${urgency === 'expired' ? 'bg-coral/10 text-coral' : 'bg-amber-100 text-amber-700'}`}>
+                      {urgency === 'expired' ? 'Expired' : 'Check'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between text-xs">
+                <span className="text-muted">{freshnessAlerts.length > 3 ? `+${freshnessAlerts.length - 3} more` : ''}</span>
+                <button onClick={() => setActiveTab('production')} className="flex items-center gap-1 font-semibold text-primary hover:text-primary-dark transition-colors">
+                  Open Production Log <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
   );
 };

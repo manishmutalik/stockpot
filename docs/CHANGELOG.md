@@ -1,5 +1,43 @@
 # Changelog
 
+## Dashboard redesign ("Kitchen Operations Platform" skin)
+
+Re-skinned the dashboard and the app shell around it from a Stitch design
+(teal brand, slate-navy ink, light-teal canvas behind white cards, Manrope
+for text and JetBrains Mono for every figure that has to line up). Only
+real app data is shown — the mockup's placeholder content (a named chef,
+a monthly profit target, barcode scanning, a "lunch service" picker) has
+no counterpart in the app and was left out rather than faked.
+
+- **Theme** (`src/index.css`): brand `primary` is now teal `#00797B`
+  (previously bread-brown), matching the new logo, plus `ink`, `muted`,
+  `coral` and `margin` tokens, Manrope/JetBrains Mono, a `#EAF4F3` canvas
+  and a `.surface-card` (border-less white card with a soft ambient
+  shadow). This re-colours every view that uses `primary`/`surface`; the
+  amber accents used on a few screens (e.g. Production) are unchanged.
+- **Shell** (`App.tsx`): the sidebar moves from the right to the left and
+  carries the Stockpot mark and the bakery's own name/logo; the header
+  becomes a slim bar with low-stock / freshness alert pills (compact
+  count badges below `xl`, and the same hover popovers as before, incl.
+  discarding a batch), currency, signed-in user and sign-out; mobile gets
+  a pill-style bottom nav and a teal production-run FAB. The bakery's
+  name/logo shows in the mobile header when set.
+- **Dashboard** (`SummaryView.tsx`): title + period controls card;
+  Cost of Goods Sold / Production Cost / Delivery Expenses / Wastage
+  cards with supporting stats (share of income, cost per run, courier
+  deliveries — grouped orders count once); GST cards when GST is on;
+  a grouped-bar Financial Trends chart; a Recent Production Runs table
+  (yield %, cost, and freshness/remaining status, with a Log Production
+  Run button); a Net Profit card that lays out income − COGS − couriers −
+  wastage; a Low Stock card whose Restock button opens the existing
+  restock flow; and a Freshness card for unsold batches to check or
+  discard. The first-run onboarding steps and the custom date range are
+  kept.
+- **Dropped from the old dashboard**: the separate "Total Income" card
+  (income now leads the Net Profit breakdown), and the "Items on Menu" /
+  "Dates with Data" counters (orders and items sold are shown under Net
+  Profit).
+
 ## Weight <-> volume unit conversion
 
 Recipes and raw materials could mix weight (g/kg) and volume (ml/l) units
