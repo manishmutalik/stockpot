@@ -14,6 +14,7 @@ import App from '../App';
 
 beforeEach(() => {
   fake.current.reset();
+  localStorage.clear();
   // No backend: billing/integration status calls just fail quietly.
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) }));
   (window as any).ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
@@ -53,6 +54,57 @@ describe('Demo sandbox', () => {
     expect(stocked.length).toBeGreaterThan(0);
     for (const r of stocked as any[]) expect(r.expiryDate >= today).toBe(true);
   });
+
+  it('shows figures on every screen that add up to the data that was seeded', async () => {
+    await startDemo();
+    await waitFor(() => expect([...fake.current.store.keys()].some((k: string) => k.includes('/productionRuns/run_9'))).toBe(true), { timeout: 5000 });
+    await screen.findAllByText('Stockpot Demo Kitchen', {}, { timeout: 5000 });
+
+    const docs = (kind: string) => [...fake.current.store.entries()].filter(([k]) => k.includes(`/${kind}/`)).map(([, v]) => v as any);
+    const [materials, menu, orders, runs, experiments] = ['materials', 'menu', 'orders', 'productionRuns', 'experiments'].map(docs);
+    const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+    const money = (n: number) => `₹${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const valueOf = (label: string) => screen.getByText(label).nextElementSibling?.textContent;
+    const open = async (nav: RegExp, heading: string) => {
+      fireEvent.click(screen.getAllByRole('button', { name: nav })[0]);
+      await screen.findByText(heading, {}, { timeout: 8000 });
+    };
+
+    // Production Runs
+    await open(/Production Runs/, 'Production Runs & Finished Goods');
+    expect(valueOf('Total Runs')).toBe(String(runs.length));
+    expect(valueOf('Units Baked')).toBe(String(sum(runs.map((r: any) => r.quantityProduced))));
+    expect(valueOf('Total Prod. Cost')).toBe(money(sum(runs.map((r: any) => r.costTotal))));
+    expect(valueOf('Finished Goods')).toBe(String(menu.filter((m: any) => m.finishedGoodsStock > 0).length));
+    expect(screen.getByText(`${sum(menu.map((m: any) => m.finishedGoodsStock))} units on shelf`)).toBeTruthy();
+
+    // Orders (default range is the last 7 days, which covers every seeded order)
+    await open(/Orders/, 'Customer & Courier Orders');
+    const revenue = sum(orders.map((o: any) => menu.find((m: any) => m.id === o.menuItemId).sellingPrice * o.quantity));
+    expect(valueOf('Total Orders')).toBe(String(orders.length));
+    expect(valueOf('Revenue Booked')).toBe(money(revenue));
+    expect(valueOf('Pending Fulfilment')).toBe(String(orders.filter((o: any) => !o.fulfilled).length));
+
+    // Inventory: value = stock on hand (after the R&D session's projected use) x cost
+    await open(/Stock \/ Inventory/, 'Raw Materials & Inventory');
+    const projectedUse = (materialId: string) => sum(experiments.flatMap((e: any) => e.materials).filter((r: any) => r.materialId === materialId).map((r: any) => r.amount));
+    const value = sum(materials.map((m: any) => Math.max(m.initialStock - projectedUse(m.id), 0) * m.costPerUnit));
+    expect(screen.getByText('Raw Inventory Value').closest('div.surface-card')?.textContent).toContain(money(value));
+    const low = materials.filter((m: any) => m.threshold > 0 && m.initialStock - projectedUse(m.id) <= m.threshold);
+    expect(low.map((m: any) => m.name)).toEqual(['Active Dry Yeast']);
+    expect(screen.getByText('Under Threshold').closest('div.surface-card')?.textContent).toContain('1 SKU');
+
+    // Dashboard (today): income - materials used = net profit
+    await open(/Dashboard/, 'Performance Summary');
+    const today = orders.filter((o: any) => !o.fulfilled);
+    const income = sum(today.map((o: any) => menu.find((m: any) => m.id === o.menuItemId).sellingPrice * o.quantity));
+    const cogs = sum(today.map((o: any) => {
+      const item = menu.find((m: any) => m.id === o.menuItemId);
+      return o.quantity * sum(item.recipe.map((r: any) => r.amount * materials.find((m: any) => m.id === r.materialId).costPerUnit));
+    }));
+    expect(screen.getByText('Cost of Goods Sold').nextElementSibling?.textContent).toBe(money(cogs));
+    expect(screen.getByText('Net Profit').closest('div.surface-card')?.textContent).toContain(money(income - cogs));
+  }, 60000);
 
   it('opens the Add Order and Log Production Run modals from the demo data', async () => {
     await startDemo();

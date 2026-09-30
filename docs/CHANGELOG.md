@@ -1,5 +1,31 @@
 # Changelog
 
+## Demo data: every figure now adds up
+
+The demo sandbox's sample data had numbers typed in that contradicted each
+other — e.g. 25 croissants costing 2,085 in production while the recipe costs
+about 1.53 a unit, ingredient stock that ignored everything the batches had
+used, shelf stock that disagreed with the batches, and every order (even old
+ones) left pending. The data now lives in `src/utils/demoData.ts` and every
+dependent figure is derived:
+
+- a batch's cost = quantity produced x the recipe's material cost (25
+  croissants = 38.31);
+- a material's stock = what was bought minus what the batches used (flour
+  60,000g bought, 42,750g used, 17,250g left);
+- shelf stock = units made after waste minus units ordered, and the batches'
+  remaining units are what is left after orders take from the oldest batches
+  first, so they sum to the shelf stock (croissants 75 - 56 = 19);
+- orders before today are fulfilled, today's are pending;
+- thresholds are meaningful, so exactly one material (yeast) shows Low Stock,
+  batches with stock are within date, and one muffin batch has a lost unit so
+  the yield pill has something to show.
+
+`demoData.test.ts` checks these from first principles (hand-worked figures,
+FIFO, day-by-day stock never going negative), and the end-to-end demo test
+checks that the Production, Orders, Inventory and Dashboard screens show
+figures that reconcile with the seeded data.
+
 ## Demo sandbox: clear errors, tidier sample data, end-to-end tests
 
 The demo sandbox stopped working because the Firebase project has the
