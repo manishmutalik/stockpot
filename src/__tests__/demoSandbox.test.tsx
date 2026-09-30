@@ -63,7 +63,7 @@ describe('Demo sandbox', () => {
     const docs = (kind: string) => [...fake.current.store.entries()].filter(([k]) => k.includes(`/${kind}/`)).map(([, v]) => v as any);
     const [materials, menu, orders, runs, experiments] = ['materials', 'menu', 'orders', 'productionRuns', 'experiments'].map(docs);
     const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
-    const money = (n: number) => `₹${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const money = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const valueOf = (label: string) => screen.getByText(label).nextElementSibling?.textContent;
     const open = async (nav: RegExp, heading: string) => {
       fireEvent.click(screen.getAllByRole('button', { name: nav })[0]);

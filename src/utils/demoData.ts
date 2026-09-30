@@ -213,7 +213,7 @@ export function buildDemoData(userId: string, today: string) {
     address: '123 Market Street, Foodville',
     phone: '555-0199',
     email: `${userId}@demo.stockpot.app`,
-    currency: { code: 'INR', symbol: '₹' },
+    currency: { code: 'USD', symbol: '$' },
     categories: ['Raw Materials', 'Packaging Materials'],
   };
 
