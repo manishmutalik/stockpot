@@ -1,5 +1,26 @@
 # Changelog
 
+## Demo sandbox: clear errors, tidier sample data, end-to-end tests
+
+The demo sandbox stopped working because the Firebase project has the
+**Email/Password sign-in provider switched off** (Firebase Authentication >
+Sign-in method): the demo signs in as a throwaway email/password user, so the
+request is refused with `PASSWORD_LOGIN_DISABLED` and the screen only said
+"Failed to initialize demo sandbox". Turning the provider on fixes it; this
+change makes the problem visible and the demo safer.
+
+- `src/utils/authErrors.ts` turns Firebase error codes into specific messages
+  for Google, email and demo sign-in (provider switched off, unauthorised
+  domain, network, rate limit, blocked pop-up, refused database write).
+  Email sign-in also now recognises `auth/invalid-credential`.
+- If the demo account is created but its sample data fails to save, the
+  visitor is signed out instead of being left in an empty app.
+- Demo batches that still have stock no longer start out already expired
+  (the dashboard opened with "Expired stock: 6 batches").
+- `src/__tests__/` runs the real app against an in-memory Firebase
+  (`fakeFirebase.ts`): demo sign-in, seeding, every tab rendering, the Add
+  Order / Log Production Run modals opening, and both failure paths.
+
 ## Every remaining modal and pre-app screen restyled ("Kitchen Operations Platform" skin)
 
 No mockups were supplied for these, so they extend the design already used by

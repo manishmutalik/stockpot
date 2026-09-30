@@ -91,6 +91,7 @@ const SettingsView = React.lazy(() => import('./views/SettingsView').then(m => (
 import { IngredientSelectorModal } from './components/IngredientSelectorModal';
 import { ProductionRunModal, ProductionRun } from './components/ProductionRunModal';
 import { AuthScreen, LoadingScreen, PaywallScreen } from './components/AuthScreens';
+import { describeAuthError } from './utils/authErrors';
 import { AddMaterialModal } from './components/AddMaterialModal';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { DiscardModal } from './components/DiscardModal';
@@ -586,7 +587,7 @@ function BakeryApp() {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
       console.error('Login failed', error);
-      setAuthError('Google login failed. Please try again.');
+      setAuthError(describeAuthError(error, 'google'));
     }
   };
 
@@ -615,11 +616,7 @@ function BakeryApp() {
       }
     } catch (error: any) {
       console.error('Email auth failed', error);
-      let message = 'Authentication failed. Please check your credentials.';
-      if (error.code === 'auth/email-already-in-use') message = 'Email already in use.';
-      if (error.code === 'auth/invalid-email') message = 'Invalid email address.';
-      if (error.code === 'auth/weak-password') message = 'Password is too weak.';
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') message = 'Invalid email or password.';
+      const message = describeAuthError(error, 'email');
       setAuthError(message);
     } finally {
       setIsAuthenticating(false);
@@ -739,9 +736,9 @@ function BakeryApp() {
       { id: 'run_1', recipeId: 'menu_croissant', quantityProduced: 30, remainingQuantity: 0, date: getPastDateStr(6), expiryDate: getPastDateStr(4), purpose: 'market_stock', costTotal: 30 * 83.40, createdAt: Date.now() - 6 * 24 * 60 * 60 * 1000 },
       { id: 'run_2', recipeId: 'menu_muffin', quantityProduced: 30, remainingQuantity: 0, date: getPastDateStr(6), expiryDate: getPastDateStr(3), purpose: 'market_stock', costTotal: 30 * 87.30, createdAt: Date.now() - 6 * 24 * 60 * 60 * 1000 },
       { id: 'run_3', recipeId: 'menu_sourdough', quantityProduced: 15, remainingQuantity: 0, date: getPastDateStr(6), expiryDate: getPastDateStr(4), purpose: 'market_stock', costTotal: 15 * 60.00, createdAt: Date.now() - 6 * 24 * 60 * 60 * 1000 },
-      { id: 'run_4', recipeId: 'menu_croissant', quantityProduced: 20, remainingQuantity: 5, date: getPastDateStr(4), expiryDate: getPastDateStr(2), purpose: 'market_stock', costTotal: 20 * 83.40, createdAt: Date.now() - 4 * 24 * 60 * 60 * 1000 },
-      { id: 'run_5', recipeId: 'menu_muffin', quantityProduced: 20, remainingQuantity: 10, date: getPastDateStr(4), expiryDate: getPastDateStr(1), purpose: 'market_stock', costTotal: 20 * 87.30, createdAt: Date.now() - 4 * 24 * 60 * 60 * 1000 },
-      { id: 'run_6', recipeId: 'menu_sourdough', quantityProduced: 15, remainingQuantity: 5, date: getPastDateStr(4), expiryDate: getPastDateStr(2), purpose: 'market_stock', costTotal: 15 * 60.00, createdAt: Date.now() - 4 * 24 * 60 * 60 * 1000 },
+      { id: 'run_4', recipeId: 'menu_croissant', quantityProduced: 20, remainingQuantity: 5, date: getPastDateStr(4), expiryDate: getPastDateStr(-3), purpose: 'market_stock', costTotal: 20 * 83.40, createdAt: Date.now() - 4 * 24 * 60 * 60 * 1000 },
+      { id: 'run_5', recipeId: 'menu_muffin', quantityProduced: 20, remainingQuantity: 10, date: getPastDateStr(4), expiryDate: getPastDateStr(-3), purpose: 'market_stock', costTotal: 20 * 87.30, createdAt: Date.now() - 4 * 24 * 60 * 60 * 1000 },
+      { id: 'run_6', recipeId: 'menu_sourdough', quantityProduced: 15, remainingQuantity: 5, date: getPastDateStr(4), expiryDate: getPastDateStr(-3), purpose: 'market_stock', costTotal: 15 * 60.00, createdAt: Date.now() - 4 * 24 * 60 * 60 * 1000 },
       { id: 'run_7', recipeId: 'menu_croissant', quantityProduced: 25, remainingQuantity: 25, date: getPastDateStr(1), expiryDate: getPastDateStr(-1), purpose: 'customer_order', costTotal: 25 * 83.40, createdAt: Date.now() - 1 * 24 * 60 * 60 * 1000 },
       { id: 'run_8', recipeId: 'menu_muffin', quantityProduced: 25, remainingQuantity: 25, date: getPastDateStr(2), expiryDate: getPastDateStr(-1), purpose: 'market_stock', costTotal: 25 * 87.30, createdAt: Date.now() - 2 * 24 * 60 * 60 * 1000 },
       { id: 'run_9', recipeId: 'menu_sourdough', quantityProduced: 15, remainingQuantity: 15, date: getPastDateStr(2), expiryDate: getPastDateStr(0), purpose: 'market_stock', costTotal: 15 * 60.00, createdAt: Date.now() - 2 * 24 * 60 * 60 * 1000 }
@@ -814,7 +811,10 @@ function BakeryApp() {
       await seedDemoData(userCredential.user.uid);
     } catch (error: any) {
       console.error('Demo login failed', error);
-      setAuthError('Failed to initialize demo sandbox. Please try again.');
+      setAuthError(describeAuthError(error, 'demo'));
+      // If the account was created but seeding failed, don't leave the visitor
+      // signed in to an empty app behind a stale error banner.
+      if (auth.currentUser) await signOut(auth).catch(() => {});
     } finally {
       setIsDemoLoading(false);
     }
