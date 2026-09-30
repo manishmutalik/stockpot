@@ -147,3 +147,28 @@ describe('AddOrderModal', () => {
     });
   });
 });
+
+describe('AddOrderModal — redesigned form', () => {
+  it('is a labelled dialog that closes from the header button', () => {
+    const { onClose } = renderModal();
+    expect(screen.getByRole('dialog', { name: 'Add Order' })).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('steps the quantity and updates the order total', () => {
+    renderModal();
+    const qty = screen.getByPlaceholderText('Qty') as HTMLInputElement;
+    fireEvent.click(screen.getByLabelText('Increase quantity'));
+    expect(qty.value).toBe('2');
+    expect(screen.getByText('$40.00')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Decrease quantity'));
+    expect(screen.getByText('$20.00', { selector: 'div' })).toBeTruthy();
+  });
+
+  it('shows how much of the chosen item is available, and its price', () => {
+    renderModal();
+    expect(screen.getByText('10 available')).toBeTruthy();
+    expect(screen.getByText('$20.00 each')).toBeTruthy();
+  });
+});

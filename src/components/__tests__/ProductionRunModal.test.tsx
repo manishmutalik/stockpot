@@ -121,3 +121,65 @@ describe('ProductionRunModal — multi-item logging', () => {
     await vi.waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   });
 });
+
+describe('ProductionRunModal — redesigned form', () => {
+  const renderWithCosts = (onSave = vi.fn().mockResolvedValue({ succeededCount: 1, failedIndex: null })) => {
+    const onClose = vi.fn();
+    render(
+      <ProductionRunModal
+        isOpen
+        onClose={onClose}
+        menu={[{ id: 'cake', name: 'Cake', sellingPrice: 20, recipe: [{ materialId: 'flour', amount: 500, unit: 'g' }] }] as any}
+        materials={[{ id: 'flour', name: 'Flour', unit: 'kg', costPerUnit: 10 }] as any}
+        onSave={onSave}
+        currency={currency}
+      />
+    );
+    return { onSave, onClose };
+  };
+
+  it('is a labelled dialog that closes from the header button', () => {
+    const { onClose } = renderModal();
+    expect(screen.getByRole('dialog', { name: 'Log Production Run' })).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Close'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('steps the quantity with the − and + buttons and never below zero', () => {
+    renderModal();
+    const qty = screen.getByPlaceholderText('Qty') as HTMLInputElement;
+    fireEvent.click(screen.getByLabelText('Increase quantity'));
+    expect(qty.value).toBe('2');
+    fireEvent.click(screen.getByLabelText('Decrease quantity'));
+    fireEvent.click(screen.getByLabelText('Decrease quantity'));
+    expect(qty.value).toBe(''); // 0 renders empty and fails validation on save
+  });
+
+  it('shows the total and per-unit cost as the quantity changes', () => {
+    renderWithCosts();
+    expect(screen.getByText('$5.00')).toBeTruthy(); // 0.5 kg x $10 x 1
+    fireEvent.change(screen.getByPlaceholderText('Qty'), { target: { value: '4' } });
+    expect(screen.getByText('$20.00')).toBeTruthy();
+    expect(screen.getByText('($5.00 / unit)')).toBeTruthy();
+  });
+
+  it('records waste through the yield section and saves the sellable count', async () => {
+    const { onSave } = renderWithCosts();
+    fireEvent.change(screen.getByPlaceholderText('Qty'), { target: { value: '10' } });
+    fireEvent.click(screen.getByRole('button', { name: /Yield & waste accountability/ }));
+    fireEvent.change(screen.getByLabelText('Sellable units (after waste)'), { target: { value: '8' } });
+    expect(screen.getByText('80% yield')).toBeTruthy();
+    expect(screen.getByText('⚠ 2 unit(s) will be logged as waste')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Log Run' }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0][0]).toMatchObject({ quantityProduced: 10, quantityYield: 8 });
+  });
+
+  it('hides the yield section once there is more than one item', () => {
+    renderWithCosts();
+    expect(screen.getByRole('button', { name: /Yield & waste accountability/ })).toBeTruthy();
+    fireEvent.click(screen.getByText('Add another item'));
+    expect(screen.queryByRole('button', { name: /Yield & waste accountability/ })).toBeNull();
+  });
+});

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { X, ChevronDown, ChevronUp, Calendar, Package, Factory, Plus, Trash2 } from 'lucide-react';
+import { Calendar, Check, ChevronDown, ChevronUp, CirclePlus, Factory, Hourglass, Package, Trash2 } from 'lucide-react';
+import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
 import { convertAmount } from '../utils/conversions';
 
 /**
@@ -255,168 +256,203 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
 
   if (!isOpen) return null;
 
+  const totalUnits = rows.reduce((sum, r) => sum + r.quantity, 0);
+  const perUnit = totalUnits > 0 ? costTotal / totalUnits : 0;
+  const expected = rows[0]?.quantity ?? 0;
+  const good = yieldQty === '' ? null : Number(yieldQty);
+  const waste = good === null ? 0 : Math.max(0, expected - good);
+  const yieldPct = good === null || expected <= 0 ? null : Math.min(100, (good / expected) * 100);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
-      <div className="bg-white rounded-[2.5rem] shadow-2xl border border-stone-100 w-full max-w-md overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-8 pt-8 pb-6 border-b border-stone-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600">
-              <Factory size={20} />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold text-stone-800">Log Production Run</h2>
-              <p className="text-[10px] text-stone-400 uppercase tracking-widest font-bold">Record a production run</p>
-            </div>
-          </div>
-          <button onClick={handleClose} className="p-2 rounded-xl hover:bg-stone-100 text-stone-400 transition-colors">
-            <X size={20} />
-          </button>
-        </div>
-
-        <div className="px-8 py-6 space-y-5 max-h-[70vh] overflow-y-auto">
-          {/* Items */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block">
-                {rows.length > 1 ? `Items (${rows.length})` : 'Recipe'}
-              </label>
-            </div>
-            <div className="space-y-2">
-              {rows.map((row, i) => (
-                <div key={i} className="flex gap-2 items-start">
-                  <select
-                    value={row.recipeId}
-                    onChange={e => updateRow(i, { recipeId: e.target.value })}
-                    className={`flex-1 min-w-0 bg-stone-50 border rounded-xl px-4 py-3 text-sm font-bold text-stone-700 outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all ${invalidRowIndex === i && !row.recipeId ? 'border-rose-400' : 'border-stone-200'}`}
-                  >
-                    <option value="" disabled>Select a recipe...</option>
-                    {menu.map(item => (
-                      <option key={item.id} value={item.id}>{item.name}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min={1}
-                    value={row.quantity === 0 ? '' : row.quantity}
-                    onChange={e => updateRow(i, { quantity: parseInt(e.target.value) || 0 })}
-                    placeholder="Qty"
-                    className={`w-20 bg-stone-50 border rounded-xl px-3 py-3 text-sm font-bold text-stone-700 outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all ${invalidRowIndex === i && row.quantity < 1 ? 'border-rose-400' : 'border-stone-200'}`}
-                  />
-                  {rows.length > 1 && (
-                    <button
-                      onClick={() => removeRow(i)}
-                      title="Remove item"
-                      className="p-3 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors shrink-0"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+    <ModalShell
+      title="Log Production Run"
+      subtitle="Record a production run"
+      icon={Factory}
+      onClose={handleClose}
+      footer={
+        <>
+          <div className="flex gap-3">
             <button
-              onClick={addRow}
-              className="flex items-center gap-1.5 mt-2 text-[11px] font-bold text-amber-600 hover:text-amber-700 transition-colors"
+              onClick={handleClose}
+              className="flex-1 sm:flex-none sm:w-36 h-12 rounded-xl bg-stone-100 text-ink text-sm font-semibold hover:bg-stone-200 transition-colors"
             >
-              <Plus size={14} /> Add another item
+              Cancel
             </button>
-          </div>
-
-          {/* Date */}
-          <div>
-            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1.5 block flex items-center gap-1.5">
-              <Calendar size={11} /> Date
-            </label>
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-sm font-bold text-stone-700 outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all"
-            />
-          </div>
-
-          {/* Yield toggle (collapsible) — only meaningful for a single item; with
-              multiple items a single "sellable units" number can't represent
-              per-item waste. Use the Production Log's per-item Discard action
-              afterward for a multi-item session that had partial waste. */}
-          {rows.length === 1 && (
-            <div>
-              <button
-                onClick={() => setShowYield(!showYield)}
-                className="flex items-center gap-2 text-[11px] font-bold text-stone-400 hover:text-stone-600 transition-colors"
-              >
-                {showYield ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                {showYield ? 'Hide yield info' : '+ Add yield info (account for waste)'}
-              </button>
-              {showYield && (
-                <div className="mt-3">
-                  <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1.5 block">
-                    Sellable Units (after waste)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={rows[0].quantity}
-                    value={yieldQty}
-                    onChange={e => setYieldQty(e.target.value === '' ? '' : parseInt(e.target.value))}
-                    placeholder={`Max: ${rows[0].quantity}`}
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-sm font-bold text-stone-700 outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all"
-                  />
-                  {yieldQty !== '' && Number(yieldQty) < rows[0].quantity && (
-                    <p className="text-[10px] text-amber-600 mt-1.5 font-bold">
-                      ⚠ {rows[0].quantity - Number(yieldQty)} unit(s) will be logged as waste
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Notes */}
-          <div>
-            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1.5 block">Notes (optional)</label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={2}
-              placeholder="Any observations about this production run..."
-              className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-sm text-stone-700 outline-none focus:ring-2 focus:ring-amber-400/30 focus:border-amber-400 transition-all resize-none"
-            />
-          </div>
-
-          {/* Cost Preview */}
-          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center justify-between">
-            <div>
-              <div className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">Total Production Cost</div>
-              <div className="text-xl font-bold font-serif text-stone-800 mt-0.5">
-                {currency.symbol}{costTotal.toFixed(2)}
-              </div>
-            </div>
-            <Package size={28} className="text-amber-300" />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-8 py-5 border-t border-stone-100 flex gap-3">
-          <button
-            onClick={handleClose}
-            className="flex-1 py-3 rounded-2xl border border-stone-200 text-stone-600 text-sm font-bold hover:bg-stone-50 transition-all"
-          >
-            Cancel
-          </button>
-          <div className="flex flex-col flex-1">
             <button
               onClick={handleSave}
               disabled={isSaving}
-              className="w-full py-3 rounded-2xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-amber-200"
+              className="flex-1 h-12 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md shadow-primary/20 flex items-center justify-center gap-2"
             >
+              {!isSaving && <Check size={18} />}
               {isSaving ? 'Logging...' : rows.length > 1 ? `Log ${rows.length} Items` : 'Log Run'}
             </button>
-            {error && <div className="text-rose-500 text-[10px] font-bold mt-1 text-center">{error}</div>}
+          </div>
+          {error && <div className="text-coral text-xs font-semibold mt-2 text-center">{error}</div>}
+        </>
+      }
+    >
+      {/* Items */}
+      <div>
+        <label className={MODAL_LABEL}>
+          {rows.length > 1 ? `Items (${rows.length})` : 'Recipe'}
+        </label>
+        <div className="space-y-3">
+          {rows.map((row, i) => (
+            <div key={i}>
+              <div className="flex gap-2 items-stretch">
+                <select
+                  value={row.recipeId}
+                  onChange={e => updateRow(i, { recipeId: e.target.value })}
+                  className={`${modalField(invalidRowIndex === i && !row.recipeId)} flex-1 min-w-0 font-semibold`}
+                >
+                  <option value="" disabled>Select a recipe...</option>
+                  {menu.map(item => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+                <QuantityStepper
+                  value={row.quantity}
+                  onChange={n => updateRow(i, { quantity: n })}
+                  invalid={invalidRowIndex === i && row.quantity < 1}
+                />
+                {rows.length > 1 && (
+                  <button
+                    onClick={() => removeRow(i)}
+                    title="Remove item"
+                    className="px-3 text-muted hover:text-coral hover:bg-coral/10 rounded-xl transition-colors shrink-0"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
+              {rows.length > 1 && row.recipeId && (
+                <div className="mt-1.5 px-1 font-mono text-[11px] text-muted">
+                  Material cost <span className="font-semibold text-ink">{currency.symbol}{rowCosts[i].toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={addRow}
+          className="flex items-center gap-1.5 mt-3 text-sm font-semibold text-primary hover:text-primary-dark transition-colors"
+        >
+          <CirclePlus size={16} /> Add another item
+        </button>
+      </div>
+
+      {/* Date */}
+      <div className="sm:max-w-xs">
+        <label className={`${MODAL_LABEL} flex items-center gap-1.5`}>
+          <Calendar size={12} /> Production date
+        </label>
+        <input
+          type="date"
+          value={date}
+          onChange={e => setDate(e.target.value)}
+          className={`${modalField()} font-mono font-semibold`}
+        />
+      </div>
+
+      {/* Yield accountability (collapsible) — only meaningful for a single item; with
+          multiple items a single "sellable units" number can't represent
+          per-item waste. Use the Production Log's per-item Discard action
+          afterward for a multi-item session that had partial waste. */}
+      {rows.length === 1 && (
+        <div className="bg-stone-50 rounded-2xl">
+          <button
+            onClick={() => setShowYield(!showYield)}
+            aria-expanded={showYield}
+            className="w-full flex items-center justify-between gap-3 p-4 text-left"
+          >
+            <span className="flex items-center gap-3 min-w-0">
+              <span className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center text-primary shrink-0">
+                <Hourglass size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-ink">Yield &amp; waste accountability</span>
+                <span className="block text-xs text-muted">
+                  {showYield ? 'Account for trimming scrap or recipe variance' : '+ Add yield info (account for waste)'}
+                </span>
+              </span>
+            </span>
+            <span className="flex items-center gap-2 shrink-0">
+              {showYield && yieldPct !== null && (
+                <span
+                  className={`font-mono text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    yieldPct >= 100 ? 'bg-margin/10 text-[#006143]' : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {yieldPct >= 100 ? '100% target met' : `${yieldPct.toFixed(0)}% yield`}
+                </span>
+              )}
+              {showYield ? <ChevronUp size={16} className="text-muted" /> : <ChevronDown size={16} className="text-muted" />}
+            </span>
+          </button>
+          {showYield && (
+            <div className="px-4 pb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-white rounded-xl px-3 py-2">
+                  <div className={`${MODAL_LABEL} !mb-0.5`}>Expected yield</div>
+                  <div className="font-mono text-lg font-semibold text-ink">{expected} <span className="text-xs font-normal text-muted">units</span></div>
+                </div>
+                <div className="bg-white rounded-xl px-3 py-2">
+                  <label htmlFor="sellable-units" className={`${MODAL_LABEL} !mb-0.5`}>Sellable units (after waste)</label>
+                  <input
+                    id="sellable-units"
+                    type="number"
+                    min={0}
+                    max={expected}
+                    value={yieldQty}
+                    onChange={e => setYieldQty(e.target.value === '' ? '' : parseInt(e.target.value))}
+                    placeholder={`Max: ${expected}`}
+                    className="w-full bg-transparent font-mono text-lg font-semibold text-ink outline-none placeholder:text-stone-300 placeholder:font-normal placeholder:text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                  />
+                </div>
+                <div className="bg-white rounded-xl px-3 py-2">
+                  <div className={`${MODAL_LABEL} !mb-0.5`}>Waste</div>
+                  <div className={`font-mono text-lg font-semibold ${waste > 0 ? 'text-amber-600' : 'text-ink'}`}>
+                    {waste} <span className="text-xs font-normal text-muted">units</span>
+                  </div>
+                </div>
+              </div>
+              {waste > 0 && (
+                <p className="text-xs text-amber-700 mt-2 font-semibold">
+                  ⚠ {waste} unit(s) will be logged as waste
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Notes */}
+      <div>
+        <label className={MODAL_LABEL}>Notes (optional)</label>
+        <textarea
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          rows={2}
+          placeholder="Any observations about this production run..."
+          className={`${modalField()} resize-none`}
+        />
+      </div>
+
+      {/* Cost Preview */}
+      <div className="bg-amber-50 rounded-2xl p-4 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-mono text-[10px] font-semibold text-amber-700 uppercase tracking-wider">Total Production Cost</div>
+          <div className="flex items-baseline flex-wrap gap-x-2 mt-0.5">
+            <span className="text-2xl font-mono font-semibold text-ink">{currency.symbol}{costTotal.toFixed(2)}</span>
+            {totalUnits > 0 && (
+              <span className="font-mono text-xs text-muted">({currency.symbol}{perUnit.toFixed(2)} / unit)</span>
+            )}
           </div>
         </div>
+        <div className="w-12 h-12 rounded-xl bg-white shadow-sm flex items-center justify-center text-amber-600 shrink-0">
+          <Package size={22} />
+        </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
