@@ -1,5 +1,32 @@
 # Changelog
 
+## Production Runs redesign ("Kitchen Operations Platform" skin)
+
+The Production Runs tab now follows the Stitch production design. Only real
+data is shown: the mockup's run numbers, SKU/rack codes, commissary statuses,
+oven/equipment utilisation, scrap-ratio gauge, Export CSV and Batch
+Calculator have no counterpart in the app and were left out.
+
+- **Headline cards** (all time): Total Runs (with runs this week), Units
+  Baked (with sellable units and overall yield), Total Prod. Cost (with
+  average cost per unit) and Finished Goods (SKUs and units on shelf, with
+  a freshness-alert count). Figures live in `src/utils/productionStats.ts`.
+- **Market Stock & Freshness** keeps all four actions (Add to Order,
+  Personal Use, Sampling, Discard) and now shows a Fresh / Check freshness /
+  Expired badge and the age of the oldest unsold batch per item.
+- **Runs table**: batch date and time, recipe, produced, a yield pill
+  (sellable share of what was produced, flagging waste), batch cost, shelf
+  expiry (marked Due / Expired while stock from the batch remains) and a
+  status pill (in stock / check freshness / expired / sold out). Sessions
+  keep their grouped header and Delete Session; sessions are never split
+  across pages.
+- **Filters and paging**: the existing recipe filter plus a date range,
+  a "n of m runs" count, Clear filters, and 12-per-page pagination.
+- The retired **Purpose** column now only appears when a listed run still
+  carries one from before purpose was removed.
+- The run-status pill logic moved from `SummaryView` to
+  `src/utils/productionStats.ts` so the dashboard and this tab share it.
+
 ## Orders redesign ("Kitchen Operations Platform" skin)
 
 The Orders tab now follows the Stitch orders design. Only real data is
