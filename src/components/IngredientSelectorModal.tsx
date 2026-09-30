@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { X, Search, CheckCircle2 } from 'lucide-react';
+import { Check, Search, Sparkles } from 'lucide-react';
+import { ModalShell } from './ModalShell';
 import { getDefaultRecipeUnit } from '../App';
 
 /**
@@ -106,116 +107,108 @@ export function IngredientSelectorModal({ isOpen, onClose, materials, categories
     onClose();
   };
 
+  const selectedCount = Object.keys(selectedItems).length;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-        <div className="px-8 pt-8 pb-6 border-b border-stone-100 flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-serif font-bold text-stone-800">Quick Select Ingredients</h2>
-            <p className="text-stone-500 text-sm italic font-serif">Enter quantities to select items automatically.</p>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-full transition-colors text-stone-400">
-            <X size={24} />
-          </button>
-        </div>
-
-        <div className="px-8 py-4 bg-stone-50/50 border-b border-stone-100">
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={18} />
-            <input
-              type="text"
-              placeholder="Search materials..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white border border-stone-200 rounded-2xl pl-12 pr-4 py-3 text-sm font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all shadow-sm"
-            />
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-8 space-y-8">
-          {categories.filter(c => c !== 'Packaging Materials').map(cat => {
-            const catMaterials = filteredMaterials.filter(m => m.category === cat);
-            if (catMaterials.length === 0) return null;
-
-            return (
-              <div key={cat} className="space-y-3">
-                <h3 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest px-2">{cat}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {catMaterials.map(mat => {
-                    const isSelected = !!selectedItems[mat.id];
-                    return (
-                      <div 
-                        key={mat.id}
-                        className={`flex items-center gap-3 p-3 rounded-2xl border transition-all cursor-pointer ${
-                          isSelected ? 'border-primary/50 bg-primary/5 shadow-sm' : 'border-stone-100 bg-white hover:border-stone-200'
-                        }`}
-                        onClick={() => !isSelected && handleToggleCheck(mat.id)}
-                      >
-                        <div 
-                          className="flex-1 flex items-center gap-3"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleCheck(mat.id);
-                          }}
-                        >
-                          <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
-                            isSelected ? 'bg-primary border-primary text-white' : 'border-stone-300 bg-white'
-                          }`}>
-                            {isSelected && <CheckCircle2 size={14} />}
-                          </div>
-                          <span className={`text-sm font-bold ${isSelected ? 'text-stone-800' : 'text-stone-600'}`}>
-                            {mat.name}
-                          </span>
-                        </div>
-                        
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            placeholder="0"
-                            value={selectedItems[mat.id] || ''}
-                            onChange={(e) => handleAmountChange(mat.id, e.target.value)}
-                            className="w-16 bg-white border border-stone-200 rounded-xl px-2 py-1.5 text-sm font-mono font-bold text-stone-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-right shadow-sm"
-                          />
-                          <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest w-6">
-                            {getDefaultRecipeUnit(mat.unit)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="px-8 py-6 border-t border-stone-100 bg-stone-50/50 flex justify-between items-center">
-          <span className="text-sm font-bold text-stone-500">
-            {Object.keys(selectedItems).length} items selected
+    <ModalShell
+      title="Quick Select Ingredients"
+      subtitle="Enter quantities to select items automatically"
+      icon={Sparkles}
+      onClose={onClose}
+      widthClass="sm:max-w-2xl"
+      footer={
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-mono text-xs font-semibold text-muted">
+            {selectedCount} item{selectedCount === 1 ? '' : 's'} selected
           </span>
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest text-stone-500 hover:bg-stone-100 transition-colors"
+              className="h-12 px-5 sm:px-8 rounded-xl bg-stone-100 text-ink text-sm font-semibold hover:bg-stone-200 transition-colors"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              disabled={Object.keys(selectedItems).length === 0}
-              className={`px-8 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg transform active:scale-95 ${
-                Object.keys(selectedItems).length > 0 
-                  ? 'bg-primary hover:bg-primary-dark text-white shadow-primary/20' 
-                  : 'bg-stone-200 text-stone-400 cursor-not-allowed'
-              }`}
+              disabled={selectedCount === 0}
+              className="h-12 px-5 sm:px-8 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md shadow-primary/20 flex items-center gap-2"
             >
+              <Check size={18} />
               Add Selected
             </button>
           </div>
         </div>
+      }
+    >
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={18} />
+        <input
+          type="text"
+          placeholder="Search materials..."
+          aria-label="Search materials"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full bg-stone-50 border border-transparent rounded-xl pl-11 pr-4 py-3 text-sm text-ink placeholder:text-muted/70 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-colors"
+        />
       </div>
-    </div>
+
+      {categories.filter(c => c !== 'Packaging Materials').map(cat => {
+        const catMaterials = filteredMaterials.filter(m => m.category === cat);
+        if (catMaterials.length === 0) return null;
+
+        return (
+          <div key={cat} className="space-y-2.5">
+            <h3 className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted">{cat}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {catMaterials.map(mat => {
+                const isSelected = !!selectedItems[mat.id];
+                return (
+                  <div
+                    key={mat.id}
+                    className={`flex items-center gap-3 p-3 rounded-xl transition-colors cursor-pointer ${
+                      isSelected ? 'bg-primary/5 ring-1 ring-primary/30' : 'bg-stone-50 hover:bg-stone-100'
+                    }`}
+                    onClick={() => !isSelected && handleToggleCheck(mat.id)}
+                  >
+                    <div
+                      className="flex-1 min-w-0 flex items-center gap-3"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleCheck(mat.id);
+                      }}
+                    >
+                      <div className={`w-5 h-5 rounded-md flex items-center justify-center transition-colors shrink-0 ${
+                        isSelected ? 'bg-primary text-white' : 'bg-white border border-stone-300'
+                      }`}>
+                        {isSelected && <Check size={14} />}
+                      </div>
+                      <span className={`text-sm font-semibold truncate ${isSelected ? 'text-ink' : 'text-muted'}`}>
+                        {mat.name}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        aria-label={`Amount of ${mat.name}`}
+                        value={selectedItems[mat.id] || ''}
+                        onChange={(e) => handleAmountChange(mat.id, e.target.value)}
+                        className="w-16 bg-white border border-transparent rounded-lg px-2 py-1.5 text-sm font-mono font-semibold text-ink focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-right"
+                      />
+                      <span className="font-mono text-[10px] font-semibold text-muted uppercase w-6">
+                        {getDefaultRecipeUnit(mat.unit)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </ModalShell>
   );
 }

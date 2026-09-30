@@ -1,19 +1,28 @@
 # Changelog
 
-## Restock, Discard and sign-in screens restyled ("Kitchen Operations Platform" skin)
+## Every remaining modal and pre-app screen restyled ("Kitchen Operations Platform" skin)
 
 No mockups were supplied for these, so they extend the design already used by
 the Add Order / Log Production Run modals and the redesigned screens. Behaviour,
-validation and every handler are unchanged.
+validation and every handler are unchanged; App still owns the state and
+submit handlers, and the modals only render them.
 
-- **Restock** and **Discard** modals moved out of `App.tsx` into
-  `RestockModal.tsx` and `DiscardModal.tsx` (App still owns their state and
-  submit handlers) and use the shared `ModalShell`: bottom sheet on phones,
-  centred card from 640px, native form submit (Enter works, `required`
-  fields validate), close on Cancel / X / backdrop click. Restock now also
-  shows the resulting cost per unit. Discard adds a "Use max" shortcut and a
-  "Cost recorded" readout; the icon and confirm colour follow the action —
-  coral for wastage, amber for Personal Use, teal for Sampling.
+- **Restock**, **Discard**, **Add Item** and **Nutrition & Allergens** moved out
+  of `App.tsx` into `RestockModal`, `DiscardModal`, `AddMaterialModal` and
+  `NutritionModal`, and the small alert / confirm popup into `ConfirmDialog`.
+  All use the shared `ModalShell` (bottom sheet on phones, centred card from
+  640px, native form submit so Enter works and `required` fields validate,
+  close on Cancel / X / backdrop click).
+  - Restock also shows the resulting cost per unit.
+  - Discard adds a "Use max" shortcut and a "Cost recorded" readout; the icon
+    and confirm colour follow the action — coral for wastage, amber for
+    Personal Use, teal for Sampling.
+  - Nutrition & Allergens keeps the USDA / Open Food Facts lookup, the four
+    nutrient fields and the allergen chips (now with `aria-pressed`).
+  - The confirm popup is coral with Cancel / Delete; the alert popup is a
+    single OK. It stacks above other modals.
+- **Quick Select Ingredients** (the recipe editor's bulk picker) now uses
+  `ModalShell` too, with a labelled search box and amount fields.
 - **Sign-in / sign-up**, the **paywall** ("Start your free trial" / "Subscription
   needs attention") and the **loading** screen moved into
   `src/components/AuthScreens.tsx`: a teal canvas with a soft glow and one
@@ -21,8 +30,8 @@ validation and every handler are unchanged.
   same Google / email / demo-sandbox options as before.
 - `ModalShell` gained `tone`, `widthClass`, `closeOnBackdrop` and `onSubmit`
   options (Add Order and Log Production Run are unaffected).
-- Not restyled yet: the Add Item and Nutrition & Allergens modals, the
-  Ingredient Selector, and the public landing / terms / privacy pages.
+- Not restyled: the public landing, terms and privacy pages (marketing pages,
+  not part of the app).
 
 ## Settings redesign ("Kitchen Operations Platform" skin)
 
