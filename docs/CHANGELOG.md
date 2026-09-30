@@ -1,5 +1,34 @@
 # Changelog
 
+## Landing page: new "Culinary Precision" design
+
+`src/LandingPage.tsx` is rebuilt from the Stitch landing-page design: sticky
+header, hero with a framed dashboard screenshot, a three-card problem section,
+a bento feature grid, a four-step workflow, a single-plan pricing card, an FAQ
+accordion (buttons carry `aria-expanded` / `aria-controls`), a closing call to
+action and a footer. Space Grotesk and Inter are loaded only while this page
+is open.
+
+The design was checked against the product and corrected where it disagreed:
+
+- **Card required.** The design said "no credit card required", but
+  `server.ts` starts the 14-day trial through Stripe Checkout, which collects
+  a card. The page now says a card is required and that nothing is charged if
+  you cancel before the trial ends.
+- **Price.** The design showed $24 / ₹499 with a region toggle; the page keeps
+  the live $49 / month (`PRICE` at the top of the file). It must match the
+  Stripe price in `STRIPE_PRICE_ID`.
+- **Left out** because they don't exist: About and Contact pages, the invented
+  browser-bar URL, and the "backed up automatically" claim (the FAQ now says
+  what is true: data lives in Google's Firebase cloud, per account).
+- **Screenshots** are real captures of the redesigned app on the demo data
+  (`public/landing/*.webp`), not hotlinked design mock-ups. The old
+  `public/dashboard_mockup.png` and `public/inventory_mockup.png` are removed.
+- Every call to action points to `/app`; Terms and Privacy point to `/terms`
+  and `/privacy`.
+
+Tests: `src/__tests__/LandingPage.test.tsx`.
+
 ## Demo data: every figure now adds up
 
 The demo sandbox's sample data had numbers typed in that contradicted each
