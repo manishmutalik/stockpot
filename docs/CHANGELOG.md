@@ -1,5 +1,37 @@
 # Changelog
 
+## Recipes, R&D and Wastage redesign ("Kitchen Operations Platform" skin)
+
+The Recipes & Menus, R&D Lab and Wastage tabs now follow the Stitch designs.
+Only real data is shown: the mockups' recipe codes, batch yields, station and
+handler columns, "logged by" avatars, sensory-panel and tasting-note cards,
+equipment/station breakdowns, AI recommendations, trial statuses and Export
+buttons have no counterpart in the app and were left out.
+
+- **Menu & Master Recipes**: headline cards (menu items, average food cost,
+  highest-margin item, items needing review), a name search and a margin
+  filter, and restyled item cards with sale price, shelf life, servings and
+  the 3.5x price suggestion as one tidy row. The recipe editor keeps Quick
+  Add, per-category adds, the cost and nutrition estimate, and now shares one
+  row component for ingredients and packaging; the delete button on each line
+  is always visible instead of only on hover. Cost/margin maths lives in
+  `src/utils/menuStats.ts` (previously repeated four times in the view). The
+  nutrition-card share flow is unchanged.
+- **R&D & Test Kitchen**: headline cards (sessions, total trial cost, this
+  month's burn, distinct materials tested), a session search, and session
+  cards showing the date, each material's cost and the session's total. Maths
+  in `src/utils/rndStats.ts`. Fixed: the "No R&D sessions logged" empty state
+  used to appear whenever nothing was logged for the Orders date filter, even
+  while sessions were listed; it now shows only when there are no sessions.
+- **Wastage & Loss Ledger**: headline cards (total loss, incidents split
+  raw/finished, primary reason, loss as a share of production cost), search,
+  reason, category-tab and date filters, a paginated ledger with unit cost
+  and cost impact, and a "Loss by Reason" breakdown. Maths in
+  `src/utils/wastageStats.ts`. Fixed: the old table's type badge never got
+  its colour because of a stray escaped `${...}` in its class name.
+  Wastage is still logged from Inventory (Discard) and Market Stock, as
+  before — the mockup's "Log Waste Incident" button has no equivalent flow.
+
 ## Production Runs redesign ("Kitchen Operations Platform" skin)
 
 The Production Runs tab now follows the Stitch production design. Only real

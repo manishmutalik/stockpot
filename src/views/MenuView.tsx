@@ -1,51 +1,112 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
-} from 'recharts';
-import { 
-  Plus, Trash2, ChevronRight, ChevronDown, Package, Utensils, ClipboardList, Calculator,
-  Save, RotateCcw, AlertCircle, CheckCircle2, Check, Info, Database, RefreshCw, Copy,
-  DollarSign, Globe, Calendar, Filter, ArrowLeft, ArrowRight, Clock, Settings, Settings2,
-  Layers, UserCog, Puzzle, User as UserIcon, LogOut, Image, Palette, Store, Mail, Phone,
-  MapPin, UserCircle, TrendingUp, TrendingDown, Activity, ShoppingBag, BarChart3, Edit2,
-  LogIn, FlaskConical, Sparkles, Factory, Download, Upload, X, Salad
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  Award, BookOpen, Check, Copy, Edit2, Package, Percent, Plus, Salad, Search, Sparkles, Trash2,
+  TriangleAlert, Utensils, X
 } from 'lucide-react';
-import { AppViewProps } from '../types';
-import { IngredientSelectorModal } from '../components/IngredientSelectorModal';
-import { ProductionRunModal } from '../components/ProductionRunModal';
-import { CURRENCIES, INITIAL_MATERIALS } from '../App';
-import { UNIT_CONVERSIONS } from '../App';
-import { calculateRecipeNutrition } from '../utils/nutritionCalculations';
+import { AppViewProps, IngredientRequirement, MenuItem as MenuItemType, RawMaterial } from '../types';
+import { MetricCard } from '../components/MetricCard';
 import { NutritionCard } from '../components/NutritionCard';
-import type { MenuItem as MenuItemType } from '../types';
+import { convertAmount } from '../utils/conversions';
+import { calculateRecipeNutrition } from '../utils/nutritionCalculations';
+import { getMarginInfo, MarginTier, recipeCost, suggestedPrice, summarizeMenu } from '../utils/menuStats';
 
+type MarginFilter = 'all' | MarginTier;
+
+const MARGIN_PILL: Record<MarginTier, string> = {
+  high: 'bg-margin/10 text-[#006143]',
+  mid: 'bg-amber-100 text-amber-700',
+  low: 'bg-coral/10 text-coral',
+};
+
+const LABEL = 'font-mono text-[10px] font-semibold uppercase tracking-wider text-muted';
+const selectCls =
+  'h-10 rounded-lg bg-stone-50 border border-transparent px-3 text-sm font-medium text-ink focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none cursor-pointer';
+const STAT_INPUT =
+  'w-full bg-transparent border-none focus:ring-0 p-0 font-mono text-base font-semibold text-ink placeholder:text-stone-300';
+
+/**
+ * One ingredient or packaging line inside a recipe editor: which material,
+ * how much (with unit) and what that line costs. Ingredients and packaging
+ * share this row; they differ only in which materials can be picked and
+ * which unit a new line defaults to.
+ */
+const RecipeLine: React.FC<{
+  itemId: string;
+  req: IngredientRequirement;
+  idx: number;
+  packaging: boolean;
+  materials: RawMaterial[];
+  categories: string[];
+  currencySymbol: string;
+  updateRecipeIngredient: AppViewProps['updateRecipeIngredient'];
+  removeIngredientFromRecipe: AppViewProps['removeIngredientFromRecipe'];
+}> = ({ itemId, req, idx, packaging, materials, categories, currencySymbol, updateRecipeIngredient, removeIngredientFromRecipe }) => {
+  const mat = materials.find(m => m.id === req.materialId);
+  const lineCost = convertAmount(req.amount, req.unit || 'g', mat?.unit || 'g') * (mat?.costPerUnit || 0);
+  return (
+    <div className="flex items-center gap-3 bg-white p-3 rounded-xl shadow-sm hover:shadow transition-shadow">
+      <div className="flex-1 min-w-0">
+        <select
+          aria-label={packaging ? 'Packaging material' : 'Ingredient material'}
+          value={req.materialId || ''}
+          onChange={(e) => updateRecipeIngredient(itemId, idx, 'materialId', e.target.value)}
+          className="w-full bg-transparent border-none focus:ring-0 text-sm font-semibold text-ink p-0 cursor-pointer"
+        >
+          {packaging ? (
+            <optgroup label="Packaging Materials">
+              {materials.filter(m => m.category === 'Packaging Materials').map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </optgroup>
+          ) : (
+            categories.filter(c => c !== 'Packaging Materials').map(cat => (
+              <optgroup key={cat} label={cat}>
+                {materials.filter(m => m.category === cat).map(m => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </optgroup>
+            ))
+          )}
+        </select>
+        <div className="font-mono text-[11px] text-muted mt-0.5">Cost: {currencySymbol}{lineCost.toFixed(2)}</div>
+      </div>
+      <div className="flex items-center gap-1 bg-stone-50 rounded-lg px-2 py-1">
+        <input
+          type="number"
+          aria-label="Amount"
+          value={req.amount ?? 0}
+          onChange={(e) => updateRecipeIngredient(itemId, idx, 'amount', parseFloat(e.target.value) || 0)}
+          className="w-16 bg-transparent border-none focus:ring-0 text-sm font-mono font-semibold text-ink p-1 text-right"
+        />
+        <select
+          aria-label="Unit"
+          value={req.unit || (packaging ? 'pcs' : 'g')}
+          onChange={(e) => updateRecipeIngredient(itemId, idx, 'unit', e.target.value)}
+          className="bg-transparent border-none focus:ring-0 font-mono text-[10px] font-semibold text-muted uppercase p-0 cursor-pointer"
+        >
+          {(packaging ? ['pcs', 'g', 'kg', 'ml', 'l'] : ['g', 'kg', 'ml', 'l', 'pcs']).map(u => (
+            <option key={u} value={u}>{u}</option>
+          ))}
+        </select>
+      </div>
+      <button
+        onClick={() => removeIngredientFromRecipe(itemId, idx)}
+        className="text-stone-300 hover:text-coral transition-colors p-2 hover:bg-coral/10 rounded-lg"
+        title="Remove line"
+        aria-label="Remove line"
+      >
+        <Trash2 size={16} />
+      </button>
+    </div>
+  );
+};
 
 export const MenuView: React.FC<AppViewProps> = (props) => {
-  // Destructure all props to make variables available in the scope
-  const { patchMaterial, setRestockExpiryDate, shopifyStatus, importShopifyOrders, isImportingShopify, odooStatus, importOdooOrders, isImportingOdoo,
-    materials, setMaterials, categories, setCategories, menu, setMenu, orders, setOrders,
-    experiments, setExperiments, productionRuns, setProductionRuns, wastageLogs, setWastageLogs,
-    isProductionRunModalOpen, setIsProductionRunModalOpen, productionFilterRecipe, setProductionFilterRecipe,
-    productionFilterPurpose, setProductionFilterPurpose, activeTab, setActiveTab, activeSettingsTab,
-    setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
-    setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
-    setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
-    summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
-    setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
-    setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
-    user, isAlertDismissed, setIsAlertDismissed, isExpiredAlertDismissed, setIsExpiredAlertDismissed,
-    inventoryUsage, summaryInventoryUsage, remainingInventory, sortedRemainingInventory, lowStockItems,
-    summaryFinancials, activeOrdersCount, averageOrderValue, financials, chartData, handleRangeChange,
-    refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
-    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock,
-    addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
-    removeMaterialFromExperiment, processVoiceCommand, startListening, copyMenuItem, addIngredientToRecipe,
-    addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
-    deleteProductionRun, handleDiscardBatch, updateOrder, deleteOrder, resetOrders, saveSettings,
-    handleRestock, restockMaterial, setRestockMaterial,
-    showSaveFeedback, saveDay,
-    updateCurrency, handleLogout, isListening, transcript, convertAmount
+  const {
+    materials, categories, menu, settings, currency, expandedRecipeId, setExpandedRecipeId,
+    setIsIngredientSelectorOpen, setActiveRecipeItemId, addMenuItem, updateMenuItem, updateMenuItemField,
+    deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe
   } = props;
 
   // Purely local, ephemeral UI state for the shareable nutrition card — not
@@ -92,417 +153,396 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     return () => { cancelled = true; };
   }, [shareCardItem]);
 
+  const [search, setSearch] = useState('');
+  const [marginFilter, setMarginFilter] = useState<MarginFilter>('all');
+
+  const money = (n: number) =>
+    `${currency.symbol}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const summary = useMemo(() => summarizeMenu(menu, materials), [menu, materials]);
+
+  const q = search.trim().toLowerCase();
+  const visible = useMemo(
+    () => menu.filter(item => {
+      if (q && !(item.name || '').toLowerCase().includes(q)) return false;
+      if (marginFilter === 'all') return true;
+      // Unpriced items have no margin to speak of: they belong under "needs review".
+      if (!(item.sellingPrice > 0)) return marginFilter === 'low';
+      return getMarginInfo(item.sellingPrice, recipeCost(item.recipe, materials)).tier === marginFilter;
+    }),
+    [menu, materials, q, marginFilter]
+  );
+
+  const isPackaging = (req: IngredientRequirement) => materials.find(m => m.id === req.materialId)?.category === 'Packaging Materials';
+
   return (
     <>
     <motion.div
-              key="menu"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-6"
-            >
-              <div className="flex justify-between items-end">
-                <div>
-                  <h2 className="text-3xl font-sans font-bold text-stone-800">Menu & Recipes</h2>
-                  <p className="text-stone-500 text-sm font-sans italic">Define how much of each material is used per item.</p>
+      key="menu"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      className="space-y-6"
+    >
+      {/* Heading */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted mb-1">
+            <span className="truncate">{settings.name || 'My Bakery'}</span>
+            <span className="text-stone-300">/</span>
+            <span className="text-primary font-semibold whitespace-nowrap">Production Formulation</span>
+          </div>
+          <h2 className="text-2xl md:text-[32px] md:leading-tight font-bold tracking-tight text-ink">Menu &amp; Master Recipes</h2>
+          <p className="text-sm text-muted mt-1 max-w-2xl">
+            Define how much of each material goes into every item, and watch food cost and margin update as prices change.
+          </p>
+        </div>
+        <button
+          onClick={addMenuItem}
+          className="h-10 flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 rounded-lg text-sm font-semibold shadow-sm transition-colors"
+        >
+          <Plus size={18} />
+          Add Menu Item
+        </button>
+      </div>
+
+      {/* Headline figures */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <MetricCard
+          label="Menu Items"
+          value={String(summary.itemCount)}
+          icon={BookOpen}
+          tone="teal"
+          footLeft={`${menu.filter(m => m.recipe.length > 0).length} with a recipe`}
+        />
+        <MetricCard
+          label="Average Food Cost"
+          value={summary.avgFoodCostPercent === null ? '—' : `${summary.avgFoodCostPercent.toFixed(1)}%`}
+          icon={Percent}
+          tone="slate"
+          footLeft="Recipe cost ÷ sale price"
+        />
+        <MetricCard
+          label="Highest Margin Item"
+          value={summary.best ? summary.best.item.name || 'Untitled' : '—'}
+          icon={Award}
+          tone="slate"
+          footLeft={summary.best ? 'Gross margin' : 'Add a recipe and a price'}
+          footRight={summary.best ? `${summary.best.margin.toFixed(0)}%` : null}
+        />
+        <MetricCard
+          label="Items Needing Review"
+          value={String(summary.needsReview.length)}
+          icon={TriangleAlert}
+          tone={summary.needsReview.length > 0 ? 'coral' : 'slate'}
+          footLeft={summary.needsReview.length > 0
+            ? summary.needsReview.slice(0, 2).map(i => i.name || 'Untitled').join(', ') + (summary.needsReview.length > 2 ? ` +${summary.needsReview.length - 2}` : '')
+            : 'Margins look healthy'}
+          footRight={summary.needsReview.length > 0 ? 'Margin < 40%' : null}
+        />
+      </div>
+
+      {/* Search + margin filter */}
+      <div className="surface-card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative flex-1 min-w-0 sm:max-w-sm">
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search menu items"
+            aria-label="Search menu items"
+            className="w-full h-10 pl-10 pr-3 rounded-lg bg-stone-50 border border-transparent text-sm text-ink placeholder:text-muted focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+          />
+        </div>
+        <select aria-label="Filter by margin" value={marginFilter} onChange={(e) => setMarginFilter(e.target.value as MarginFilter)} className={selectCls}>
+          <option value="all">All Margins</option>
+          <option value="high">60% and up</option>
+          <option value="mid">40% – 60%</option>
+          <option value="low">Under 40% / unpriced</option>
+        </select>
+        <span className="font-mono text-[11px] text-muted sm:ml-auto">
+          {visible.length} of {menu.length} item{menu.length === 1 ? '' : 's'}
+        </span>
+      </div>
+
+      {menu.length === 0 && (
+        <div className="surface-card text-center py-16 px-8">
+          <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <Utensils size={30} />
+          </div>
+          <h3 className="text-xl font-bold text-ink mb-2">No menu items yet</h3>
+          <p className="text-muted text-sm mb-6">Add your first item, then build its recipe from your raw materials.</p>
+          <button
+            onClick={addMenuItem}
+            className="inline-flex items-center gap-2 h-10 bg-primary hover:bg-primary-dark text-white px-6 rounded-lg text-sm font-semibold shadow-sm transition-colors"
+          >
+            <Plus size={18} />
+            Add Menu Item
+          </button>
+        </div>
+      )}
+      {menu.length > 0 && visible.length === 0 && (
+        <div className="surface-card text-center py-14 text-muted">No menu items match these filters.</div>
+      )}
+
+      <div className="grid gap-4">
+        {visible.map((item) => {
+          const cost = recipeCost(item.recipe, materials);
+          const { margin, tier, isLoss } = getMarginInfo(item.sellingPrice, cost);
+          const expanded = expandedRecipeId === item.id;
+          const suggested = suggestedPrice(cost);
+          const ingredientLines = item.recipe.filter(r => !isPackaging(r));
+          const packagingLines = item.recipe.filter(r => isPackaging(r));
+          return (
+            <div key={item.id} className={`surface-card overflow-hidden ${expanded ? 'ring-1 ring-primary/30' : ''}`}>
+              <div className="p-4 sm:p-5 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                    <div className="relative w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary text-2xl shrink-0 overflow-hidden cursor-text hover:bg-primary/20 transition-colors">
+                      <input
+                        type="text"
+                        maxLength={2}
+                        aria-label="Emoji"
+                        value={item.emoji || ''}
+                        onChange={(e) => updateMenuItemField(item.id, 'emoji', e.target.value)}
+                        className="absolute inset-0 w-full h-full text-center bg-transparent outline-none z-10 cursor-text"
+                      />
+                      {!item.emoji && <Utensils size={24} className="opacity-50 absolute pointer-events-none" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <input
+                        type="text"
+                        aria-label="Item name"
+                        value={item.name || ''}
+                        onChange={(e) => updateMenuItem(item.id, e.target.value)}
+                        className="w-full bg-transparent border border-transparent hover:border-stone-200 focus:border-primary focus:bg-white rounded-md px-2 py-0.5 -mx-2 text-xl font-bold text-ink outline-none focus:ring-2 focus:ring-primary/20"
+                        placeholder="Item Name"
+                      />
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <span className="font-mono text-[11px] text-muted">Cost: {money(cost)}</span>
+                        <span className={`font-mono text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ${MARGIN_PILL[tier]}`}>
+                          {isLoss ? `Loss (${margin.toFixed(0)}%)` : `${margin.toFixed(0)}% Margin`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => setExpandedRecipeId(expanded ? null : item.id)}
+                      title={expanded ? 'Close Editor' : 'Edit Recipe'}
+                      className={`flex items-center gap-2 h-9 px-4 rounded-lg text-sm font-semibold transition-colors ${
+                        expanded ? 'bg-ink text-white shadow-sm' : 'bg-stone-50 text-ink hover:bg-primary/10 hover:text-primary'
+                      }`}
+                    >
+                      {expanded ? <Check size={16} /> : <Edit2 size={16} />}
+                      <span>{expanded ? 'Done' : 'Recipe'}</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!item.servings || item.servings <= 0) {
+                          setCardError(`Set servings for "${item.name}" before sharing its nutrition card.`);
+                          return;
+                        }
+                        setShareCardItem(item);
+                      }}
+                      disabled={isGeneratingCard}
+                      title="Share Nutrition Card"
+                      aria-label={`Share nutrition card for ${item.name}`}
+                      className="text-muted hover:text-primary transition-colors p-2 hover:bg-primary/10 rounded-lg disabled:opacity-40 disabled:pointer-events-none"
+                    >
+                      <Salad size={18} />
+                    </button>
+                    <button
+                      onClick={() => copyMenuItem(item)}
+                      title="Duplicate Recipe"
+                      aria-label={`Duplicate ${item.name}`}
+                      className="text-muted hover:text-primary transition-colors p-2 hover:bg-primary/10 rounded-lg"
+                    >
+                      <Copy size={18} />
+                    </button>
+                    <button
+                      onClick={() => deleteMenuItem(item.id)}
+                      title="Delete Recipe"
+                      aria-label={`Delete ${item.name}`}
+                      className="text-muted hover:text-coral transition-colors p-2 hover:bg-coral/10 rounded-lg"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
-                <button 
-                  onClick={addMenuItem}
-                  className="flex items-center gap-2 bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-primary/20 transform active:scale-95"
-                >
-                  <Plus size={18} />
-                  Add Menu Item
-                </button>
+
+                {/* Price, shelf life, servings */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <label className="bg-stone-50 rounded-xl px-3 py-2 block">
+                    <span className={LABEL}>Sale price</span>
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className="text-sm font-semibold text-muted">{currency.symbol}</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        aria-label="Sale price"
+                        value={item.sellingPrice ?? 0}
+                        onChange={(e) => updateMenuItemField(item.id, 'sellingPrice', parseFloat(e.target.value) || 0)}
+                        className={STAT_INPUT}
+                        placeholder="Price"
+                      />
+                    </div>
+                  </label>
+                  <label className="bg-stone-50 rounded-xl px-3 py-2 block" title="Shelf Life (Days)">
+                    <span className={LABEL}>Shelf life (days)</span>
+                    <input
+                      type="number"
+                      aria-label="Shelf life in days"
+                      value={item.shelfLifeDays || ''}
+                      onChange={(e) => updateMenuItemField(item.id, 'shelfLifeDays', parseInt(e.target.value) || undefined)}
+                      className={`${STAT_INPUT} mt-0.5`}
+                      placeholder="-"
+                    />
+                  </label>
+                  <label className="bg-stone-50 rounded-xl px-3 py-2 block" title="Servings this recipe yields — needed to estimate per-serving nutrition">
+                    <span className={LABEL}>Servings</span>
+                    <input
+                      type="number"
+                      min="0"
+                      aria-label="Servings"
+                      value={item.servings || ''}
+                      onChange={(e) => updateMenuItemField(item.id, 'servings', parseInt(e.target.value) || undefined)}
+                      className={`${STAT_INPUT} mt-0.5`}
+                      placeholder="-"
+                    />
+                  </label>
+                  <button
+                    onClick={() => updateMenuItemField(item.id, 'sellingPrice', suggested)}
+                    className="bg-primary/5 hover:bg-primary/10 rounded-xl px-3 py-2 text-left transition-colors"
+                    title="Apply 3.5x markup suggestion"
+                  >
+                    <span className={LABEL}>Suggest</span>
+                    <div className="font-mono text-base font-semibold text-primary mt-0.5">{currency.symbol}{suggested.toFixed(2)}</div>
+                  </button>
+                </div>
               </div>
 
-              <div className="grid gap-6">
-                {menu.map((item) => (
-                  <div key={item.id} className="bg-white rounded-[10px] sm:rounded-[15px] border border-stone-200/50 shadow-sm overflow-hidden transition-all hover:shadow-md">
-                    <div className="px-6 py-5 bg-stone-50/50 border-b border-stone-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="relative w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary text-2xl shrink-0 overflow-hidden cursor-text hover:bg-primary/20 transition-colors">
-                          <input 
-                            type="text"
-                            maxLength={2}
-                            value={item.emoji || ''}
-                            onChange={(e) => updateMenuItemField(item.id, 'emoji', e.target.value)}
-                            className="absolute inset-0 w-full h-full text-center bg-transparent outline-none z-10 cursor-text"
-                          />
-                          {!item.emoji && <Utensils size={24} className="opacity-50 absolute pointer-events-none" />}
-                        </div>
-                        <div className="flex-1">
-                          <input 
-                            type="text" 
-                            value={item.name || ''}
-                            onChange={(e) => updateMenuItem(item.id, e.target.value)}
-                            className="bg-transparent border-none focus:ring-0 font-sans font-bold text-stone-800 text-xl p-0 w-full"
-                            placeholder="Item Name"
-                          />
-                          <div className="flex items-center gap-3 mt-1">
-                            {(() => {
-                              const cost = item.recipe.reduce((total, req) => {
-                                const mat = materials.find(m => m.id === req.materialId);
-                                if (!mat) return total;
-                                const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-                                return total + (convertedAmount * (mat.costPerUnit || 0));
-                              }, 0);
-                              const margin = item.sellingPrice > 0 ? ((item.sellingPrice - cost) / item.sellingPrice) * 100 : 0;
-                              
-                              return (
-                                <>
-                                  <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">
-                                    Cost: {currency.symbol}{cost.toFixed(2)}
-                                  </span>
-                                  <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${margin >= 60 ? 'bg-emerald-50 text-emerald-600' : margin >= 40 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}`}>
-                                    {item.sellingPrice < cost ? `LOSS (${margin.toFixed(0)}%)` : `${margin.toFixed(0)}% Margin`}
-                                  </span>
-                                </>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-4 py-2 shadow-sm">
-                              <span className="text-stone-400 text-sm font-bold">{currency.symbol}</span>
-                              <input 
-                                type="number" 
-                                step="0.01"
-                                value={item.sellingPrice ?? 0}
-                                onChange={(e) => updateMenuItemField(item.id, 'sellingPrice', parseFloat(e.target.value) || 0)}
-                                className="w-16 bg-transparent border-none focus:ring-0 text-lg font-bold text-stone-700 p-0"
-                                placeholder="Price"
-                              />
-                              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Sale</span>
-                            </div>
-                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-3 py-2 shadow-sm" title="Shelf Life (Days)">
-                              <input
-                                type="number"
-                                value={item.shelfLifeDays || ''}
-                                onChange={(e) => updateMenuItemField(item.id, 'shelfLifeDays', parseInt(e.target.value) || undefined)}
-                                className="w-8 bg-transparent border-none focus:ring-0 text-lg font-bold text-stone-700 p-0 text-center"
-                                placeholder="-"
-                              />
-                              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Days</span>
-                            </div>
-                            <div className="flex items-center gap-2 bg-white border border-stone-200 rounded-xl px-3 py-2 shadow-sm" title="Servings this recipe yields — needed to estimate per-serving nutrition">
-                              <input
-                                type="number"
-                                min="0"
-                                value={item.servings || ''}
-                                onChange={(e) => updateMenuItemField(item.id, 'servings', parseInt(e.target.value) || undefined)}
-                                className="w-8 bg-transparent border-none focus:ring-0 text-lg font-bold text-stone-700 p-0 text-center"
-                                placeholder="-"
-                              />
-                              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Servings</span>
-                            </div>
+              <AnimatePresence>
+                {expanded && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden bg-primary/[0.03]"
+                  >
+                    <div className="p-4 sm:p-6 space-y-6 border-t border-stone-100">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex flex-wrap items-stretch gap-3">
+                          <div className="p-3 bg-white rounded-xl shadow-sm">
+                            <h4 className={`${LABEL} mb-1`}>Recipe cost</h4>
+                            <div className="font-mono text-xl font-semibold text-primary">{money(cost)}</div>
                           </div>
                           {(() => {
-                            const cost = item.recipe.reduce((total, req) => {
-                              const mat = materials.find(m => m.id === req.materialId);
-                              if (!mat) return total;
-                              const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-                              return total + (convertedAmount * (mat.costPerUnit || 0));
-                            }, 0);
-                            const suggested = cost * 3.5;
-                            
+                            const rollup = calculateRecipeNutrition(item.recipe, materials, item.servings || 0);
+                            const noServings = !item.servings || item.servings <= 0;
                             return (
-                              <button 
-                                onClick={() => updateMenuItemField(item.id, 'sellingPrice', parseFloat(suggested.toFixed(2)))}
-                                className="text-[9px] font-bold text-primary uppercase tracking-widest hover:text-primary-dark transition-colors"
-                                title="Apply 3.5x markup suggestion"
-                              >
-                                Suggest: {currency.symbol}{suggested.toFixed(2)}
-                              </button>
+                              <div className="p-3 bg-white rounded-xl shadow-sm min-w-[200px]">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <Salad size={12} className="text-primary" />
+                                  <h4 className={LABEL}>Nutrition (est.) / serving</h4>
+                                  {!noServings && rollup.hasIncompleteData && (
+                                    <span className="text-[8px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Partial</span>
+                                  )}
+                                </div>
+                                {noServings ? (
+                                  <p className="text-[11px] text-muted">Set servings above to estimate</p>
+                                ) : (
+                                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs font-mono font-semibold text-ink">
+                                    <span>{rollup.perServing.calories.toFixed(0)} kcal</span>
+                                    <span className="text-muted font-normal">P {rollup.perServing.protein.toFixed(1)}g</span>
+                                    <span className="text-muted font-normal">C {rollup.perServing.carbs.toFixed(1)}g</span>
+                                    <span className="text-muted font-normal">F {rollup.perServing.fat.toFixed(1)}g</span>
+                                  </div>
+                                )}
+                                {rollup.allergens.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {rollup.allergens.map(tag => (
+                                      <span key={tag} className="text-[8px] font-bold uppercase tracking-wide bg-coral/10 text-coral px-1.5 py-0.5 rounded-full">
+                                        {tag.replace(/_/g, ' ')}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             );
                           })()}
                         </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setActiveRecipeItemId(item.id);
+                              setIsIngredientSelectorOpen(true);
+                            }}
+                            className="flex items-center gap-2 h-9 bg-primary text-white px-4 rounded-lg text-sm font-semibold shadow-sm hover:bg-primary-dark transition-colors"
+                          >
+                            <Sparkles size={14} />
+                            Quick Add
+                          </button>
+                          {categories.map(cat => (
+                            <button
+                              key={cat}
+                              onClick={() => addIngredientToRecipe(item.id, cat)}
+                              className="flex items-center gap-2 h-9 bg-white hover:bg-stone-50 text-ink px-3.5 rounded-lg text-sm font-medium shadow-sm transition-colors"
+                            >
+                              <Plus size={14} className="text-primary" />
+                              Add {cat}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 md:border-l border-stone-200 md:pl-4 md:ml-4">
-                        <button 
-                          onClick={() => setExpandedRecipeId(expandedRecipeId === item.id ? null : item.id)}
-                          title={expandedRecipeId === item.id ? "Close Editor" : "Edit Recipe"}
-                          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
-                            expandedRecipeId === item.id 
-                              ? 'bg-stone-800 text-white shadow-lg' 
-                              : 'bg-white text-stone-600 border border-stone-200 hover:border-primary hover:text-primary shadow-sm'
-                          }`}
-                        >
-                          {expandedRecipeId === item.id ? <Check size={16} /> : <Edit2 size={16} />}
-                          <span>{expandedRecipeId === item.id ? "Done" : "Recipe"}</span>
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (!item.servings || item.servings <= 0) {
-                              setCardError(`Set servings for "${item.name}" before sharing its nutrition card.`);
-                              return;
-                            }
-                            setShareCardItem(item);
-                          }}
-                          disabled={isGeneratingCard}
-                          title="Share Nutrition Card"
-                          className="text-stone-400 hover:text-sky-500 transition-colors p-2 hover:bg-sky-50 rounded-xl disabled:opacity-40 disabled:pointer-events-none"
-                        >
-                          <Salad size={18} />
-                        </button>
-                        <button
-                          onClick={() => copyMenuItem(item)}
-                          title="Duplicate Recipe"
-                          className="text-stone-400 hover:text-emerald-600 transition-colors p-2 hover:bg-emerald-50 rounded-xl"
-                        >
-                          <Copy size={18} />
-                        </button>
-                        <button 
-                          onClick={() => deleteMenuItem(item.id)}
-                          title="Delete Recipe"
-                          className="text-stone-400 hover:text-rose-500 transition-colors p-2 hover:bg-rose-50 rounded-xl"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </div>
-                    <AnimatePresence>
-                      {expandedRecipeId === item.id && (
-                        <motion.div 
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="overflow-hidden bg-stone-50/30"
-                        >
-                          <div className="p-4 sm:p-8 space-y-6 sm:space-y-8 border-t border-stone-100">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                              <div className="flex flex-wrap items-stretch gap-4">
-                                <div className="p-3 bg-white rounded-xl shadow-sm border border-stone-100">
-                                  <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Recipe Cost</h4>
-                                  <div className="flex items-center gap-1.5 text-primary">
-                                    <span className="text-sm font-bold">{currency.symbol}</span>
-                                    <span className="text-xl font-mono font-bold">
-                                      {item.recipe.reduce((total, req) => {
-                                        const mat = materials.find(m => m.id === req.materialId);
-                                        if (!mat) return total;
-                                        const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-                                        return total + (convertedAmount * (mat.costPerUnit || 0));
-                                      }, 0).toFixed(2)}
-                                    </span>
-                                  </div>
-                                </div>
-                                {(() => {
-                                  const rollup = calculateRecipeNutrition(item.recipe, materials, item.servings || 0);
-                                  const noServings = !item.servings || item.servings <= 0;
 
-                                  return (
-                                    <div className="p-3 bg-white rounded-xl shadow-sm border border-stone-100 min-w-[200px]">
-                                      <div className="flex items-center gap-1.5 mb-1">
-                                        <Salad size={12} className="text-emerald-500" />
-                                        <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Nutrition (Est.) / Serving</h4>
-                                        {!noServings && rollup.hasIncompleteData && (
-                                          <span className="text-[8px] font-bold uppercase tracking-wide bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded-full">Partial</span>
-                                        )}
-                                      </div>
-                                      {noServings ? (
-                                        <p className="text-[10px] text-stone-400 italic">Set servings above to estimate</p>
-                                      ) : (
-                                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs font-mono font-bold text-stone-700">
-                                          <span>{rollup.perServing.calories.toFixed(0)} kcal</span>
-                                          <span className="text-stone-400 font-normal">P {rollup.perServing.protein.toFixed(1)}g</span>
-                                          <span className="text-stone-400 font-normal">C {rollup.perServing.carbs.toFixed(1)}g</span>
-                                          <span className="text-stone-400 font-normal">F {rollup.perServing.fat.toFixed(1)}g</span>
-                                        </div>
-                                      )}
-                                      {rollup.allergens.length > 0 && (
-                                        <div className="flex flex-wrap gap-1 mt-2">
-                                          {rollup.allergens.map(tag => (
-                                            <span key={tag} className="text-[8px] font-bold uppercase tracking-wide bg-rose-50 text-rose-500 px-1.5 py-0.5 rounded-full">
-                                              {tag.replace(/_/g, ' ')}
-                                            </span>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
+                      <div className="grid md:grid-cols-2 gap-6">
+                        {([
+                          { title: 'Ingredients', icon: Utensils, lines: ingredientLines, packaging: false, empty: 'No ingredients added' },
+                          { title: 'Packaging', icon: Package, lines: packagingLines, packaging: true, empty: 'No packaging added' },
+                        ] as const).map(section => (
+                          <div key={section.title} className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className={`flex items-center gap-2 ${LABEL}`}>
+                                <section.icon size={14} className="text-primary" />
+                                <span>{section.title}</span>
                               </div>
-                              <div className="flex flex-wrap items-center gap-2 mt-2 sm:mt-0">
-                                <button
-                                  onClick={() => {
-                                    setActiveRecipeItemId(item.id);
-                                    setIsIngredientSelectorOpen(true);
-                                  }}
-                                  className="flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-primary/20 hover:bg-primary/20 transition-all shadow-sm active:scale-95"
-                                >
-                                  <Sparkles size={14} />
-                                  Quick Add
-                                </button>
-                                {categories.map(cat => (
-                                  <button 
-                                    key={cat}
-                                    onClick={() => addIngredientToRecipe(item.id, cat)}
-                                    className="flex items-center gap-2 bg-white hover:bg-stone-50 text-stone-700 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-stone-200 transition-all shadow-sm active:scale-95"
-                                  >
-                                    <Plus size={14} className="text-primary" />
-                                    Add {cat}
-                                  </button>
-                                ))}
-                              </div>
+                              <span className={`${LABEL} text-stone-300`}>{section.lines.length} Items</span>
                             </div>
-                            
-                            <div className="grid md:grid-cols-2 gap-8">
-                              {/* Ingredients Section */}
-                              <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2 text-[10px] font-bold text-stone-400 uppercase tracking-widest">
-                                    <Utensils size={14} className="text-primary" />
-                                    <span>Ingredients</span>
-                                  </div>
-                                  <span className="text-[10px] font-bold text-stone-300 uppercase tracking-widest">
-                                    {item.recipe.filter(req => materials.find(m => m.id === req.materialId)?.category !== 'Packaging Materials').length} Items
-                                  </span>
+                            <div className="space-y-2">
+                              {section.lines.map(req => (
+                                <RecipeLine
+                                  key={item.recipe.indexOf(req)}
+                                  itemId={item.id}
+                                  req={req}
+                                  idx={item.recipe.indexOf(req)}
+                                  packaging={section.packaging}
+                                  materials={materials}
+                                  categories={categories}
+                                  currencySymbol={currency.symbol}
+                                  updateRecipeIngredient={updateRecipeIngredient}
+                                  removeIngredientFromRecipe={removeIngredientFromRecipe}
+                                />
+                              ))}
+                              {section.lines.length === 0 && (
+                                <div className="text-center py-6 rounded-xl bg-white/60 text-muted text-[11px] uppercase font-semibold tracking-wider">
+                                  {section.empty}
                                 </div>
-                                <div className="space-y-3">
-                                  {item.recipe.map((req, idx) => {
-                                    const mat = materials.find(m => m.id === req.materialId);
-                                    if (mat?.category === 'Packaging Materials') return null;
-                                    
-                                    const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat?.unit || 'g');
-                                    const ingredientCost = convertedAmount * (mat?.costPerUnit || 0);
-                                    
-                                    return (
-                                      <div key={idx} className="group flex items-center gap-3 bg-white p-4 rounded-xl border border-stone-100 shadow-sm transition-all hover:border-primary/20">
-                                        <div className="flex-1">
-                                          <select 
-                                            value={req.materialId || ''}
-                                            onChange={(e) => updateRecipeIngredient(item.id, idx, 'materialId', e.target.value)}
-                                            className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-stone-700 p-0"
-                                          >
-                                            {categories.filter(c => c !== 'Packaging Materials').map(cat => (
-                                              <optgroup key={cat} label={cat}>
-                                                {materials.filter(m => m.category === cat).map(m => (
-                                                  <option key={m.id} value={m.id}>{m.name}</option>
-                                                ))}
-                                              </optgroup>
-                                            ))}
-                                          </select>
-                                          <div className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">
-                                            Cost: {currency.symbol}{ingredientCost.toFixed(2)}
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2 bg-stone-50 rounded-xl px-2 py-1">
-                                          <input 
-                                            type="number" 
-                                            value={req.amount ?? 0}
-                                            onChange={(e) => updateRecipeIngredient(item.id, idx, 'amount', parseFloat(e.target.value) || 0)}
-                                            className="w-16 bg-transparent border-none focus:ring-0 text-sm font-mono font-bold text-stone-700 p-1 text-right"
-                                          />
-                                          <select 
-                                            value={req.unit || 'g'}
-                                            onChange={(e) => updateRecipeIngredient(item.id, idx, 'unit', e.target.value)}
-                                            className="bg-transparent border-none focus:ring-0 text-[10px] font-bold text-stone-400 uppercase tracking-widest p-0"
-                                          >
-                                            <option value="g">g</option>
-                                            <option value="kg">kg</option>
-                                            <option value="ml">ml</option>
-                                            <option value="l">l</option>
-                                            <option value="pcs">pcs</option>
-                                          </select>
-                                        </div>
-                                        <button 
-                                          onClick={() => removeIngredientFromRecipe(item.id, idx)}
-                                          className="text-stone-300 hover:text-rose-500 transition-colors p-2 hover:bg-rose-50 rounded-xl opacity-100 md:opacity-0 md:group-hover:opacity-100"
-                                        >
-                                          <Trash2 size={16} />
-                                        </button>
-                                      </div>
-                                    );
-                                  })}
-                                  {item.recipe.filter(req => materials.find(m => m.id === req.materialId)?.category !== 'Packaging Materials').length === 0 && (
-                                    <div className="text-center py-8 border-2 border-dashed border-stone-200 rounded-[10px] sm:rounded-[15px] text-stone-400 text-[10px] uppercase font-bold tracking-widest bg-white/50">
-                                      No ingredients added
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Packaging Section */}
-                              <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2 text-[10px] font-bold text-stone-400 uppercase tracking-widest">
-                                    <Package size={14} className="text-primary" />
-                                    <span>Packaging</span>
-                                  </div>
-                                  <span className="text-[10px] font-bold text-stone-300 uppercase tracking-widest">
-                                    {item.recipe.filter(req => materials.find(m => m.id === req.materialId)?.category === 'Packaging Materials').length} Items
-                                  </span>
-                                </div>
-                                <div className="space-y-3">
-                                  {item.recipe.map((req, idx) => {
-                                    const mat = materials.find(m => m.id === req.materialId);
-                                    if (mat?.category !== 'Packaging Materials') return null;
-                                    
-                                    const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat?.unit || 'g');
-                                    const ingredientCost = convertedAmount * (mat?.costPerUnit || 0);
-                                    
-                                    return (
-                                      <div key={idx} className="group flex items-center gap-3 bg-white p-4 rounded-xl border border-stone-100 shadow-sm transition-all hover:border-primary/20">
-                                        <div className="flex-1">
-                                          <select 
-                                            value={req.materialId || ''}
-                                            onChange={(e) => updateRecipeIngredient(item.id, idx, 'materialId', e.target.value)}
-                                            className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-stone-700 p-0"
-                                          >
-                                            <optgroup label="Packaging Materials">
-                                              {materials.filter(m => m.category === 'Packaging Materials').map(m => (
-                                                <option key={m.id} value={m.id}>{m.name}</option>
-                                              ))}
-                                            </optgroup>
-                                          </select>
-                                          <div className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mt-1">
-                                            Cost: {currency.symbol}{ingredientCost.toFixed(2)}
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-2 bg-stone-50 rounded-xl px-2 py-1">
-                                          <input 
-                                            type="number" 
-                                            value={req.amount ?? 0}
-                                            onChange={(e) => updateRecipeIngredient(item.id, idx, 'amount', parseFloat(e.target.value) || 0)}
-                                            className="w-16 bg-transparent border-none focus:ring-0 text-sm font-mono font-bold text-stone-700 p-1 text-right"
-                                          />
-                                          <select 
-                                            value={req.unit || 'pcs'}
-                                            onChange={(e) => updateRecipeIngredient(item.id, idx, 'unit', e.target.value)}
-                                            className="bg-transparent border-none focus:ring-0 text-[10px] font-bold text-stone-400 uppercase tracking-widest p-0"
-                                          >
-                                            <option value="pcs">pcs</option>
-                                            <option value="g">g</option>
-                                            <option value="kg">kg</option>
-                                            <option value="ml">ml</option>
-                                            <option value="l">l</option>
-                                          </select>
-                                        </div>
-                                        <button 
-                                          onClick={() => removeIngredientFromRecipe(item.id, idx)}
-                                          className="text-stone-300 hover:text-rose-500 transition-colors p-2 hover:bg-rose-50 rounded-xl opacity-100 md:opacity-0 md:group-hover:opacity-100"
-                                        >
-                                          <Trash2 size={16} />
-                                        </button>
-                                      </div>
-                                    );
-                                  })}
-                                  {item.recipe.filter(req => materials.find(m => m.id === req.materialId)?.category === 'Packaging Materials').length === 0 && (
-                                    <div className="text-center py-8 border-2 border-dashed border-stone-200 rounded-[10px] sm:rounded-[15px] text-stone-400 text-[10px] uppercase font-bold tracking-widest bg-white/50">
-                                      No packaging added
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+                              )}
                             </div>
                           </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
 
     {/* Rendered off-screen (not display:none — html2canvas needs real
         layout) purely to be captured as a PNG; never shown to the user. */}
