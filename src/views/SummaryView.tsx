@@ -9,18 +9,9 @@ import {
 } from 'lucide-react';
 import { AppViewProps } from '../types';
 import { MetricCard } from '../components/MetricCard';
-import { getBatchesNeedingAttention, getStockUrgency } from '../utils/stockAging';
+import { getRunStatus } from '../utils/productionStats';
+import { getBatchesNeedingAttention } from '../utils/stockAging';
 import type { ProductionRun } from '../components/ProductionRunModal';
-
-/** Status pill for one production run: what's left of it and how fresh. */
-function runStatus(run: ProductionRun, today: string): { label: string; cls: string } {
-  const remaining = run.remainingQuantity ?? 0;
-  if (remaining <= 0) return { label: 'Sold out', cls: 'bg-stone-100 text-muted' };
-  const urgency = getStockUrgency(run, today);
-  if (urgency === 'expired') return { label: `Expired · ${remaining} left`, cls: 'bg-coral/10 text-coral' };
-  if (urgency === 'aging') return { label: `Check freshness · ${remaining} left`, cls: 'bg-amber-100 text-amber-700' };
-  return { label: `In stock · ${remaining} left`, cls: 'bg-margin/10 text-margin' };
-}
 
 export const SummaryView: React.FC<AppViewProps> = (props) => {
   const {
@@ -366,7 +357,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                   </thead>
                   <tbody>
                     {recentRuns.map(run => {
-                      const status = runStatus(run, today);
+                      const status = getRunStatus(run, today);
                       const sellable = run.quantityYield ?? run.quantityProduced;
                       const yieldPct = run.quantityProduced > 0 ? (sellable / run.quantityProduced) * 100 : 100;
                       return (
