@@ -24,6 +24,9 @@ The design was checked against the product and corrected where it disagreed:
 - **Screenshots** are real captures of the redesigned app on the demo data
   (`public/landing/*.webp`), not hotlinked design mock-ups. The old
   `public/dashboard_mockup.png` and `public/inventory_mockup.png` are removed.
+- **Dollars throughout.** The demo sandbox now seeds a USD currency
+  (was INR), so the demo and the landing-page screenshots show `$` and match
+  the $49 price. The screenshots were retaken.
 - Every call to action points to `/app`; Terms and Privacy point to `/terms`
   and `/privacy`.
 

@@ -628,7 +628,7 @@ function BakeryApp() {
    * Seeds realistic demo data for a newly created demo user in Firestore.
    * Sets up settings, materials, menu items, sales orders, production runs, and R&D sessions.
    * Uses a single atomic writeBatch to ensure all writes complete together.
-   * Default currency is set to INR (Indian Rupee, code: 'INR', symbol: '₹').
+   * Default currency is set to USD (US Dollar, code: 'USD', symbol: '$').
    * The data itself lives in utils/demoData.ts, where every dependent number
    * (batch costs, ingredient and shelf stock) is derived so the demo adds up.
    */
