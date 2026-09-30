@@ -1,5 +1,25 @@
 # Changelog
 
+## Add Order and Log Production Run modals redesign ("Kitchen Operations Platform" skin)
+
+Both modals now follow the Stitch modal designs, sharing one frame
+(`src/components/ModalShell.tsx`): a bottom sheet on phones and a centred card
+from 640px up, with a teal accent bar, an icon tile + title + mono subtitle,
+a scrolling body and a pinned Cancel / primary-action footer. It is a proper
+`role="dialog"` with an accessible title and a labelled Close button. Form
+logic, validation and save behaviour are unchanged. The mockups' station /
+line-lead pickers, prep slot, "Repeat Last", and live-sync footers have no
+counterpart in the app and were left out.
+
+- **Add Order**: a − / + quantity stepper, how many units of the chosen item
+  are available (coral at zero) with its unit price, a three-column
+  date / customer / phone row, and the order total in the mono face.
+- **Log Production Run**: the same stepper, a per-item material cost when
+  logging several items, and the yield section reworked into a
+  "Yield & waste accountability" card showing expected yield, sellable units
+  and waste (with a "% yield" / "100% target met" badge). The cost preview now
+  also shows cost per unit. The primary button is teal instead of amber.
+
 ## Recipes, R&D and Wastage redesign ("Kitchen Operations Platform" skin)
 
 The Recipes & Menus, R&D Lab and Wastage tabs now follow the Stitch designs.
