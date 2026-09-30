@@ -16,7 +16,7 @@ import {
  * card is required and never "no credit card". The monthly price is defined
  * once here; it must equal the Stripe price in STRIPE_PRICE_ID.
  */
-const PRICE = { symbol: '$', amount: '49', period: 'month' };
+const PRICE = { symbol: '$', amount: '24', period: 'month' };
 const TRIAL_DAYS = 14;
 
 const DISPLAY = "font-['Space_Grotesk',ui-sans-serif,system-ui,sans-serif]";

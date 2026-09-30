@@ -1,5 +1,12 @@
 # Changelog
 
+## Landing page: price is $24 / month
+
+The pricing card now shows $24 / month (`PRICE` in `src/LandingPage.tsx`),
+matching the Stitch design. The Stripe price behind `STRIPE_PRICE_ID` is set
+in Stripe, not in code, and must be $24 / month too or customers will be
+charged a different amount than the page shows.
+
 ## Landing page: new "Culinary Precision" design
 
 `src/LandingPage.tsx` is rebuilt from the Stitch landing-page design: sticky
