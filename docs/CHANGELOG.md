@@ -1,5 +1,28 @@
 # Changelog
 
+## Settings redesign ("Kitchen Operations Platform" skin)
+
+The Settings screen now follows the Stitch settings design. Only real settings
+are shown: the mockup's FSSAI licence, GSTIN, tax-classification scheme,
+KOT/thermal printers and station chits, staff permissions, telemetry and
+"Discard Changes" have no counterpart in the app and were left out.
+
+- **Layout**: a section list on the left (a scrolling chip row on phones)
+  replaces the dropdown, with counts where they mean something (GST on,
+  connected integrations, number of categories). The same five sections and
+  the same `activeSettingsTab` state as before; Save Changes is unchanged.
+- **Business & GST**, **Integrations**, **App Customisation**, **User
+  Account** and **Inventory Categories** are restyled as cards with status
+  pills (GST Active/Off, Shopify Connected / Setup required, connected count).
+  Every field, toggle, connect/disconnect action, the billing link and Sign
+  Out keep their existing behaviour. Form fields now have real labels.
+- **Inventory Categories**: the add box is a controlled input (it used to
+  read and clear the DOM node by id); Enter and the + button both add.
+- **Brand colour** (was "Theme Colour"): the swatches were a set of brown
+  tones left over from the old look; they are now the Stockpot palette plus the
+  previous default. The label says what it drives — the shared nutrition
+  cards — since the app's own colours come from the theme, not this setting.
+
 ## Add Order and Log Production Run modals redesign ("Kitchen Operations Platform" skin)
 
 Both modals now follow the Stitch modal designs, sharing one frame
