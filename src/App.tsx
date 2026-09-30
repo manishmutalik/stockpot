@@ -90,6 +90,9 @@ const SettingsView = React.lazy(() => import('./views/SettingsView').then(m => (
 
 import { IngredientSelectorModal } from './components/IngredientSelectorModal';
 import { ProductionRunModal, ProductionRun } from './components/ProductionRunModal';
+import { AuthScreen, LoadingScreen, PaywallScreen } from './components/AuthScreens';
+import { DiscardModal } from './components/DiscardModal';
+import { RestockModal } from './components/RestockModal';
 import { AddOrderModal } from './components/AddOrderModal';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -1323,15 +1326,7 @@ function BakeryApp() {
   // ─── Render Gate: Loading ──────────────────────────────────────────────────────
   // Shows a spinner while Firebase Auth resolves the session on first load.
   if (!isAuthReady) {
-    return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <img src="/logo-icon.png" alt="Stockpot" className="w-12 h-12" />
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-stone-500 font-medium font-sans italic">Loading Stockpot...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen />;
   }
 
   // ─── Render Gate: Authentication ───────────────────────────────────────────────────
@@ -1339,144 +1334,23 @@ function BakeryApp() {
   // Supports Google OAuth popup and email/password auth modes.
   if (!user) {
     return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200 shadow-xl max-w-md w-full"
-        >
-          <div className="flex flex-col items-center mb-8">
-            <img src="/logo-full.png" alt="Stockpot" className="h-16 w-auto mb-4" />
-            <p className="text-stone-500 text-sm text-center mt-2 font-sans italic">Manage your inventory, recipes, and margins securely in the cloud.</p>
-          </div>
-
-          {authError && (
-            <div className="mb-6 p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl text-center font-medium">
-              {authError}
-            </div>
-          )}
-
-          {authMode === 'google' ? (
-            <div className="space-y-4">
-              <button 
-                onClick={handleLogin}
-                className="w-full flex items-center justify-center gap-3 bg-white border border-stone-200 hover:bg-stone-50 text-stone-700 font-bold py-3 rounded-xl shadow-sm transition-all transform active:scale-[0.98]"
-              >
-                <Globe size={20} className="text-primary" />
-                Sign in with Google
-              </button>
-              
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-stone-100"></div>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-2 text-stone-400 font-bold tracking-widest">Or</span>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => setAuthMode('login')}
-                className="w-full flex items-center justify-center gap-3 bg-stone-800 hover:bg-stone-900 text-white font-bold py-3 rounded-xl shadow-sm transition-all transform active:scale-[0.98]"
-              >
-                <Mail size={20} />
-                Sign in with Email
-              </button>
-
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-stone-100"></div>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-2 text-stone-400 font-bold tracking-widest">Or</span>
-                </div>
-              </div>
-
-              <button 
-                onClick={handleDemoLogin}
-                disabled={isAuthenticating || isDemoLoading}
-                className="w-full flex items-center justify-center gap-3 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold py-3 rounded-xl shadow-sm transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
-              >
-                <Sparkles size={20} className={`text-amber-600 ${isDemoLoading ? 'animate-spin' : 'animate-pulse'}`} />
-                {isDemoLoading ? 'Generating Demo Sandbox...' : 'Explore Demo Sandbox'}
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleEmailAuth} className="space-y-4">
-              {authMode === 'signup' && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest ml-1">Full Name</label>
-                  <input 
-                    type="text"
-                    required
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-primary transition-all"
-                    placeholder="John Doe"
-                  />
-                </div>
-              )}
-              
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest ml-1">Email Address</label>
-                <input 
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-primary transition-all"
-                  placeholder="you@example.com"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest ml-1">Password</label>
-                <input 
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-primary transition-all"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <button 
-                type="submit"
-                disabled={isAuthenticating}
-                className="w-full bg-primary hover:bg-primary-dark text-white font-bold py-3 rounded-xl shadow-lg shadow-primary/20 transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
-              >
-                {isAuthenticating ? 'Processing...' : (authMode === 'login' ? 'Sign In' : 'Create Account')}
-              </button>
-
-              <div className="flex flex-col gap-2 pt-2">
-                <button 
-                  type="button"
-                  onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-                  className="text-xs text-primary font-bold hover:underline"
-                >
-                  {authMode === 'login' ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setAuthMode('google');
-                    setAuthError(null);
-                  }}
-                  className="text-xs text-stone-400 font-medium hover:text-stone-600"
-                >
-                  Back to options
-                </button>
-              </div>
-            </form>
-          )}
-          
-          <div className="mt-8 pt-6 border-t border-stone-100 text-center">
-            <p className="text-[10px] text-stone-400 uppercase tracking-widest font-bold">Stockpot</p>
-          </div>
-        </motion.div>
-      </div>
+      <AuthScreen
+        mode={authMode}
+        onModeChange={setAuthMode}
+        displayName={displayName}
+        onDisplayNameChange={setDisplayName}
+        email={email}
+        onEmailChange={setEmail}
+        password={password}
+        onPasswordChange={setPassword}
+        error={authError}
+        onClearError={() => setAuthError(null)}
+        isAuthenticating={isAuthenticating}
+        isDemoLoading={isDemoLoading}
+        onGoogle={handleLogin}
+        onEmailSubmit={handleEmailAuth}
+        onDemo={handleDemoLogin}
+      />
     );
   }
 
@@ -1485,54 +1359,18 @@ function BakeryApp() {
   // Waits for isLoadingBilling to resolve first, so we don't flash the paywall before
   // we actually know the user's real status.
   if (!SKIP_BILLING_GATE_FOR_TESTING && isLoadingBilling) {
-    return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
+    return <LoadingScreen message="Checking your plan..." />;
   }
 
   if (!SKIP_BILLING_GATE_FOR_TESTING && !hasAccess) {
     const isPastDueOrCanceled = billing.status === 'past_due' || billing.status === 'canceled';
     return (
-      <div className="min-h-screen bg-stone-50 flex items-center justify-center p-4">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="bg-white p-8 rounded-[10px] sm:rounded-[15px] border border-stone-200 shadow-xl max-w-md w-full text-center"
-        >
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-5">
-            <Globe size={26} className="text-primary" />
-          </div>
-          <h2 className="text-xl font-bold text-stone-800 mb-2">
-            {isPastDueOrCanceled ? 'Subscription needs attention' : 'Start your free trial'}
-          </h2>
-          <p className="text-sm text-stone-500 mb-6">
-            {isPastDueOrCanceled
-              ? "There's an issue with your payment method, or your subscription has ended. Update your billing details to keep using the app."
-              : 'Try Stockpot free for 14 days — inventory, orders, production, and everything else.'}
-          </p>
-          <button
-            onClick={() => isPastDueOrCanceled ? openBillingPortal() : startCheckout(user?.email || undefined)}
-            disabled={isStartingCheckout || isOpeningPortal}
-            className="w-full bg-primary hover:bg-primary-dark text-white py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-primary/20 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {(isStartingCheckout || isOpeningPortal) ? 'Redirecting…' : isPastDueOrCanceled ? 'Update Billing' : 'Start Free Trial'}
-          </button>
-          <button
-            onClick={handleLogout}
-            className="w-full mt-3 text-xs text-stone-400 hover:text-stone-600 font-medium"
-          >
-            Sign out
-          </button>
-          <p className="mt-6 text-[10px] text-stone-300">
-            By starting your trial you agree to our{' '}
-            <a href="/terms" className="underline hover:text-stone-500">Terms of Service</a>
-            {' '}and{' '}
-            <a href="/privacy" className="underline hover:text-stone-500">Privacy Policy</a>.
-          </p>
-        </motion.div>
-      </div>
+      <PaywallScreen
+        needsAttention={isPastDueOrCanceled}
+        isBusy={isStartingCheckout || isOpeningPortal}
+        onContinue={() => isPastDueOrCanceled ? openBillingPortal() : startCheckout(user?.email || undefined)}
+        onSignOut={handleLogout}
+      />
     );
   }
 
@@ -1933,92 +1771,18 @@ function BakeryApp() {
         />
 
         {/* Discard Modal */}
-      <AnimatePresence>
         {discardTarget && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm"
-              onClick={() => setDiscardTarget(null)}
-            />
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md bg-white rounded-[10px] sm:rounded-[15px] shadow-2xl overflow-y-auto max-h-[90vh] border border-stone-200/50"
-            >
-              <div className="p-8">
-                <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-6 ${
-                  discardTarget.presetReason === 'Personal Use' ? 'bg-amber-50' :
-                  discardTarget.presetReason === 'Sampling' ? 'bg-purple-50' : 'bg-rose-50'
-                }`}>
-                  {discardTarget.presetReason === 'Personal Use' ? <Home size={32} className="text-amber-600" /> :
-                   discardTarget.presetReason === 'Sampling' ? <Gift size={32} className="text-purple-600" /> :
-                   <Trash2 size={32} className="text-rose-500" />}
-                </div>
-                <h3 className="text-2xl font-bold text-stone-800 mb-2">
-                  {discardTarget.presetReason ? `${discardTarget.presetReason}: ${discardTarget.name}` : `Discard ${discardTarget.name}`}
-                </h3>
-                <p className="text-stone-500 text-sm font-sans italic mb-6">
-                  {discardTarget.presetReason
-                    ? `Log this as ${discardTarget.presetReason.toLowerCase()} — excluded from income. Max: ${discardTarget.maxQty} ${discardTarget.unit}`
-                    : `Log wasted stock and track cost. Max: ${discardTarget.maxQty} ${discardTarget.unit}`}
-                </p>
-
-                <form onSubmit={handleDiscard}>
-                  <div className="space-y-4 mb-8">
-                    <div>
-                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Quantity to Discard ({discardTarget.unit})</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        max={discardTarget.maxQty}
-                        required
-                        value={discardQty}
-                        onChange={(e) => setDiscardQty(e.target.value)}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Reason</label>
-                      <input
-                        type="text"
-                        required
-                        value={discardReason}
-                        onChange={(e) => setDiscardReason(e.target.value)}
-                        placeholder="e.g. Expired, Spilled, Burnt"
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 font-bold"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setDiscardTarget(null)}
-                      className="flex-1 px-6 py-4 rounded-xl text-xs font-bold text-stone-500 hover:bg-stone-50 transition-colors uppercase tracking-widest border border-stone-200"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className={`flex-1 px-6 py-4 rounded-xl text-xs font-bold text-white transition-colors uppercase tracking-widest shadow-lg ${
-                        discardTarget.presetReason === 'Personal Use' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20' :
-                        discardTarget.presetReason === 'Sampling' ? 'bg-purple-500 hover:bg-purple-600 shadow-purple-500/20' :
-                        'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20'
-                      }`}
-                    >
-                      {discardTarget.presetReason ? `Confirm ${discardTarget.presetReason}` : 'Confirm Discard'}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </motion.div>
-          </div>
+          <DiscardModal
+            target={discardTarget}
+            currency={currency}
+            qty={discardQty}
+            onQtyChange={setDiscardQty}
+            reason={discardReason}
+            onReasonChange={setDiscardReason}
+            onSubmit={handleDiscard}
+            onClose={() => setDiscardTarget(null)}
+          />
         )}
-      </AnimatePresence>
 
       {/* Restock Modal */}
 
@@ -2147,101 +1911,18 @@ function BakeryApp() {
       )}
 
         {restockMaterial && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm"
-              onClick={() => setRestockMaterial(null)}
-            />
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-md bg-white rounded-[10px] sm:rounded-[15px] shadow-2xl overflow-y-auto max-h-[90vh] border border-stone-200/50"
-            >
-              <div className="p-8">
-                <div className="w-16 h-16 bg-emerald-50 rounded-xl flex items-center justify-center mb-6">
-                  <Plus size={32} className="text-emerald-500" />
-                </div>
-                <h3 className="text-2xl font-bold text-stone-800 mb-2">Restock {restockMaterial.name}</h3>
-                <p className="text-stone-500 text-sm font-sans italic mb-6">
-                  Current Stock: {restockMaterial.initialStock} {restockMaterial.unit}
-                </p>
-
-                <form onSubmit={handleRestock}>
-                  <div className="space-y-4 mb-8">
-                    <div>
-                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Quantity Added ({restockMaterial.unit})</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        required
-                        value={restockQty}
-                        onChange={(e) => setRestockQty(e.target.value)}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Total Base Price Paid</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        required
-                        value={restockBaseTotal}
-                        onChange={(e) => setRestockBaseTotal(e.target.value)}
-                        placeholder="0.00"
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 font-bold"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-2">Expiry Date of This Batch</label>
-                      <input
-                        type="date"
-                        value={restockExpiryDate}
-                        onChange={(e) => setRestockExpiryDate(e.target.value)}
-                        className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-3 text-stone-800 font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 mb-8">
-                    <div className="p-4 bg-stone-50 rounded-xl border border-stone-100 flex justify-between items-center">
-                      <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">GST ({restockMaterial.gstRate ?? 5}%)</span>
-                      <span className="text-sm font-mono font-bold text-stone-700">
-                        {currency.symbol}{restockBaseTotal ? (Number(restockBaseTotal) * ((restockMaterial.gstRate ?? 5) / 100)).toFixed(2) : '0.00'}
-                      </span>
-                    </div>
-
-                    <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100 flex justify-between items-center">
-                      <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">Total Paid</span>
-                      <span className="text-lg font-mono font-bold text-emerald-700">
-                        {currency.symbol}{restockBaseTotal ? (Number(restockBaseTotal) * (1 + ((restockMaterial.gstRate ?? 5) / 100))).toFixed(2) : '0.00'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setRestockMaterial(null)}
-                      className="flex-1 px-6 py-4 rounded-xl text-xs font-bold text-stone-500 hover:bg-stone-50 transition-colors uppercase tracking-widest border border-stone-200"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={!restockQty || !restockBaseTotal}
-                      className="flex-1 px-6 py-4 rounded-xl text-xs font-bold text-white bg-emerald-500 hover:bg-emerald-600 transition-colors uppercase tracking-widest disabled:opacity-50"
-                    >
-                      Confirm Restock
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </motion.div>
-          </div>
+          <RestockModal
+            material={restockMaterial}
+            currency={currency}
+            qty={restockQty}
+            onQtyChange={setRestockQty}
+            baseTotal={restockBaseTotal}
+            onBaseTotalChange={setRestockBaseTotal}
+            expiryDate={restockExpiryDate}
+            onExpiryDateChange={setRestockExpiryDate}
+            onSubmit={handleRestock}
+            onClose={() => setRestockMaterial(null)}
+          />
         )}
 
         {nutritionEditMaterial && (
