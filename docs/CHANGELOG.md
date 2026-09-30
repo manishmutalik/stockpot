@@ -1,5 +1,34 @@
 # Changelog
 
+## Orders redesign ("Kitchen Operations Platform" skin)
+
+The Orders tab now follows the Stitch orders design. Only real data is
+shown: the mockup's order numbers, SLA timers, surge multipliers, dispatch
+window, courier-partner breakdown, "Out for Delivery"/"Cancelled" statuses
+and Export Manifest have no counterpart in the app and were left out.
+
+- **Headline cards** for the selected date range: Total Orders (a
+  multi-item order counts once, not once per item), Revenue Booked (items +
+  delivery charged, same rule as the dashboard's income), Courier Cost
+  (with the net of delivery charged vs. courier fees) and Pending
+  Fulfilment. Figures live in `src/utils/orderStats.ts`; delivery charge and
+  fee are counted once per order group.
+- **Filters**: date range with Today / 7 Days / 30 Days shortcuts (the
+  active one is highlighted), search across customer, phone, item and
+  address, and All / Pending / Fulfilled tabs with counts. A multi-item
+  order stays whole when any of its items matches.
+- **Day cards** show orders, items and revenue per day. Each row keeps its
+  inline editing (item, quantity, customer, phone) and adds a status pill,
+  a delivery-method chip and the line total; actions are always visible.
+  Multi-item orders keep their container with the order total and
+  Fulfill All / Delete All. The delivery details panel now shows the
+  delivery margin (charged to customer minus paid to courier) on courier
+  orders.
+- **Layout**: one row layout for every screen size — stacked cards on
+  phones and tablets, a table-style row from 1280px up.
+- `MetricCard` moved out of `SummaryView` into `src/components/MetricCard.tsx`
+  so the dashboard and Orders share it.
+
 ## Inventory redesign ("Kitchen Operations Platform" skin)
 
 The Inventory tab now follows the same Stitch design as the dashboard. Only
