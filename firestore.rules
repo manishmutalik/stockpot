@@ -54,6 +54,13 @@ service cloud.firestore {
       }
     }
 
+    // Public bill snapshots (see lib/billStore.ts). Only the server's Admin SDK
+    // reads or writes these, and it serves them through /bill/<token>; clients
+    // never touch this collection, so orders stay private.
+    match /bills/{token} {
+      allow read, write: if false;
+    }
+
     // Default deny
     match /{document=**} {
       allow read, write: if false;

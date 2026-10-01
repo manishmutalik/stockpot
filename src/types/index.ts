@@ -151,6 +151,13 @@ export interface Order {
    * UI presentation and bulk actions, not a change to what an individual
    * Order document means. */
   orderGroupId?: string;
+  /** Random, unguessable token generated the first time a bill is produced
+   * for this order (shared by every item of a multi-item order). It builds
+   * the public, read-only bill link (/bill/<billToken>) without exposing any
+   * other order data or opening up Firestore rules. Absent until the first
+   * "Generate Bill"; once set it is reused so QR codes and links already
+   * shared with a customer keep working. Written by the server only. */
+  billToken?: string;
 }
 
 /**
@@ -207,6 +214,10 @@ export interface BakerySettings {
   gstApplicable?: boolean;
   gstRate?: number; // Output GST %, applied to sales — see gstPricingMode for how.
   gstPricingMode?: 'inclusive' | 'exclusive'; // Whether menu prices already include GST, or GST is added on top.
+  /** The business's UPI ID (e.g. "business@okhdfcbank"), used to build the
+   * upi://pay link in a bill's payment QR. Absent means bills simply have no
+   * payment QR; it is optional and never required to use the app. */
+  upiId?: string;
 }
 
 /**

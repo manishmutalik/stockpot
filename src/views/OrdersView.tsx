@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
   Calendar, CheckCircle2, ClipboardList, Clock, Database, Globe, MapPin, Plus, Receipt, Search,
@@ -8,6 +9,7 @@ import { AppViewProps, Order, MenuItem } from '../types';
 import { clusterOrdersByGroup, OrderCluster } from '../utils/orderClustering';
 import { orderLineTotal, summarizeOrders } from '../utils/orderStats';
 import { MetricCard } from '../components/MetricCard';
+import { BillModal } from '../components/BillModal';
 
 type StatusFilter = 'all' | 'pending' | 'fulfilled';
 
@@ -134,7 +136,9 @@ const OrderRow: React.FC<{
   toggleDeliveryDetails: (orderId: string) => void;
   currencySymbol: string;
   money: (n: number) => string;
-}> = ({ order, menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol, money }) => {
+  /** Opens the bill for this order. Omitted for items nested in a multi-item order, whose header has the bill button. */
+  onBill?: () => void;
+}> = ({ order, menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol, money, onBill }) => {
   // Stock available for a given menu item, from this order's point of view:
   // its own current item gets its already-claimed quantity added back in,
   // since that's this same order's claim being resized, not new stock.
@@ -195,6 +199,16 @@ const OrderRow: React.FC<{
           className={`${FIELD} col-span-3 xl:col-span-1 xl:order-4`}
         />
         <div className="col-span-6 xl:col-span-1 xl:order-7 flex justify-end gap-1">
+          {onBill && (
+            <button
+              onClick={onBill}
+              className="p-2 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+              title="Generate Bill"
+              aria-label="Generate Bill"
+            >
+              <Receipt size={18} />
+            </button>
+          )}
           <button
             onClick={() => toggleDeliveryDetails(order.id)}
             className={`p-2 rounded-lg transition-colors ${hasDelivery ? 'text-primary bg-primary/10' : 'text-muted hover:text-primary hover:bg-primary/10'}`}
@@ -253,6 +267,9 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
       return next;
     });
   };
+
+  // Orders whose bill is open: one order, or every item of a multi-item order.
+  const [billOrders, setBillOrders] = useState<Order[] | null>(null);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -524,7 +541,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                     <div className="text-right">Actions</div>
                   </div>
                   {clusters.map(cluster => cluster.type === 'single' ? (
-                    <OrderRow key={cluster.order.id} order={cluster.order} {...rowProps} />
+                    <OrderRow key={cluster.order.id} order={cluster.order} {...rowProps} onBill={() => setBillOrders([cluster.order])} />
                   ) : (
                     <div key={cluster.groupId} className="border border-primary/20 rounded-xl overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-primary/5">
@@ -538,6 +555,13 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                           </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => setBillOrders(cluster.orders)}
+                            title="Generate one bill for every item in this order"
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg font-mono text-[10px] font-semibold uppercase tracking-wider text-primary hover:bg-primary/10 transition-colors"
+                          >
+                            <Receipt size={13} /> Generate Bill
+                          </button>
                           {cluster.orders.some(o => !o.fulfilled) && (
                             <button
                               onClick={() => cluster.orders.forEach(o => { if (!o.fulfilled) fulfillOrder(o); })}
@@ -572,6 +596,11 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
             );
           })}
         </div>
+      )}
+      {/* In a portal: this view animates with a transform, which would otherwise pin the modal inside it. */}
+      {billOrders && createPortal(
+        <BillModal orders={billOrders} menu={menu} settings={settings} currency={currency} onClose={() => setBillOrders(null)} />,
+        document.body
       )}
     </motion.div>
   );

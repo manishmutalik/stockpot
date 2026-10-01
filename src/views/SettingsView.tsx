@@ -186,6 +186,22 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
                     />
                   </div>
                   <div className="md:col-span-2">
+                    <label htmlFor="business-upi" className={LABEL}>UPI ID (optional)</label>
+                    <input
+                      id="business-upi"
+                      type="text"
+                      value={settings.upiId ?? ''}
+                      onChange={(e) => updateSettingsField('upiId', e.target.value)}
+                      className={`${FIELD} font-mono`}
+                      placeholder="yourname@okhdfcbank"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                    />
+                    <p className="text-xs text-muted mt-1.5">
+                      Adds a "scan to pay" UPI QR code to the bills you send customers. Leave it empty and bills simply have no payment QR. Shown only when your currency is INR.
+                    </p>
+                  </div>
+                  <div className="md:col-span-2">
                     <label htmlFor="business-address" className={LABEL}>Address</label>
                     <input
                       id="business-address"

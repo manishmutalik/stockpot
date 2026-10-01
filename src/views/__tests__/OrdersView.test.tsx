@@ -121,4 +121,23 @@ describe('OrdersView', () => {
     rerender(<OrdersView {...makeProps({ shopifyStatus: { connected: true } })} />);
     expect(screen.getByText('Shopify Import')).toBeTruthy();
   });
+
+  describe('Generate Bill', () => {
+    it('opens a bill for a single order', async () => {
+      render(<OrdersView {...makeProps()} />);
+      const row = screen.getByDisplayValue('Rajani').closest('div.p-3') as HTMLElement;
+      fireEvent.click(within(row).getByRole('button', { name: 'Generate Bill' }));
+      expect(await screen.findByRole('dialog', { name: 'Bill' })).toBeTruthy();
+    });
+
+    it('offers one bill per multi-item order, from its header, not one per item', () => {
+      render(<OrdersView {...makeProps()} />);
+      // a, b and the group header: three bill buttons for three orders (the group's two items have none).
+      expect(screen.getAllByRole('button', { name: /Generate (one )?Bill|Generate Bill/i })).toHaveLength(3);
+      fireEvent.click(screen.getByTitle('Generate one bill for every item in this order'));
+      const dialog = screen.getByRole('dialog', { name: 'Bill' });
+      expect(within(dialog).getByText('Cake')).toBeTruthy();
+      expect(within(dialog).getByText('Cookie')).toBeTruthy();
+    });
+  });
 });
