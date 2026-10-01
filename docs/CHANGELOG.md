@@ -1,5 +1,18 @@
 # Changelog
 
+## Landing page: banner and food photos, one section per row
+
+- **Photos added** (`public/landing/`, WebP): the widescreen hero banner
+  (`banner-wide`, with a 4:3 `banner-tablet` version for phones and tablets
+  through `<picture>`), a pastries photo on the Recipe Engine card, and a
+  sourdough photo behind the closing call to action.
+- **No two sections side by side.** The hero was text beside a screenshot, the
+  FAQ had its heading beside the questions and the price card was split in
+  two to fill the width. Each section is now one full-width column: banner,
+  then headline and buttons, then the app screenshot; pricing and FAQ are
+  centred single columns. Only cards of the same kind (problem cards, the
+  four workflow steps, the feature cards) sit in a row.
+
 ## Landing page: revised design, wider desktop layout, rupee price
 
 `src/LandingPage.tsx` follows the revised Stitch landing-page design: a
