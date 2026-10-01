@@ -76,6 +76,21 @@ describe('BillModal', () => {
       await screen.findByAltText(/view this bill online/i);
       expect(screen.queryByAltText(/UPI payment QR/i)).toBeNull();
     });
+    it('tells the owner why it is missing: no UPI ID yet', async () => {
+      renderBill();
+      await screen.findByAltText(/view this bill online/i);
+      expect(screen.getByRole('note').textContent).toMatch(/Add your UPI ID in Settings/);
+    });
+    it('tells the owner why it is missing: the bill is not in INR', async () => {
+      renderBill({ settings: { upiId: 'asha@okhdfcbank' }, currency: { code: 'USD', symbol: '$' } });
+      await screen.findByAltText(/view this bill online/i);
+      expect(screen.getByRole('note').textContent).toMatch(/only for bills in INR.*in USD/);
+    });
+    it('shows no explanation when the QR is there', async () => {
+      renderBill({ settings: { upiId: 'asha@okhdfcbank' } });
+      await screen.findByAltText(/UPI payment QR/i);
+      expect(screen.queryByRole('note')).toBeNull();
+    });
   });
 
   describe('view bill online QR', () => {

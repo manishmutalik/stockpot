@@ -150,7 +150,7 @@ const OrderRow: React.FC<{
 
   return (
     <div className="p-3 bg-stone-50/60 rounded-xl hover:bg-primary/[0.04] transition-colors">
-      <div className="grid grid-cols-6 gap-2 items-center xl:grid-cols-[minmax(0,3fr)_5rem_minmax(0,2fr)_minmax(0,2fr)_8rem_6rem_7.5rem] xl:gap-3">
+      <div className="grid grid-cols-6 gap-2 items-center xl:grid-cols-[minmax(0,3fr)_4rem_minmax(0,2fr)_minmax(0,2fr)_8rem_6rem_9.5rem] xl:gap-2">
         <select
           aria-label="Item"
           value={order.menuItemId || ''}
@@ -531,7 +531,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                 </div>
                 <div className="p-3 sm:p-4 space-y-2">
                   {/* Column headers — table layout only */}
-                  <div className={`hidden xl:grid grid-cols-[minmax(0,3fr)_5rem_minmax(0,2fr)_minmax(0,2fr)_8rem_6rem_7.5rem] gap-3 px-3 pb-1 ${TH}`}>
+                  <div className={`hidden xl:grid grid-cols-[minmax(0,3fr)_4rem_minmax(0,2fr)_minmax(0,2fr)_8rem_6rem_9.5rem] gap-2 px-3 pb-1 ${TH}`}>
                     <div>Item</div>
                     <div className="text-center">Qty</div>
                     <div>Customer</div>

@@ -1,5 +1,19 @@
 # Changelog
 
+## Bills: fixes to the Orders row and the missing UPI QR
+
+- **Generate Bill overlapped the price.** The new bill button made the
+  actions column four buttons wide, wider than its 7.5rem slot on the Orders
+  table (from the `xl` breakpoint), so it ran over the Total. The column is
+  now 9.5rem, paid for with a smaller Qty column and tighter gaps, so the item,
+  customer and phone fields are as wide as before. Checked at 1280, 1440, 1100,
+  820 and 390px: nothing overlaps.
+- **No UPI QR on the bill.** The QR is, by design, shown only when a UPI ID is
+  saved under Settings > Business & GST and the bill's currency is INR, and
+  nothing said so. The bill now explains why there is none ("Add your UPI ID in
+  Settings..." or "UPI works only for bills in INR"). The note sits below the
+  bill and is not part of the image that is downloaded or sent.
+
 ## Bills: Generate Bill, WhatsApp send and QR codes
 
 Each order, and each multi-item order as a whole, now has a **Generate Bill**

@@ -153,6 +153,14 @@ export const BillModal: React.FC<{
       <div ref={billRef}>
         <BillCard bill={bill} upiLink={upiLink} online={online} />
       </div>
+      {/* Not part of the image: why there is no payment QR, so it never looks like a bug. */}
+      {!upiLink && (
+        <p role="note" className="text-xs text-muted bg-stone-50 rounded-lg px-3 py-2">
+          {currency.code !== 'INR'
+            ? `No UPI payment QR: UPI works only for bills in INR, and this bill is in ${currency.code}. You can switch the currency in the top bar.`
+            : 'No UPI payment QR yet. Add your UPI ID in Settings > Business & GST and it will appear on your bills.'}
+        </p>
+      )}
     </ModalShell>
   );
 };
