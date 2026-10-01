@@ -51,57 +51,81 @@ const PROBLEMS = [
   { icon: Trash2, tone: 'bg-teal-50 text-primary', title: 'Unaccounted batch & prep loss', body: 'Trimmings, proofing rejects and expired cream disappear into the bin without ever being counted against production cost.' },
 ];
 
-interface Tile {
+interface ShotTile {
   icon: React.ElementType;
   tag: string;
   title: string;
   body: string;
-  images: { src: string; alt: string }[];
-  /** Optional food photo shown above the screenshot. */
-  photo?: { src: string; alt: string; caption: string };
-  /** Spans the full grid width instead of half. */
-  wide?: boolean;
+  image: { src: string; alt: string };
 }
 
-const TILES: Tile[] = [
+/** The two core screens are shown; the rest of the product is described in words. */
+const SHOT_TILES: ShotTile[] = [
   {
-    icon: BookOpen, wide: true, tag: 'Recipe engine',
+    icon: BookOpen, tag: 'Recipe engine',
     title: 'Real-time recipe costing, to the gram',
     body: 'Change the cost of an ingredient once, and every menu item recalculates its cost, margin and suggested price automatically.',
-    images: [{ src: '/landing/recipes.webp', alt: 'Menu & Master Recipes in Stockpot' }],
-    photo: { src: '/landing/pastries.webp', alt: 'Croissants, pain au chocolat and bread on a rustic bakery counter', caption: 'Every bake, costed to the gram' },
+    image: { src: '/landing/recipes.webp', alt: 'Menu & Master Recipes in Stockpot' },
   },
   {
     icon: Boxes, tag: 'Smart inventory',
     title: 'Never run out mid-bake',
     body: 'Live stock for raw materials and packaging, with low-stock alerts before you are caught short.',
-    images: [{ src: '/landing/inventory.webp', alt: 'Raw materials and stock alerts' }],
+    image: { src: '/landing/inventory.webp', alt: 'Raw materials and stock alerts' },
   },
+];
+
+interface TextTile {
+  icon: React.ElementType;
+  tag: string;
+  title: string;
+  body: string;
+  points: string[];
+}
+
+const TEXT_TILES: TextTile[] = [
   {
     icon: Factory, tag: 'Batch yields',
     title: 'Automated stock logs',
-    body: 'Logging a production run deducts the ingredients, adds finished stock and records the batch cost. No manual math, no double entry.',
-    images: [{ src: '/landing/production.webp', alt: 'Production runs and finished goods' }],
+    body: 'Logging a production run deducts the ingredients and adds finished stock, so there is no manual math and no double entry.',
+    points: [
+      'Record how many you made and how many are sellable after waste',
+      'Batch cost is saved with every run',
+      'Shelf life and expiry dates, with freshness alerts',
+      'Sell, use for an order or discard leftover market stock',
+    ],
   },
   {
-    icon: Truck, tag: 'Courier delivery',
+    icon: Truck, tag: 'Orders & delivery',
     title: 'True fulfilment profitability',
-    body: 'Capture what couriers charge you against what you charge the customer for delivery, on every order.',
-    images: [{ src: '/landing/orders.webp', alt: 'Customer & courier orders' }],
+    body: 'Every order feeds straight into your margins, including what delivery really costs you.',
+    points: [
+      'Multi-item orders with customer name and phone',
+      'Pending and fulfilled status, filtered by date range',
+      'Pickup, self-delivery or third-party courier',
+      'Delivery charged to the customer vs. fee paid to the courier',
+    ],
   },
   {
     icon: Landmark, tag: 'GST & compliance',
     title: 'Built for India',
-    body: 'Switch GST on when you register. Choose inclusive or exclusive pricing; GST is tracked separately from your food margins.',
-    images: [{ src: '/landing/gst.webp', alt: 'Business profile and GST settings' }],
+    body: 'Switch GST on when you register. It is tracked separately from your food margins.',
+    points: [
+      'Your own GST rate, with inclusive or exclusive pricing',
+      'GST collected on sales shown on the dashboard',
+      'GST paid on each ingredient you buy, set per material',
+      'Prices in rupees (₹) by default',
+    ],
   },
   {
-    icon: FlaskConical, wide: true, tag: 'Audit & testing',
+    icon: FlaskConical, tag: 'Audit & testing',
     title: 'See what spoilage really costs',
-    body: 'Log wastage and recipe experiments separately from your real numbers, so testing a new item never messes with your books.',
-    images: [
-      { src: '/landing/wastage.webp', alt: 'Wastage & loss ledger' },
-      { src: '/landing/rnd.webp', alt: 'R&D test kitchen' },
+    body: 'Wastage and recipe experiments each get their own ledger, so you can see exactly what spoilage and testing cost you.',
+    points: [
+      'Wastage ledger by reason: expired, spilled, sampling and more',
+      'Cost impact of every discarded ingredient or finished item',
+      'R&D test kitchen with the cost of each trial',
+      'Trial ingredients show as a separate R&D expense on the dashboard',
     ],
   },
 ];
@@ -268,11 +292,11 @@ const LandingPage: React.FC = () => {
                   <span className="w-3 h-3 rounded-full bg-[#27C93F]" />
                 </div>
                 <div className="flex-1 max-w-sm mx-auto text-center text-xs font-medium text-muted bg-white border border-slate-200 rounded-md py-1 truncate">
-                  Stockpot · Menu &amp; Master Recipes
+                  Stockpot · Performance Summary
                 </div>
                 <span className="w-12 hidden sm:block" aria-hidden="true" />
               </div>
-              <img src="/landing/recipes.webp" alt="Stockpot's recipe costing screen, showing cost, margin and suggested price" width={1152} height={820} className="w-full h-auto block" />
+              <img src="/landing/dashboard.webp" alt="Stockpot's Performance Summary dashboard, showing income, costs and net profit" width={1440} height={900} className="w-full h-auto block" />
             </motion.div>
           </div>
         </section>
@@ -312,9 +336,14 @@ const LandingPage: React.FC = () => {
               <p className="text-lg text-muted">Instant calculations, live stock balances and clear margins, in one place.</p>
             </Reveal>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6">
-              {TILES.map(({ icon: Icon, tag, title, body, images, photo, wide }, i) => (
-                <Reveal key={title} delay={(i % 2) * 0.08} className={`${CARD} ${CARD_HOVER} overflow-hidden flex flex-col ${wide ? 'lg:col-span-2' : ''}`}>
+            <Reveal className="relative h-52 sm:h-64 lg:h-72 rounded-[20px] overflow-hidden border border-slate-200 shadow-sm mb-5 lg:mb-6">
+              <img src="/landing/pastries.webp" alt="Croissants, pain au chocolat and bread on a rustic bakery counter" loading="lazy" decoding="async" className="w-full h-full object-cover" />
+              <span className="absolute bottom-3 left-3 px-3 py-1.5 rounded-md bg-ink/80 backdrop-blur-sm text-white text-xs font-medium">Every bake, costed to the gram</span>
+            </Reveal>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 mb-5 lg:mb-6">
+              {SHOT_TILES.map(({ icon: Icon, tag, title, body, image }, i) => (
+                <Reveal key={title} delay={i * 0.08} className={`${CARD} ${CARD_HOVER} overflow-hidden flex flex-col`}>
                   <div className="p-6 lg:p-7 pb-5">
                     <div className="inline-flex items-center gap-2 text-primary bg-surface px-2.5 py-1 rounded-md mb-4">
                       <Icon size={16} />
@@ -323,19 +352,32 @@ const LandingPage: React.FC = () => {
                     <h3 className={`${DISPLAY} text-xl lg:text-2xl font-bold tracking-tight mb-2`}>{title}</h3>
                     <p className="text-muted leading-relaxed">{body}</p>
                   </div>
-                  {photo && (
-                    <div className="relative mx-5 lg:mx-6 mb-4 h-44 sm:h-56 lg:h-64 rounded-xl overflow-hidden border border-slate-200">
-                      <img src={photo.src} alt={photo.alt} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                      <span className="absolute bottom-2 left-2 px-2.5 py-1 rounded-md bg-ink/80 backdrop-blur-sm text-white text-[11px] font-medium">{photo.caption}</span>
+                  <div className="mt-auto px-5 lg:px-6">
+                    <div className="h-52 sm:h-60 rounded-t-xl overflow-hidden border border-b-0 border-slate-200 bg-surface">
+                      <Shot src={image.src} alt={image.alt} />
                     </div>
-                  )}
-                  <div className={`mt-auto px-5 lg:px-6 grid gap-3 ${images.length > 1 ? 'sm:grid-cols-2' : ''}`}>
-                    {images.map(img => (
-                      <div key={img.src} className="h-52 sm:h-60 rounded-t-xl overflow-hidden border border-b-0 border-slate-200 bg-surface">
-                        <Shot src={img.src} alt={img.alt} />
-                      </div>
-                    ))}
                   </div>
+                </Reveal>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 lg:gap-6">
+              {TEXT_TILES.map(({ icon: Icon, tag, title, body, points }, i) => (
+                <Reveal key={title} delay={(i % 2) * 0.08} className={`${CARD} ${CARD_HOVER} p-6 lg:p-7 flex flex-col`}>
+                  <div className="inline-flex self-start items-center gap-2 text-primary bg-surface px-2.5 py-1 rounded-md mb-4">
+                    <Icon size={16} />
+                    <span className="text-xs font-semibold">{tag}</span>
+                  </div>
+                  <h3 className={`${DISPLAY} text-xl font-bold tracking-tight mb-2`}>{title}</h3>
+                  <p className="text-muted leading-relaxed mb-5">{body}</p>
+                  <ul className="mt-auto space-y-2.5 text-sm">
+                    {points.map(pt => (
+                      <li key={pt} className="flex items-start gap-2.5">
+                        <CircleCheck size={16} className="text-primary shrink-0 mt-0.5" />
+                        <span>{pt}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </Reveal>
               ))}
             </div>

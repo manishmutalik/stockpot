@@ -1,5 +1,23 @@
 # Changelog
 
+## Landing page: fewer screenshots, more words
+
+The page had eight app screenshots plus three photos. Now it has three app
+screens and the photos:
+
+- **Kept:** the dashboard in the hero (it shows the profit the headline
+  promises; the hero used the recipe screen, which now appears only in the
+  feature section), the recipe-costing screen and the inventory screen.
+- **Replaced with text:** Production, Orders & delivery, GST and Wastage & R&D
+  are now cards with a short description and four checked points each, written
+  from what the app really does (for example, "Delivery charged to the
+  customer vs. fee paid to the courier"). They sit in one row of four.
+- The pastries photo is a banner strip above the feature cards instead of
+  being squeezed into the Recipe card.
+- The unused screenshots (`production`, `orders`, `gst`, `wastage`, `rnd`,
+  `add-order`, `add-item`) stay in `public/landing/` in case they are wanted
+  again; nothing links to them.
+
 ## Landing page: banner and food photos, one section per row
 
 - **Photos added** (`public/landing/`, WebP): the widescreen hero banner
