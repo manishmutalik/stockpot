@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas';
 import { ModalShell } from './ModalShell';
 import { BillCard, type OnlineLink } from './BillCard';
 import { apiFetch } from '../utils/apiClient';
+import { saveFile, shareFileViaSystem } from '../utils/shareFile';
 import {
   buildBill, buildBillMessage, buildUpiLink, buildWhatsAppUrl, normalizeWhatsAppNumber
 } from '../utils/billing';
@@ -71,15 +72,6 @@ export const BillModal: React.FC<{
     }
   };
 
-  const saveFile = (file: File) => {
-    const url = URL.createObjectURL(file);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
   const handleDownload = async () => {
     setBusy(true);
     setNotice('');
@@ -95,17 +87,10 @@ export const BillModal: React.FC<{
     setBusy(true);
     setNotice('');
     const file = await renderImage();
-    try {
-      // Phones: the share sheet with the bill image attached; WhatsApp is one tap away.
-      if (file && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], text: message });
-        return;
-      }
-    } catch (err: any) {
-      if (err?.name === 'AbortError') return; // the owner closed the share sheet
-    } finally {
-      setBusy(false);
-    }
+    // Phones: the share sheet with the bill image attached; WhatsApp is one tap away.
+    const shared = file ? await shareFileViaSystem(file, message) : 'unsupported';
+    setBusy(false);
+    if (shared !== 'unsupported') return; // shared, or the owner closed the share sheet
     // Desktop and other browsers: save the image, then open WhatsApp with the message.
     if (file) {
       saveFile(file);

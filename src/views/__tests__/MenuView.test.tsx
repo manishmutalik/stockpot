@@ -134,4 +134,23 @@ describe('MenuView', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /Add Menu Item/ })[1]);
     expect(props.addMenuItem).toHaveBeenCalled();
   });
+
+  it('lets an item be given a menu category and description for the shared menu', () => {
+    const props = makeProps();
+    render(<MenuView {...props} />);
+    const cake = card('Cake');
+    fireEvent.change(within(cake).getByLabelText('Menu category'), { target: { value: 'Cakes' } });
+    expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'category', 'Cakes');
+    fireEvent.change(within(cake).getByLabelText('Menu description'), { target: { value: 'Rich dark chocolate, 6 inch' } });
+    expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'description', 'Rich dark chocolate, 6 inch');
+  });
+
+  it('shows the saved category and description, and suggests the categories already used', () => {
+    const withMeta = menu.map(m => m.id === 'cake' ? { ...m, category: 'Cakes', description: 'Rich dark chocolate' } : m.id === 'bread' ? { ...m, category: 'Breads' } : m);
+    const { container } = render(<MenuView {...makeProps({ menu: withMeta })} />);
+    expect(within(card('Cake')).getByLabelText('Menu category')).toHaveProperty('value', 'Cakes');
+    expect(within(card('Cake')).getByLabelText('Menu description')).toHaveProperty('value', 'Rich dark chocolate');
+    expect(within(card('Loss Leader')).getByLabelText('Menu category')).toHaveProperty('value', '');
+    expect([...container.querySelectorAll('#menu-categories option')].map(o => o.getAttribute('value')).sort()).toEqual(['Breads', 'Cakes']);
+  });
 });

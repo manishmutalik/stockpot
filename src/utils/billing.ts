@@ -50,7 +50,7 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
 /** A logo is kept only when it is a web URL or a small embedded image, so a bill stays small. */
 const MAX_LOGO_CHARS = 200_000;
-function usableLogo(logo: string | undefined): string | undefined {
+export function usableLogo(logo: string | undefined): string | undefined {
   if (!logo) return undefined;
   const ok = /^https?:\/\//i.test(logo) || /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(logo);
   return ok && logo.length <= MAX_LOGO_CHARS ? logo : undefined;

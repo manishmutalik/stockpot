@@ -206,6 +206,10 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
         </button>
       </div>
 
+      <datalist id="menu-categories">
+        {[...new Set(menu.map(m => (m.category || '').trim()).filter(Boolean))].map(c => <option key={c} value={c} />)}
+      </datalist>
+
       {/* Headline figures */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <MetricCard
@@ -420,6 +424,33 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                     <span className={LABEL}>Suggest</span>
                     <div className="font-mono text-base font-semibold text-primary mt-0.5">{currency.symbol}{suggested.toFixed(2)}</div>
                   </button>
+                </div>
+
+                {/* Shown on the menu PDF you share with customers */}
+                <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-3">
+                  <label className="bg-stone-50 rounded-xl px-3 py-2 block" title="Groups this item into a section on the shared menu, e.g. Cakes">
+                    <span className={LABEL}>Menu category</span>
+                    <input
+                      type="text"
+                      list="menu-categories"
+                      aria-label="Menu category"
+                      value={item.category || ''}
+                      onChange={(e) => updateMenuItemField(item.id, 'category', e.target.value)}
+                      className={`${STAT_INPUT} mt-0.5`}
+                      placeholder="e.g. Cakes"
+                    />
+                  </label>
+                  <label className="bg-stone-50 rounded-xl px-3 py-2 block" title="A short line under the item's name on the shared menu">
+                    <span className={LABEL}>Menu description</span>
+                    <input
+                      type="text"
+                      aria-label="Menu description"
+                      value={item.description || ''}
+                      onChange={(e) => updateMenuItemField(item.id, 'description', e.target.value)}
+                      className={`${STAT_INPUT} mt-0.5`}
+                      placeholder="e.g. Rich dark chocolate, 6 inch"
+                    />
+                  </label>
                 </div>
               </div>
 

@@ -227,4 +227,29 @@ describe('OrdersView', () => {
       expect(props.markOrdersPaid).toHaveBeenCalledWith(['solo'], false);
     });
   });
+
+  describe('Share Menu', () => {
+    it("opens the menu for a single order's customer, with their name", async () => {
+      render(<OrdersView {...makeProps()} />);
+      const row = screen.getByDisplayValue('Misha').closest('div.p-3') as HTMLElement;
+      fireEvent.click(within(row).getByRole('button', { name: 'Share menu' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Share menu' });
+      expect(within(dialog).getByText('For Misha')).toBeTruthy();
+    });
+
+    it('offers one Share Menu per multi-item order, from its header, using the first customer details it has', async () => {
+      render(<OrdersView {...makeProps()} />);
+      fireEvent.click(screen.getByTitle('Share the menu with this customer'));
+      const dialog = await screen.findByRole('dialog', { name: 'Share menu' });
+      expect(within(dialog).getByText('For Aris')).toBeTruthy();
+      // one icon button per standalone order (a, b); the two group items have none
+      expect(screen.getAllByRole('button', { name: 'Share menu' })).toHaveLength(2);
+    });
+
+    it('sits next to the bill button, so both are found together', () => {
+      render(<OrdersView {...makeProps()} />);
+      const bill = screen.getAllByRole('button', { name: 'Generate Bill' })[0];
+      expect(bill.nextElementSibling?.getAttribute('aria-label')).toBe('Share menu');
+    });
+  });
 });
