@@ -53,7 +53,9 @@ describe('LandingPage', () => {
   it('only shows screenshots that ship with the app, each with alt text', () => {
     renderPage();
     const shots = screen.getAllByRole('img').filter(img => img.getAttribute('src')?.startsWith('/landing/'));
-    expect(shots.length).toBeGreaterThanOrEqual(8);
+    // a handful of real screens (dashboard, recipes, inventory) plus the photos; the rest is text
+    expect(shots.length).toBeGreaterThanOrEqual(5);
+    expect(shots.length).toBeLessThanOrEqual(7);
     shots.forEach(img => {
       expect(img.getAttribute('alt')).toBeTruthy();
       expect(img.getAttribute('src')).toMatch(/^\/landing\/[a-z-]+\.webp$/);
@@ -68,6 +70,18 @@ describe('LandingPage', () => {
     }
     expect(screen.getByAltText(/inventory and margin tracking on a tablet/i)).toBeTruthy();
     expect(screen.getByAltText(/croissants, pain au chocolat/i)).toBeTruthy();
+  });
+
+  it('describes the other features in words instead of screenshots', () => {
+    const { container } = renderPage();
+    const text = container.textContent ?? '';
+    for (const phrase of ['Automated stock logs', 'True fulfilment profitability', 'Built for India', 'See what spoilage really costs']) {
+      expect(text).toContain(phrase);
+    }
+    expect(text).toContain('Delivery charged to the customer vs. fee paid to the courier');
+    for (const unused of ['production', 'orders', 'gst', 'wastage', 'rnd']) {
+      expect(container.querySelector(`img[src="/landing/${unused}.webp"]`)).toBeNull();
+    }
   });
 
   it('opens and closes FAQ answers with the right aria state', () => {
