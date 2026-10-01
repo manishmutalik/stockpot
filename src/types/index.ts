@@ -96,6 +96,13 @@ export interface MenuItem {
   finishedGoodsStock?: number;
   shelfLifeDays?: number;
   emoji?: string;
+  /** A short line shown under the item's name on the shared menu PDF, e.g.
+   * "Rich dark chocolate, 6 inch". Optional: items without one show just a
+   * name and price. */
+  description?: string;
+  /** Groups the item into a section on the shared menu PDF (Cakes, Cookies,
+   * ...). Optional: ungrouped items fall under a single "Menu" heading. */
+  category?: string;
 }
 
 /**

@@ -1,5 +1,40 @@
 # Changelog
 
+## Share Menu: a menu PDF sent over WhatsApp
+
+A **Share Menu** button (fork-and-knife icon) now sits next to the bill icon on
+each order, and in the header of a multi-item order. It opens a preview of the
+current menu as a designed PDF with **Download** and **Send via WhatsApp**,
+addressed to that order's customer. It works like the bill: on phones the share
+sheet opens with the PDF attached; on desktop the PDF is saved and `wa.me`
+opens with a short message ("Hi Priya, here's our menu from Asha Bakes.") to
+attach it to. With no usable phone number WhatsApp is turned off with an
+explanation, and Download still works. PDF only: no public menu page or QR.
+
+- **The PDF** is drawn from the live menu each time (nothing is cached), on A4
+  pages in the same look as the bill: business name, address, phone and logo,
+  then each item's name and price under category headings. Only items with a
+  name and a sale price are listed. A long menu runs over as many pages as it
+  needs, with the section heading repeated as "(continued)" and page numbers;
+  a heading is never left alone at the bottom of a page. A 29-item menu in five
+  categories made three clean pages. The file is named `<business-name>-menu.pdf`.
+- **Two optional fields on a menu item**, set in Menu & Master Recipes under
+  each item: **Menu category** (suggests categories already in use) and **Menu
+  description** (one line under the name). Items without them show just a name
+  and price, under a single "Menu" heading when nothing is categorised.
+- **How it is built:** `MenuCard` draws the pages with inline hex colours only
+  (no Tailwind classes, so `html2canvas` can read them; a test fails if a class
+  ever appears) and explicit pixel sizes on the logo. `src/utils/pdfExport.ts`
+  turns rendered pages into a PDF with `html2canvas` and `jsPDF` (loaded only
+  when first used) and is generic, so other reports can reuse it.
+  `src/utils/menuShare.ts` holds the grouping, pagination, file name and
+  message. `src/utils/shareFile.ts` is the save-or-share-sheet step, now shared
+  with the bill.
+- New dependency: `jspdf`.
+- On the Orders table the five action buttons are slightly tighter from the
+  `xl` breakpoint so they still fit without squeezing the customer and phone
+  fields.
+
 ## Pending payments and the consolidated bill
 
 When a customer has several unpaid orders you can now send one bill covering

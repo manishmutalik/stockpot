@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
   Calendar, CheckCircle2, ClipboardList, Clock, Database, Globe, MapPin, Plus, Receipt, Search,
-  ShoppingBag, Trash2, Truck, Wallet
+  ShoppingBag, Trash2, Truck, Utensils, Wallet
 } from 'lucide-react';
 import { AppViewProps, Order, MenuItem } from '../types';
 import { clusterOrdersByGroup, OrderCluster } from '../utils/orderClustering';
@@ -11,6 +11,7 @@ import { orderLineTotal, summarizeOrders } from '../utils/orderStats';
 import { MetricCard } from '../components/MetricCard';
 import { BillModal } from '../components/BillModal';
 import { PendingPayments } from '../components/PendingPayments';
+import { MenuShareModal } from '../components/MenuShareModal';
 import { groupPendingPayments, isUnpaid } from '../utils/payments';
 
 type StatusFilter = 'all' | 'pending' | 'fulfilled';
@@ -153,11 +154,13 @@ const OrderRow: React.FC<{
   money: (n: number) => string;
   /** Opens the bill for this order. Omitted for items nested in a multi-item order, whose header has the bill button. */
   onBill?: () => void;
+  /** Opens the shareable menu PDF for this order's customer. */
+  onShareMenu?: () => void;
   /** Marks this order's whole purchase (every item of a multi-item order) paid or unpaid. */
   setPaid: (paid: boolean) => void;
   /** Show the "Unpaid" tag on this row; a multi-item order shows it once, in its header. */
   showPaymentTag?: boolean;
-}> = ({ order, menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol, money, onBill, setPaid, showPaymentTag }) => {
+}> = ({ order, menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol, money, onBill, onShareMenu, setPaid, showPaymentTag }) => {
   // Stock available for a given menu item, from this order's point of view:
   // its own current item gets its already-claimed quantity added back in,
   // since that's this same order's claim being resized, not new stock.
@@ -232,16 +235,26 @@ const OrderRow: React.FC<{
           {onBill && (
             <button
               onClick={onBill}
-              className="p-2 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+              className="p-1.5 xl:p-1 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
               title="Generate Bill"
               aria-label="Generate Bill"
             >
               <Receipt size={18} />
             </button>
           )}
+          {onShareMenu && (
+            <button
+              onClick={onShareMenu}
+              className="p-1.5 xl:p-1 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+              title="Share menu"
+              aria-label="Share menu"
+            >
+              <Utensils size={18} />
+            </button>
+          )}
           <button
             onClick={() => toggleDeliveryDetails(order.id)}
-            className={`p-2 rounded-lg transition-colors ${hasDelivery ? 'text-primary bg-primary/10' : 'text-muted hover:text-primary hover:bg-primary/10'}`}
+            className={`p-1.5 xl:p-1 rounded-lg transition-colors ${hasDelivery ? 'text-primary bg-primary/10' : 'text-muted hover:text-primary hover:bg-primary/10'}`}
             title="Delivery details"
             aria-label="Delivery details"
             aria-expanded={expandedOrderIds.has(order.id)}
@@ -251,20 +264,20 @@ const OrderRow: React.FC<{
           {!order.fulfilled ? (
             <button
               onClick={() => fulfillOrder(order)}
-              className="p-2 rounded-lg text-margin hover:bg-margin/10 transition-colors"
+              className="p-1.5 xl:p-1 rounded-lg text-margin hover:bg-margin/10 transition-colors"
               title="Mark Fulfilled"
               aria-label="Mark Fulfilled"
             >
               <CheckCircle2 size={18} />
             </button>
           ) : (
-            <span className="p-2 text-margin" title="Order fulfilled">
+            <span className="p-1.5 xl:p-1 text-margin" title="Order fulfilled">
               <CheckCircle2 size={18} fill="currentColor" stroke="#fff" />
             </span>
           )}
           <button
             onClick={() => deleteOrder(order.id)}
-            className="p-2 rounded-lg text-coral/70 hover:text-coral hover:bg-coral/10 transition-colors"
+            className="p-1.5 xl:p-1 rounded-lg text-coral/70 hover:text-coral hover:bg-coral/10 transition-colors"
             title="Delete Order"
             aria-label="Delete Order"
           >
@@ -302,6 +315,12 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
   const [billOrders, setBillOrders] = useState<Order[] | null>(null);
   // True when that bill is a consolidated statement of a customer's pending orders.
   const [billIsStatement, setBillIsStatement] = useState(false);
+  // Who the shared menu is for (the order's customer), or null when closed.
+  const [menuShare, setMenuShare] = useState<{ name?: string; phone?: string } | null>(null);
+  const shareMenuFor = (orders: Order[]) => setMenuShare({
+    name: orders.find(o => o.customerName)?.customerName,
+    phone: orders.find(o => o.customerPhone)?.customerPhone,
+  });
   const openBill = (orders: Order[], statement = false) => { setBillIsStatement(statement); setBillOrders(orders); };
 
   const [search, setSearch] = useState('');
@@ -591,7 +610,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                     <div className="text-right">Actions</div>
                   </div>
                   {clusters.map(cluster => cluster.type === 'single' ? (
-                    <OrderRow key={cluster.order.id} order={cluster.order} {...rowProps} onBill={() => openBill([cluster.order])} setPaid={paid => markOrdersPaid([cluster.order.id], paid)} showPaymentTag />
+                    <OrderRow key={cluster.order.id} order={cluster.order} {...rowProps} onBill={() => openBill([cluster.order])} onShareMenu={() => shareMenuFor([cluster.order])} setPaid={paid => markOrdersPaid([cluster.order.id], paid)} showPaymentTag />
                   ) : (
                     <div key={cluster.groupId} className="border border-primary/20 rounded-xl overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-primary/5">
@@ -616,6 +635,13 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => shareMenuFor(cluster.orders)}
+                            title="Share the menu with this customer"
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg font-mono text-[10px] font-semibold uppercase tracking-wider text-primary hover:bg-primary/10 transition-colors"
+                          >
+                            <Utensils size={13} /> Share Menu
+                          </button>
                           <button
                             onClick={() => openBill(cluster.orders)}
                             title="Generate one bill for every item in this order"
@@ -657,6 +683,10 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
             );
           })}
         </div>
+      )}
+      {menuShare && createPortal(
+        <MenuShareModal menu={menu} settings={settings} currency={currency} customerName={menuShare.name} customerPhone={menuShare.phone} onClose={() => setMenuShare(null)} />,
+        document.body
       )}
       {/* In a portal: this view animates with a transform, which would otherwise pin the modal inside it. */}
       {billOrders && createPortal(
