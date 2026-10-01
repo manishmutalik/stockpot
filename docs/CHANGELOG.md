@@ -1,5 +1,39 @@
 # Changelog
 
+## Pending payments and the consolidated bill
+
+When a customer has several unpaid orders you can now send one bill covering
+all of them.
+
+- **Payment status on orders.** Add Order has a **Paid now / Pay later**
+  switch (default Paid now). A pay-later order is stored as
+  `paymentStatus: 'unpaid'` and shows an **Unpaid** tag (one click marks it
+  paid; a multi-item order shows it once and marks every item together). An
+  order's details also have a Payment select to set it back to unpaid. An
+  order with no value counts as paid, so every existing order stays paid and
+  nothing is suddenly owed. Orders imported from Shopify or Odoo are paid.
+- **Payments pending** panel on the Orders tab (only while something is owed,
+  and across all dates, not just the selected range): one row per customer
+  with what they owe and how many orders. Customers are matched by phone (the
+  last 10 digits, so `+91 98450 10101` and `098450-10101` are one customer),
+  otherwise by name ignoring case. The amount is the same sum the bill shows
+  (items, delivery once per order, GST).
+- **Consolidated bill** per customer: one statement listing every pending
+  order oldest first with its date, one **Total due**, the UPI QR for that
+  total (INR with a UPI ID, as for any bill), a view-online QR/link and Send
+  via WhatsApp ("here's your statement from X: Rs due for N orders"). The link
+  is created once (stored as `statementToken` on the orders, separate from a
+  single bill's `billToken`) and reused, even after more orders are added, so
+  a link already sent keeps working; generating again refreshes what it shows.
+  The server builds it from the owner's own orders (a multi-item order is never
+  split) and refuses anything that is not theirs.
+- **Mark all paid** on each customer (with a confirmation) once the money is
+  in. The statement page shows what was due "as of" the day it was generated,
+  so it is not updated automatically after a payment; generate it again to
+  refresh it.
+
+Server: `POST /api/bills` also accepts `{ orderIds: [...] }` (1 to 200).
+
 ## Bills: fixes to the Orders row and the missing UPI QR
 
 - **Generate Bill overlapped the price.** The new bill button made the

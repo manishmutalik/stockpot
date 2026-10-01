@@ -36,17 +36,32 @@ export function createPublicBillHandler(getBill: (token: string) => Promise<Bill
   };
 }
 
-/** POST /api/bills (signed in): creates or refreshes the bill for the owner's order. */
+const MAX_STATEMENT_ORDERS = 200;
+const validId = (id: unknown): id is string => typeof id === 'string' && id.length > 0 && id.length <= 200 && !id.includes('/');
+
+/**
+ * POST /api/bills (signed in): creates or refreshes a bill for the owner's
+ * order ({ orderId }), or a consolidated statement for several of their
+ * pending orders ({ orderIds: [...] }).
+ */
 export function createBillHandler(
-  createBill: (uid: string, orderId: string) => Promise<{ token: string; bill: Bill } | null>
+  createBill: (uid: string, orderId: string) => Promise<{ token: string; bill: Bill } | null>,
+  createStatement?: (uid: string, orderIds: string[]) => Promise<{ token: string; bill: Bill } | null>
 ) {
   return async (req: AuthedRequest, res: Response) => {
-    const orderId = req.body?.orderId;
-    if (typeof orderId !== 'string' || !orderId || orderId.includes('/')) {
+    const { orderId, orderIds } = req.body ?? {};
+    const isStatement = orderIds !== undefined;
+    if (isStatement) {
+      if (!createStatement || !Array.isArray(orderIds) || orderIds.length === 0 || orderIds.length > MAX_STATEMENT_ORDERS || !orderIds.every(validId)) {
+        return res.status(400).json({ error: 'Invalid orderIds' });
+      }
+    } else if (!validId(orderId)) {
       return res.status(400).json({ error: 'Missing orderId' });
     }
     try {
-      const result = await createBill(req.uid!, orderId);
+      const result = isStatement
+        ? await createStatement!(req.uid!, [...new Set(orderIds as string[])])
+        : await createBill(req.uid!, orderId);
       if (!result) return res.status(404).json({ error: 'Order not found' });
       return res.json(result);
     } catch (err: any) {

@@ -140,4 +140,91 @@ describe('OrdersView', () => {
       expect(within(dialog).getByText('Cookie')).toBeTruthy();
     });
   });
+
+  describe('pending payments and the consolidated bill', () => {
+    const unpaidOrders = [
+      o('p1', { customerName: 'Priya', customerPhone: '9845010101', paymentStatus: 'unpaid', date: '2026-03-05' }),
+      o('p2', { customerName: 'Priya', customerPhone: '+91 98450 10101', paymentStatus: 'unpaid', menuItemId: 'cookie', quantity: 4, date: '2026-03-08' }),
+      o('p3', { customerName: 'Rohan', paymentStatus: 'unpaid', date: '2026-03-09' }),
+      o('paid1', { customerName: 'Meera', date: '2026-03-09' }),
+    ];
+    const withUnpaid = (over: Record<string, any> = {}) => makeProps({ orders: unpaidOrders, markOrdersPaid: vi.fn(), ...over });
+
+    it('lists each customer with what they owe, leaving out paid orders', () => {
+      render(<OrdersView {...withUnpaid()} />);
+      const panel = screen.getByRole('region', { name: 'Pending payments' });
+      expect(within(panel).getByText('Priya')).toBeTruthy();
+      expect(within(panel).getByText('Rohan')).toBeTruthy();
+      expect(within(panel).queryByText('Meera')).toBeNull();
+      expect(within(panel).getByText('$140.00')).toBeTruthy(); // 100 + 4 x 10
+      expect(within(panel).getByText(/2 customers · 3 orders/)).toBeTruthy();
+    });
+
+    it('is not shown at all when nothing is pending', () => {
+      render(<OrdersView {...makeProps()} />);
+      expect(screen.queryByRole('region', { name: 'Pending payments' })).toBeNull();
+    });
+
+    it('includes pending orders from outside the date range', () => {
+      const old = o('old1', { customerName: 'Old Customer', paymentStatus: 'unpaid', date: '2026-01-02' });
+      render(<OrdersView {...makeProps({ orders: [...orders, old], markOrdersPaid: vi.fn() })} />);
+      expect(within(screen.getByRole('region', { name: 'Pending payments' })).getByText('Old Customer')).toBeTruthy();
+    });
+
+    it("opens one consolidated bill with all of the customer's pending orders", async () => {
+      render(<OrdersView {...withUnpaid()} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Send consolidated bill to Priya' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Consolidated bill' });
+      expect(within(dialog).getByText('Cake')).toBeTruthy();
+      expect(within(dialog).getByText('Cookie')).toBeTruthy();
+      expect(within(dialog).queryByText(/Total due/)).toBeTruthy();
+      expect(within(dialog).getAllByText('$140.00').length).toBeGreaterThan(0);
+    });
+
+    it('marks all of a customer\'s orders paid after confirming', () => {
+      const props = withUnpaid();
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      render(<OrdersView {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Mark everything paid for Priya' }));
+      expect(confirm).toHaveBeenCalled();
+      expect(props.markOrdersPaid).toHaveBeenCalledWith(['p1', 'p2'], true);
+      confirm.mockRestore();
+    });
+
+    it('does nothing when the confirmation is declined', () => {
+      const props = withUnpaid();
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      render(<OrdersView {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Mark everything paid for Priya' }));
+      expect(props.markOrdersPaid).not.toHaveBeenCalled();
+      confirm.mockRestore();
+    });
+
+    it('tags an unpaid order, and one click marks it paid', () => {
+      const props = withUnpaid({ orders: [o('solo', { customerName: 'Solo', paymentStatus: 'unpaid' })] });
+      render(<OrdersView {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Unpaid, mark as paid' }));
+      expect(props.markOrdersPaid).toHaveBeenCalledWith(['solo'], true);
+    });
+
+    it('tags a multi-item order once, in its header, and marks every item paid together', () => {
+      const props = withUnpaid({ orders: [
+        o('g1', { orderGroupId: 'g', customerName: 'Aris', paymentStatus: 'unpaid' }),
+        o('g2', { orderGroupId: 'g', customerName: 'Aris', paymentStatus: 'unpaid', menuItemId: 'cookie' }),
+      ] });
+      render(<OrdersView {...props} />);
+      const tags = screen.getAllByRole('button', { name: /^Unpaid, mark/ });
+      expect(tags).toHaveLength(1);
+      fireEvent.click(tags[0]);
+      expect(props.markOrdersPaid).toHaveBeenCalledWith(['g1', 'g2'], true);
+    });
+
+    it('lets an order be marked unpaid from its details', () => {
+      const props = withUnpaid({ orders: [o('solo', { customerName: 'Solo' })] });
+      render(<OrdersView {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Delivery details' }));
+      fireEvent.change(screen.getByLabelText('Payment'), { target: { value: 'unpaid' } });
+      expect(props.markOrdersPaid).toHaveBeenCalledWith(['solo'], false);
+    });
+  });
 });

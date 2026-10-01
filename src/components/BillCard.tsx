@@ -19,7 +19,9 @@ const QR_SIZE = 132;
  * NutritionCard, and its placeholders are drawn without Tailwind colours too.
  */
 export const BillCard: React.FC<{ bill: Bill; upiLink: string | null; online: OnlineLink }> = ({ bill, upiLink, online }) => {
+  const statement = bill.kind === 'statement';
   const money = (n: number) => formatMoney(n, bill.currency);
+  const shortDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   const date = new Date(bill.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   const th: React.CSSProperties = { padding: '6px 0', fontFamily: MONO, fontSize: 10, letterSpacing: '0.05em', textTransform: 'uppercase', color: MUTED, fontWeight: 600 };
   const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', padding: '2px 0' };
@@ -31,7 +33,7 @@ export const BillCard: React.FC<{ bill: Bill; upiLink: string | null; online: On
       <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{bill.business.name || 'Your business'}</h3>
       <p style={{ margin: 0, fontSize: 12, color: MUTED }}>{[bill.business.address, bill.business.phone].filter(Boolean).join(' · ')}</p>
       <p style={{ margin: '12px 0 0', fontFamily: MONO, fontSize: 11, color: MUTED }}>
-        {date}{bill.customerName ? ` · ${bill.customerName}` : ''}
+        {statement ? `Statement · ${bill.orderCount} order${bill.orderCount === 1 ? '' : 's'} · as of ${date}` : date}{bill.customerName ? ` · ${bill.customerName}` : ''}
       </p>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, marginTop: 12 }}>
@@ -46,7 +48,10 @@ export const BillCard: React.FC<{ bill: Bill; upiLink: string | null; online: On
         <tbody>
           {bill.lines.map((l, i) => (
             <tr key={i} style={{ borderTop: `1px solid ${FAINT}` }}>
-              <td style={{ padding: '8px 8px 8px 0' }}>{l.name}</td>
+              <td style={{ padding: '8px 8px 8px 0' }}>
+                {statement && l.date && <span style={{ display: 'block', fontFamily: MONO, fontSize: 10, color: MUTED }}>{shortDate(l.date)}</span>}
+                {l.name}
+              </td>
               <td style={{ padding: '8px 0', textAlign: 'right', fontFamily: MONO }}>{l.quantity}</td>
               <td style={{ padding: '8px 0', textAlign: 'right', fontFamily: MONO, whiteSpace: 'nowrap' }}>{money(l.unitPrice)}</td>
               <td style={{ padding: '8px 0', textAlign: 'right', fontFamily: MONO, whiteSpace: 'nowrap' }}>{money(l.lineTotal)}</td>
@@ -67,7 +72,7 @@ export const BillCard: React.FC<{ bill: Bill; upiLink: string | null; online: On
           </div>
         )}
         <div style={{ ...row, borderTop: `2px solid ${INK}`, paddingTop: 8, marginTop: 8, fontSize: 16, fontWeight: 700 }}>
-          <span>Total</span><span style={{ fontFamily: MONO }}>{money(bill.total)}</span>
+          <span>{statement ? 'Total due' : 'Total'}</span><span style={{ fontFamily: MONO }}>{money(bill.total)}</span>
         </div>
       </div>
 

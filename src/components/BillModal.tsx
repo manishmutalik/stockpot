@@ -19,20 +19,23 @@ import type { BakerySettings, MenuItem, Order } from '../types';
  */
 export const BillModal: React.FC<{
   orders: Order[];
+  /** A consolidated bill (statement) for several orders, rather than one bill. */
+  statement?: boolean;
   menu: MenuItem[];
   settings: BakerySettings;
   currency: { code: string; symbol: string };
   onClose: () => void;
-}> = ({ orders, menu, settings, currency, onClose }) => {
+}> = ({ orders, statement = false, menu, settings, currency, onClose }) => {
   const billRef = useRef<HTMLDivElement>(null);
   const [online, setOnline] = useState<OnlineLink>({ status: 'loading' });
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const bill = useMemo(() => buildBill({ orders, menu, settings, currency }), [orders, menu, settings, currency]);
+  const bill = useMemo(() => buildBill({ orders, menu, settings, currency, statement }), [orders, menu, settings, currency, statement]);
   const customerPhone = orders.find(o => o.customerPhone)?.customerPhone;
   const whatsappReady = normalizeWhatsAppNumber(customerPhone) !== null;
-  const orderId = orders[0].id;
+  const orderIds = orders.map(o => o.id);
+  const idsKey = orderIds.join(',');
 
   // Ask the server for the bill's public link. It creates the token on the
   // first call and reuses it afterwards, so the same link/QR comes back.
@@ -41,7 +44,7 @@ export const BillModal: React.FC<{
     apiFetch('/api/bills', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId }),
+      body: JSON.stringify(statement ? { orderIds } : { orderId: orderIds[0] }),
     })
       .then(async res => {
         const data = await res.json();
@@ -50,7 +53,7 @@ export const BillModal: React.FC<{
       })
       .catch(() => { if (!cancelled) setOnline({ status: 'error' }); });
     return () => { cancelled = true; };
-  }, [orderId]);
+  }, [idsKey, statement]);
 
   const onlineUrl = online.status === 'ready' ? online.url : undefined;
   const upiLink = bill.upiId
@@ -113,7 +116,7 @@ export const BillModal: React.FC<{
 
   return (
     <ModalShell
-      title="Bill"
+      title={statement ? 'Consolidated bill' : 'Bill'}
       subtitle={`Ref ${bill.reference}`}
       icon={Receipt}
       onClose={onClose}

@@ -26,8 +26,10 @@ const PAGE_STYLE = `
 export function renderBillHtml(bill: Bill): string {
   const money = (n: number) => escapeHtml(formatMoney(n, bill.currency));
   const date = new Date(bill.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const statement = bill.kind === 'statement';
+  const shortDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   const rows = bill.lines.map(l => `
-        <tr><td>${escapeHtml(l.name)}</td><td class="num">${escapeHtml(l.quantity)}</td><td class="num">${money(l.unitPrice)}</td><td class="num">${money(l.lineTotal)}</td></tr>`).join('');
+        <tr><td>${statement && l.date ? `<span class="muted">${escapeHtml(shortDate(l.date))}</span><br>` : ''}${escapeHtml(l.name)}</td><td class="num">${escapeHtml(l.quantity)}</td><td class="num">${money(l.unitPrice)}</td><td class="num">${money(l.lineTotal)}</td></tr>`).join('');
   const logo = bill.business.logo ? `<img class="logo" src="${escapeHtml(bill.business.logo)}" alt="">` : '';
   const upi = bill.upiId
     ? `<a class="pay" href="${escapeHtml(buildUpiLink({ upiId: bill.upiId, payeeName: bill.business.name, amount: bill.total, reference: bill.reference }))}">Pay ${money(bill.total)} with UPI</a>`
@@ -43,7 +45,7 @@ export function renderBillHtml(bill: Bill): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<title>Bill from ${escapeHtml(bill.business.name)}</title>
+<title>${statement ? 'Statement' : 'Bill'} from ${escapeHtml(bill.business.name)}</title>
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
@@ -52,7 +54,7 @@ export function renderBillHtml(bill: Bill): string {
     ${logo}
     <h1>${escapeHtml(bill.business.name)}</h1>
     <div class="muted">${escapeHtml(bill.business.address)}${bill.business.phone ? ` · ${escapeHtml(bill.business.phone)}` : ''}</div>
-    <div class="muted" style="margin-top:12px">Bill ${escapeHtml(bill.reference)} · ${escapeHtml(date)}${bill.customerName ? ` · ${escapeHtml(bill.customerName)}` : ''}</div>
+    <div class="muted" style="margin-top:12px">${statement ? `Statement ${escapeHtml(bill.reference)} · ${escapeHtml(bill.orderCount)} order${bill.orderCount === 1 ? '' : 's'} · as of ${escapeHtml(date)}` : `Bill ${escapeHtml(bill.reference)} · ${escapeHtml(date)}`}${bill.customerName ? ` · ${escapeHtml(bill.customerName)}` : ''}</div>
     <table>
       <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th></tr></thead>
       <tbody>${rows}
@@ -61,7 +63,7 @@ export function renderBillHtml(bill: Bill): string {
     <div class="row"><span>Items</span><span>${money(bill.itemsTotal)}</span></div>
     ${bill.deliveryCharge > 0 ? `<div class="row"><span>Delivery</span><span>${money(bill.deliveryCharge)}</span></div>` : ''}
     ${bill.gst ? `<div class="row"><span>${gstLabel}</span><span>${money(bill.gst.amount)}</span></div>` : ''}
-    <div class="row total"><span>Total</span><span>${money(bill.total)}</span></div>
+    <div class="row total"><span>${statement ? 'Total due' : 'Total'}</span><span>${money(bill.total)}</span></div>
     ${upi}
   </div>
   <footer>Thank you for your order.</footer>

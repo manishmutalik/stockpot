@@ -107,3 +107,55 @@ describe('create bill route', () => {
     expect((await run({ orderId: 'nope' }, createBill)).statusCode).toBe(404);
   });
 });
+
+describe('create statement route', () => {
+  const run = async (body: any, createStatement: any = vi.fn().mockResolvedValue({ token: 't', bill })) => {
+    const res = mockRes();
+    await createBillHandler(vi.fn(), createStatement)({ uid: 'u1', body } as any, res);
+    return { res, createStatement };
+  };
+  it('creates a statement for the signed-in user, once per distinct order id', async () => {
+    const { res, createStatement } = await run({ orderIds: ['a', 'b', 'a'] });
+    expect(createStatement).toHaveBeenCalledWith('u1', ['a', 'b']);
+    expect(res.body).toEqual({ token: 't', bill });
+  });
+  it.each([[[]], ['a'], [['a/b']], [[1]], [[''], ], [Array.from({ length: 201 }, (_, i) => `o${i}`)]])('rejects orderIds %#', async ids => {
+    const { res, createStatement } = await run({ orderIds: ids });
+    expect(res.statusCode).toBe(400);
+    expect(createStatement).not.toHaveBeenCalled();
+  });
+  it('404s when an order is not theirs', async () => {
+    const { res } = await run({ orderIds: ['theirs'] }, vi.fn().mockResolvedValue(null));
+    expect(res.statusCode).toBe(404);
+  });
+  it('still creates a single bill from orderId', async () => {
+    const createBill = vi.fn().mockResolvedValue({ token: 't', bill });
+    const res = mockRes();
+    await createBillHandler(createBill, vi.fn())({ uid: 'u1', body: { orderId: 'o1' } } as any, res);
+    expect(createBill).toHaveBeenCalledWith('u1', 'o1');
+  });
+});
+
+describe('statement page HTML', () => {
+  const statement = buildBill({
+    statement: true, today: '2026-03-20',
+    orders: [
+      { id: 'a1', menuItemId: 'cake', quantity: 1, date: '2026-03-02', customerName: 'Priya' } as any,
+      { id: 'b2', menuItemId: 'cake', quantity: 2, date: '2026-03-08' } as any,
+    ],
+    menu: [{ id: 'cake', name: 'Cake', sellingPrice: 250 } as any],
+    settings: { name: 'Asha Bakes', address: '14 MG Road', phone: '', logo: '', upiId: 'asha@okhdfcbank' },
+    currency: { code: 'INR', symbol: '₹' },
+  });
+  it('shows a statement heading, dated lines and the total due', () => {
+    const html = renderBillHtml(statement);
+    expect(html).toContain('Statement ST-A1');
+    expect(html).toContain('2 orders');
+    expect(html).toContain('as of 20 March 2026');
+    expect(html).toContain('2 Mar');
+    expect(html).toContain('8 Mar');
+    expect(html).toContain('Total due');
+    expect(html).toContain('₹750.00');
+    expect(html).toContain('Statement from Asha Bakes');
+  });
+});

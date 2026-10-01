@@ -10,6 +10,8 @@ import { clusterOrdersByGroup, OrderCluster } from '../utils/orderClustering';
 import { orderLineTotal, summarizeOrders } from '../utils/orderStats';
 import { MetricCard } from '../components/MetricCard';
 import { BillModal } from '../components/BillModal';
+import { PendingPayments } from '../components/PendingPayments';
+import { groupPendingPayments, isUnpaid } from '../utils/payments';
 
 type StatusFilter = 'all' | 'pending' | 'fulfilled';
 
@@ -42,13 +44,26 @@ const DeliveryDetailsSection: React.FC<{
   order: Order;
   updateOrder: (id: string, field: keyof Order, value: any) => void;
   currencySymbol: string;
-}> = ({ order, updateOrder, currencySymbol }) => {
+  setPaid: (paid: boolean) => void;
+}> = ({ order, updateOrder, currencySymbol, setPaid }) => {
   const method = order.deliveryMethod || 'pickup';
   const showMargin = method === 'third_party' && (order.deliveryCharge != null || order.deliveryFee != null);
   const margin = (order.deliveryCharge || 0) - (order.deliveryFee || 0);
   const label = 'block font-mono text-[10px] font-semibold uppercase tracking-wider text-muted mb-1';
   return (
     <div className="mt-3 p-3 bg-white rounded-xl border border-stone-100 space-y-3">
+      <div className="sm:max-w-xs">
+        <label className={label} htmlFor={`payment-${order.id}`}>Payment</label>
+        <select
+          id={`payment-${order.id}`}
+          value={isUnpaid(order) ? 'unpaid' : 'paid'}
+          onChange={(e) => setPaid(e.target.value === 'paid')}
+          className={FIELD}
+        >
+          <option value="paid">Paid</option>
+          <option value="unpaid">Unpaid (pay later)</option>
+        </select>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className={label}>Delivery Method</label>
@@ -138,7 +153,11 @@ const OrderRow: React.FC<{
   money: (n: number) => string;
   /** Opens the bill for this order. Omitted for items nested in a multi-item order, whose header has the bill button. */
   onBill?: () => void;
-}> = ({ order, menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol, money, onBill }) => {
+  /** Marks this order's whole purchase (every item of a multi-item order) paid or unpaid. */
+  setPaid: (paid: boolean) => void;
+  /** Show the "Unpaid" tag on this row; a multi-item order shows it once, in its header. */
+  showPaymentTag?: boolean;
+}> = ({ order, menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol, money, onBill, setPaid, showPaymentTag }) => {
   // Stock available for a given menu item, from this order's point of view:
   // its own current item gets its already-claimed quantity added back in,
   // since that's this same order's claim being resized, not new stock.
@@ -178,6 +197,17 @@ const OrderRow: React.FC<{
           <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-stone-100 text-muted font-mono text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
             {DELIVERY_LABEL[method]}
           </span>
+          {showPaymentTag && isUnpaid(order) && (
+            <button
+              type="button"
+              onClick={() => setPaid(true)}
+              title="Unpaid. Click to mark as paid"
+              aria-label="Unpaid, mark as paid"
+              className="inline-flex items-center px-2 py-0.5 rounded-full bg-coral/10 text-coral font-mono text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap hover:bg-coral/20 transition-colors"
+            >
+              Unpaid
+            </button>
+          )}
         </div>
         <div className="col-span-2 xl:col-span-1 xl:order-6 text-right font-mono text-sm font-semibold text-ink whitespace-nowrap">
           {money(orderLineTotal(order, menu))}
@@ -243,7 +273,7 @@ const OrderRow: React.FC<{
         </div>
       </div>
       {expandedOrderIds.has(order.id) && (
-        <DeliveryDetailsSection order={order} updateOrder={updateOrder} currencySymbol={currencySymbol} />
+        <DeliveryDetailsSection order={order} updateOrder={updateOrder} currencySymbol={currencySymbol} setPaid={setPaid} />
       )}
     </div>
   );
@@ -253,7 +283,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
   const {
     orders, menu, currency, settings, orderFilterStart, setOrderFilterStart, orderFilterEnd, setOrderFilterEnd,
     setIsAddOrderModalOpen, shopifyStatus, importShopifyOrders, isImportingShopify, odooStatus,
-    importOdooOrders, isImportingOdoo, fulfillOrder, updateOrder, deleteOrder
+    importOdooOrders, isImportingOdoo, fulfillOrder, markOrdersPaid, updateOrder, deleteOrder
   } = props;
 
   // Which orders currently have their "Delivery Details" section expanded.
@@ -270,6 +300,9 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
 
   // Orders whose bill is open: one order, or every item of a multi-item order.
   const [billOrders, setBillOrders] = useState<Order[] | null>(null);
+  // True when that bill is a consolidated statement of a customer's pending orders.
+  const [billIsStatement, setBillIsStatement] = useState(false);
+  const openBill = (orders: Order[], statement = false) => { setBillIsStatement(statement); setBillOrders(orders); };
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -321,6 +354,11 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
 
   const importBtn = 'h-10 flex items-center gap-2 px-4 rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:cursor-not-allowed';
   const deliveryNet = stats.deliveryCharged - stats.courierCost;
+
+  const pendingCustomers = useMemo(
+    () => groupPendingPayments({ orders, menu, settings, currency }),
+    [orders, menu, settings, currency]
+  );
 
   const rowProps = { menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol: currency.symbol, money };
 
@@ -485,6 +523,18 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
         </div>
       </div>
 
+      {/* Customers with unpaid orders (all dates), each with a consolidated bill */}
+      <PendingPayments
+        customers={pendingCustomers}
+        money={money}
+        onStatement={orders => openBill(orders, true)}
+        onMarkPaid={c => {
+          if (window.confirm(`Mark all ${c.orderCount} pending order${c.orderCount === 1 ? '' : 's'} from ${c.name} (${money(c.dueTotal)}) as paid?`)) {
+            markOrdersPaid(c.orders.map(o => o.id), true);
+          }
+        }}
+      />
+
       {/* Orders by day */}
       {days.length === 0 ? (
         <div className="surface-card text-center py-20 px-8">
@@ -541,7 +591,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                     <div className="text-right">Actions</div>
                   </div>
                   {clusters.map(cluster => cluster.type === 'single' ? (
-                    <OrderRow key={cluster.order.id} order={cluster.order} {...rowProps} onBill={() => setBillOrders([cluster.order])} />
+                    <OrderRow key={cluster.order.id} order={cluster.order} {...rowProps} onBill={() => openBill([cluster.order])} setPaid={paid => markOrdersPaid([cluster.order.id], paid)} showPaymentTag />
                   ) : (
                     <div key={cluster.groupId} className="border border-primary/20 rounded-xl overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 bg-primary/5">
@@ -553,10 +603,21 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                           <span className="font-mono text-[11px] font-semibold text-ink whitespace-nowrap">
                             {money(summarizeOrders(cluster.orders, menu).revenue)}
                           </span>
+                          {cluster.orders.some(isUnpaid) && (
+                            <button
+                              type="button"
+                              onClick={() => markOrdersPaid(cluster.orders.map(o => o.id), true)}
+                              title="Unpaid. Click to mark the whole order as paid"
+                              aria-label="Unpaid, mark whole order as paid"
+                              className="inline-flex items-center px-2 py-0.5 rounded-full bg-coral/10 text-coral font-mono text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap hover:bg-coral/20 transition-colors"
+                            >
+                              Unpaid
+                            </button>
+                          )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <button
-                            onClick={() => setBillOrders(cluster.orders)}
+                            onClick={() => openBill(cluster.orders)}
                             title="Generate one bill for every item in this order"
                             className="flex items-center gap-1 px-2 py-1 rounded-lg font-mono text-[10px] font-semibold uppercase tracking-wider text-primary hover:bg-primary/10 transition-colors"
                           >
@@ -586,7 +647,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                       </div>
                       <div className="p-2 space-y-2 bg-white">
                         {cluster.orders.map(order => (
-                          <OrderRow key={order.id} order={order} {...rowProps} />
+                          <OrderRow key={order.id} order={order} {...rowProps} setPaid={paid => markOrdersPaid(cluster.orders.map(o => o.id), paid)} />
                         ))}
                       </div>
                     </div>
@@ -599,7 +660,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
       )}
       {/* In a portal: this view animates with a transform, which would otherwise pin the modal inside it. */}
       {billOrders && createPortal(
-        <BillModal orders={billOrders} menu={menu} settings={settings} currency={currency} onClose={() => setBillOrders(null)} />,
+        <BillModal orders={billOrders} statement={billIsStatement} menu={menu} settings={settings} currency={currency} onClose={() => setBillOrders(null)} />,
         document.body
       )}
     </motion.div>

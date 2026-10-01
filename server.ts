@@ -10,7 +10,7 @@ import { saveCredentials, getCredentials, deleteCredentials } from "./lib/integr
 import { getStripe } from "./lib/stripe";
 import { setBillingInfo, getBillingInfo, findUidByStripeCustomerId, SubscriptionStatus } from "./lib/subscriptionStore";
 import { searchUsda, searchOpenFoodFacts } from "./lib/nutritionSearch";
-import { createOrRefreshBill, getPublicBill } from "./lib/billStore";
+import { createOrRefreshBill, createOrRefreshStatement, getPublicBill } from "./lib/billStore";
 import { createBillHandler, createPublicBillHandler } from "./lib/billRoutes";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -572,7 +572,7 @@ async function startServer() {
   // Creating a bill acts on the signed-in owner's own order, so it is an
   // authenticated route. (This is separate from /billing above, which is
   // Stockpot's own subscription billing.)
-  api.post("/bills", requireCsrf, createBillHandler(createOrRefreshBill));
+  api.post("/bills", requireCsrf, createBillHandler(createOrRefreshBill, createOrRefreshStatement));
 
   app.use("/api", api);
 

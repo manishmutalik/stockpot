@@ -24,18 +24,36 @@ import { buildBill, resolveBillToken, type Bill } from '../src/utils/billing';
 const DEFAULT_CURRENCY = { code: 'INR', symbol: '₹' };
 
 export async function createOrRefreshBill(uid: string, orderId: string): Promise<{ token: string; bill: Bill } | null> {
+  return writeBill(uid, [orderId], false);
+}
+
+/**
+ * A consolidated bill (statement) for several of one owner's orders: one
+ * token, stored as `statementToken` on each, reused on later calls (even when
+ * the set of orders has changed) so a link already sent keeps working.
+ */
+export async function createOrRefreshStatement(uid: string, orderIds: string[]): Promise<{ token: string; bill: Bill } | null> {
+  return writeBill(uid, orderIds, true);
+}
+
+async function writeBill(uid: string, orderIds: string[], statement: boolean): Promise<{ token: string; bill: Bill } | null> {
   const db = getFirestore();
   const user = db.collection('users').doc(uid);
   const ordersCol = user.collection('orders');
 
-  const orderSnap = await ordersCol.doc(orderId).get();
-  if (!orderSnap.exists) return null;
-  const order = { id: orderSnap.id, ...orderSnap.data() } as Order;
+  // Every order must be this owner's (they are looked up under their own uid).
+  const snaps = await Promise.all(orderIds.map(id => ordersCol.doc(id).get()));
+  if (snaps.some(s => !s.exists)) return null;
+  const picked = snaps.map(s => ({ id: s.id, ...s.data() }) as Order);
 
-  // A multi-item order is one bill: every item that shares its group.
-  const members: Order[] = order.orderGroupId
-    ? (await ordersCol.where('orderGroupId', '==', order.orderGroupId).get()).docs.map(d => ({ id: d.id, ...d.data() }) as Order)
-    : [order];
+  // A multi-item order is always whole: every item that shares its group.
+  const groupIds = [...new Set(picked.map(o => o.orderGroupId).filter((g): g is string => !!g))];
+  const groupMembers = (await Promise.all(groupIds.map(g => ordersCol.where('orderGroupId', '==', g).get())))
+    .flatMap(q => q.docs.map(d => ({ id: d.id, ...d.data() }) as Order));
+  const byId = new Map<string, Order>();
+  for (const o of [...picked, ...groupMembers]) byId.set(o.id, o);
+  const members = [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+  if (!statement && members.length === 0) return null;
 
   const menuIds = [...new Set(members.map(o => o.menuItemId).filter(Boolean))];
   const menuSnaps = menuIds.length ? await db.getAll(...menuIds.map(id => user.collection('menu').doc(id))) : [];
@@ -44,8 +62,10 @@ export async function createOrRefreshBill(uid: string, orderId: string): Promise
   const settingsData = (await user.collection('settings').doc('bakery').get()).data() || {};
   const settings = settingsData as Partial<BakerySettings> & { currency?: { code: string; symbol: string } };
 
-  const { token } = resolveBillToken(members);
+  const tokenField = statement ? 'statementToken' : 'billToken';
+  const { token } = resolveBillToken(members, tokenField);
   const bill = buildBill({
+    statement,
     orders: members,
     menu,
     settings: {
@@ -65,7 +85,7 @@ export async function createOrRefreshBill(uid: string, orderId: string): Promise
   const batch = db.batch();
   batch.set(db.collection('bills').doc(token), { uid, orderIds: members.map(o => o.id), bill, updatedAt: now }, { merge: true });
   for (const m of members) {
-    if (m.billToken !== token) batch.update(ordersCol.doc(m.id), { billToken: token });
+    if (m[tokenField] !== token) batch.update(ordersCol.doc(m.id), { [tokenField]: token });
   }
   await batch.commit();
 

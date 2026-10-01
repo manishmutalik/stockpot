@@ -151,3 +151,73 @@ describe('bill token', () => {
     expect(isValidBillToken(t)).toBe(false);
   });
 });
+
+describe('consolidated bill (statement)', () => {
+  const orders = [
+    order('b2', { date: '2026-03-08', menuItemId: 'cookie', quantity: 10, customerName: 'Priya' }),
+    order('a1', { date: '2026-03-02', quantity: 1, customerName: 'Priya' }),
+    order('c3', { date: '2026-03-05', quantity: 2 }),
+  ];
+  const stmt = (settingsOver: Record<string, any> = {}) =>
+    buildBill({ orders, menu, settings: { ...settings, ...settingsOver }, currency: INR, statement: true, today: '2026-03-20' });
+
+  it('lists every order oldest first, each line dated, on one bill', () => {
+    const bill = stmt();
+    expect(bill.kind).toBe('statement');
+    expect(bill.lines.map(l => [l.date, l.name, l.quantity])).toEqual([
+      ['2026-03-02', 'Chocolate Cake', 1],
+      ['2026-03-05', 'Chocolate Cake', 2],
+      ['2026-03-08', 'Atta Cookie', 10],
+    ]);
+    expect(bill.itemsTotal).toBe(500 + 1000 + 200);
+    expect(bill.total).toBe(1700);
+    expect(bill.orderCount).toBe(3);
+  });
+
+  it('is dated today, has an ST- reference from the first order id, and names the customer', () => {
+    const bill = stmt();
+    expect(bill.date).toBe('2026-03-20');
+    expect(bill.reference).toBe('ST-A1');
+    expect(bill.customerName).toBe('Priya');
+  });
+
+  it('puts GST on the whole amount, once', () => {
+    const bill = stmt({ gstApplicable: true, gstRate: 18, gstPricingMode: 'exclusive' });
+    expect(bill.gst).toEqual({ rate: 18, mode: 'exclusive', amount: 306 }); // 1700 x 18%
+    expect(bill.total).toBe(2006);
+  });
+
+  it('counts a multi-item order once and one delivery charge per order', () => {
+    const bill = buildBill({
+      statement: true, today: '2026-03-20', menu, settings, currency: INR,
+      orders: [
+        order('g1', { orderGroupId: 'g', deliveryCharge: 40 }),
+        order('g2', { orderGroupId: 'g', menuItemId: 'cookie', quantity: 5 }),
+        order('s1', { deliveryCharge: 30 }),
+      ],
+    });
+    expect(bill.orderCount).toBe(2);
+    expect(bill.deliveryCharge).toBe(70);
+    expect(bill.total).toBe(500 + 100 + 500 + 70);
+  });
+
+  it('is not affected by the plain bill: same orders, no dates, no statement fields', () => {
+    const plain = buildBill({ orders: [orders[1]], menu, settings, currency: INR });
+    expect(plain.kind).toBeUndefined();
+    expect(plain.lines[0].date).toBeUndefined();
+    expect(plain.reference).toBe('A1');
+  });
+
+  it('writes a statement message with the amount due and the number of orders', () => {
+    const bill = stmt();
+    expect(buildBillMessage(bill, 'https://x/bill/t')).toBe("Hi Priya, here's your statement from Asha & Sons: ₹1,700.00 due for 3 orders. View/pay: https://x/bill/t");
+    expect(buildBillMessage({ ...bill, orderCount: 1 })).toContain('due for 1 order.');
+  });
+
+  it('keeps the statement token separate from the single-bill token, reusing each', () => {
+    const stored = [order('a', { billToken: 'a'.repeat(32), statementToken: 'b'.repeat(32) }), order('b')];
+    expect(resolveBillToken(stored)).toEqual({ token: 'a'.repeat(32), isNew: false });
+    expect(resolveBillToken(stored, 'statementToken')).toEqual({ token: 'b'.repeat(32), isNew: false });
+    expect(resolveBillToken([order('a', { billToken: 'a'.repeat(32) })], 'statementToken').isNew).toBe(true);
+  });
+});

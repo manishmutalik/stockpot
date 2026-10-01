@@ -63,7 +63,7 @@ export function useOrderActions(
    * then claimed atomically in the same batch as the order documents.
    */
   const addOrderGroup = async (
-    common: { date: string; customerName?: string; customerPhone?: string },
+    common: { date: string; customerName?: string; customerPhone?: string; paymentStatus?: 'paid' | 'unpaid' },
     lineItems: { menuItemId: string; quantity: number }[]
   ) => {
     if (!auth.currentUser || lineItems.length === 0) return;
@@ -105,6 +105,8 @@ export function useOrderActions(
           ...(common.customerName && { customerName: common.customerName }),
           ...(common.customerPhone && { customerPhone: common.customerPhone }),
           ...(orderGroupId && { orderGroupId }),
+          // Only "pay later" is stored; an order with no value counts as paid.
+          ...(common.paymentStatus === 'unpaid' && { paymentStatus: 'unpaid' as const }),
         };
         batch.set(doc(db, 'users', userId, 'orders', id), newOrder);
       }
@@ -143,6 +145,25 @@ export function useOrderActions(
       await setDoc(doc(db, 'users', userId, 'orders', order.id), { fulfilled: true }, { merge: true });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${order.id}`);
+    }
+  };
+
+  /**
+   * Marks orders paid or unpaid in one atomic write. "Paid" stores
+   * `paymentStatus: 'paid'`; an order with no value also counts as paid, so
+   * the explicit value just records that it was once pending.
+   */
+  const markOrdersPaid = async (ids: string[], paid: boolean) => {
+    if (!auth.currentUser || ids.length === 0) return;
+    const userId = auth.currentUser.uid;
+    try {
+      const batch = writeBatch(db);
+      for (const id of ids) {
+        batch.set(doc(db, 'users', userId, 'orders', id), { paymentStatus: paid ? 'paid' : 'unpaid' }, { merge: true });
+      }
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders`);
     }
   };
 
@@ -283,6 +304,7 @@ export function useOrderActions(
   return {
     addOrderGroup,
     fulfillOrder,
+    markOrdersPaid,
     updateOrder,
     deleteOrder,
     resetOrders,

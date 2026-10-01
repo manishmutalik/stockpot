@@ -34,7 +34,7 @@ const fakeDb = {
 };
 vi.mock('firebase-admin/firestore', () => ({ getFirestore: () => fakeDb }));
 
-import { createOrRefreshBill, getPublicBill } from '../billStore';
+import { createOrRefreshBill, createOrRefreshStatement, getPublicBill } from '../billStore';
 
 const U = 'users/u1';
 beforeEach(() => {
@@ -110,5 +110,43 @@ describe('getPublicBill', () => {
     const { token, bill } = (await createOrRefreshBill('u1', 'single'))!;
     expect(await getPublicBill(token)).toEqual(bill);
     expect(await getPublicBill('f'.repeat(32))).toBeNull();
+  });
+});
+
+describe('createOrRefreshStatement', () => {
+  beforeEach(() => {
+    store.set(`${U}/orders/single`, { ...store.get(`${U}/orders/single`), paymentStatus: 'unpaid', customerName: 'Priya' });
+  });
+
+  it('puts the chosen orders on one bill, with a statement token on each', async () => {
+    const result = await createOrRefreshStatement('u1', ['single', 'g1']);
+    expect(result!.bill.kind).toBe('statement');
+    // single (500) + the whole group g1+g2 (500 + 100 + 40 delivery), since a multi-item order is never split
+    expect(result!.bill.lines).toHaveLength(3);
+    expect(result!.bill.total).toBe(500 + 500 + 100 + 40);
+    for (const id of ['single', 'g1', 'g2']) expect(store.get(`${U}/orders/${id}`).statementToken).toBe(result!.token);
+    expect(store.get(`bills/${result!.token}`).uid).toBe('u1');
+  });
+
+  it('reuses the link when it is generated again, even after another order was added', async () => {
+    const first = await createOrRefreshStatement('u1', ['single']);
+    const again = await createOrRefreshStatement('u1', ['single']);
+    expect(again!.token).toBe(first!.token);
+    const grown = await createOrRefreshStatement('u1', ['single', 'g1']);
+    expect(grown!.token).toBe(first!.token);
+    expect((await getPublicBill(first!.token))!.total).toBe(500 + 500 + 100 + 40);
+  });
+
+  it('does not touch the single-order bill token', async () => {
+    const single = await createOrRefreshBill('u1', 'single');
+    const statement = await createOrRefreshStatement('u1', ['single']);
+    expect(statement!.token).not.toBe(single!.token);
+    expect(store.get(`${U}/orders/single`).billToken).toBe(single!.token);
+    expect(store.get(`${U}/orders/single`).statementToken).toBe(statement!.token);
+  });
+
+  it("refuses when any order is missing or belongs to someone else", async () => {
+    expect(await createOrRefreshStatement('u1', ['single', 'theirs'])).toBeNull();
+    expect(await createOrRefreshStatement('u1', ['single', 'missing'])).toBeNull();
   });
 });

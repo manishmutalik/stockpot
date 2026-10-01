@@ -26,7 +26,7 @@ interface AddOrderModalProps {
    * open and the user can retry; nothing partially saves.
    */
   onSave: (
-    common: { date: string; customerName?: string; customerPhone?: string },
+    common: { date: string; customerName?: string; customerPhone?: string; paymentStatus?: 'paid' | 'unpaid' },
     lineItems: OrderLineItem[]
   ) => Promise<void>;
   /** When set, the modal opens with a single line item pre-filled to this
@@ -54,6 +54,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
   const [date,          setDate]          = useState(today);
   const [customerName,  setCustomerName]  = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [payLater,      setPayLater]      = useState(false);
   const [lineItems,     setLineItems]     = useState<OrderLineItem[]>([EMPTY_LINE_ITEM(menu)]);
   const [isSaving,      setIsSaving]      = useState(false);
   const [error,         setError]         = useState('');
@@ -98,6 +99,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
     setDate(today);
     setCustomerName('');
     setCustomerPhone('');
+    setPayLater(false);
     setLineItems([EMPTY_LINE_ITEM(menu)]);
     setInvalidRowIndex(null);
   };
@@ -143,7 +145,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
     setIsSaving(true);
     try {
       await onSave(
-        { date, customerName: customerName.trim() || undefined, customerPhone: customerPhone.trim() || undefined },
+        { date, customerName: customerName.trim() || undefined, customerPhone: customerPhone.trim() || undefined, paymentStatus: payLater ? 'unpaid' : 'paid' },
         lineItems
       );
       resetForm();
@@ -285,6 +287,32 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
             className={modalField()}
           />
         </div>
+      </div>
+
+      <div>
+        <div className={MODAL_LABEL}>Payment</div>
+        <div role="radiogroup" aria-label="Payment" className="inline-flex p-1 bg-stone-100 rounded-xl">
+          {([['paid', 'Paid now'], ['later', 'Pay later']] as const).map(([value, label]) => {
+            const selected = (value === 'later') === payLater;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setPayLater(value === 'later')}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${selected ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {payLater && (
+          <p className="text-xs text-muted mt-1.5">
+            This order will be listed under pending payments, so you can send the customer one consolidated bill later.
+          </p>
+        )}
       </div>
 
       {lineItems.length > 1 && (
