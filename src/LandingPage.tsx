@@ -51,30 +51,6 @@ const PROBLEMS = [
   { icon: Trash2, tone: 'bg-teal-50 text-primary', title: 'Unaccounted batch & prep loss', body: 'Trimmings, proofing rejects and expired cream disappear into the bin without ever being counted against production cost.' },
 ];
 
-interface ShotTile {
-  icon: React.ElementType;
-  tag: string;
-  title: string;
-  body: string;
-  image: { src: string; alt: string };
-}
-
-/** The two core screens are shown; the rest of the product is described in words. */
-const SHOT_TILES: ShotTile[] = [
-  {
-    icon: BookOpen, tag: 'Recipe engine',
-    title: 'Real-time recipe costing, to the gram',
-    body: 'Change the cost of an ingredient once, and every menu item recalculates its cost, margin and suggested price automatically.',
-    image: { src: '/landing/recipes.webp', alt: 'Menu & Master Recipes in Stockpot' },
-  },
-  {
-    icon: Boxes, tag: 'Smart inventory',
-    title: 'Never run out mid-bake',
-    body: 'Live stock for raw materials and packaging, with low-stock alerts before you are caught short.',
-    image: { src: '/landing/inventory.webp', alt: 'Raw materials and stock alerts' },
-  },
-];
-
 interface TextTile {
   icon: React.ElementType;
   tag: string;
@@ -84,6 +60,28 @@ interface TextTile {
 }
 
 const TEXT_TILES: TextTile[] = [
+  {
+    icon: BookOpen, tag: 'Recipe engine',
+    title: 'Real-time recipe costing, to the gram',
+    body: 'Change the cost of an ingredient once, and every menu item recalculates its cost, margin and suggested price automatically.',
+    points: [
+      'Cost, margin and a suggested price for every menu item',
+      'Amounts in g, kg, ml, l or pieces, converted for you',
+      'Packaging materials costed alongside ingredients',
+      'Estimated nutrition per serving',
+    ],
+  },
+  {
+    icon: Boxes, tag: 'Smart inventory',
+    title: 'Never run out mid-bake',
+    body: 'Live stock for raw materials and packaging, with low-stock alerts before you are caught short.',
+    points: [
+      'Current stock, alert level and status for every material',
+      'Low-stock alerts with a Restock button',
+      'Raw materials and packaging in their own categories',
+      'Import from a CSV, with a template to start from',
+    ],
+  },
   {
     icon: Factory, tag: 'Batch yields',
     title: 'Automated stock logs',
@@ -154,10 +152,6 @@ const Reveal: React.FC<{ children: React.ReactNode; className?: string; delay?: 
   >
     {children}
   </motion.div>
-);
-
-const Shot: React.FC<{ src: string; alt: string; className?: string }> = ({ src, alt, className = '' }) => (
-  <img src={src} alt={alt} loading="lazy" decoding="async" className={`w-full h-full object-cover object-top ${className}`} />
 );
 
 const Eyebrow: React.FC<{ children: React.ReactNode; tone?: 'teal' | 'white' }> = ({ children, tone = 'teal' }) => (
@@ -336,32 +330,29 @@ const LandingPage: React.FC = () => {
               <p className="text-lg text-muted">Instant calculations, live stock balances and clear margins, in one place.</p>
             </Reveal>
 
+            {/* One composition: the recipe screen on a laptop, the stock screen on a phone */}
+            <Reveal className="relative max-w-6xl mx-auto mb-14 sm:mb-16 lg:mb-20">
+              <div className="md:w-[90%]">
+                <div className="rounded-t-2xl border-[10px] border-b-0 border-ink bg-ink shadow-[0_24px_48px_-12px_rgba(43,49,61,0.35)]">
+                  <img src="/landing/device-laptop.webp" alt="Stockpot's recipe costing screen on a laptop" width={1440} height={900} loading="lazy" decoding="async" className="w-full h-auto block rounded-t-md" />
+                </div>
+                <div className="h-3 sm:h-4 mx-[-2%] rounded-b-2xl bg-gradient-to-b from-slate-300 to-slate-400 shadow-md" aria-hidden="true">
+                  <div className="mx-auto w-24 h-1 rounded-b bg-slate-500/60" />
+                </div>
+              </div>
+              <div className="mt-8 mx-auto w-40 sm:w-48 md:mt-0 md:absolute md:right-0 md:bottom-[-2.5rem] md:w-[21%] md:min-w-[150px]">
+                <div className="rounded-[2rem] border-[7px] border-ink bg-ink shadow-[0_24px_48px_-12px_rgba(43,49,61,0.4)] overflow-hidden">
+                  <img src="/landing/device-phone.webp" alt="Stockpot's stock alerts on a phone" width={780} height={1560} loading="lazy" decoding="async" className="w-full h-auto block rounded-[1.5rem]" />
+                </div>
+              </div>
+            </Reveal>
+
             <Reveal className="relative h-52 sm:h-64 lg:h-72 rounded-[20px] overflow-hidden border border-slate-200 shadow-sm mb-5 lg:mb-6">
               <img src="/landing/pastries.webp" alt="Croissants, pain au chocolat and bread on a rustic bakery counter" loading="lazy" decoding="async" className="w-full h-full object-cover" />
               <span className="absolute bottom-3 left-3 px-3 py-1.5 rounded-md bg-ink/80 backdrop-blur-sm text-white text-xs font-medium">Every bake, costed to the gram</span>
             </Reveal>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6 mb-5 lg:mb-6">
-              {SHOT_TILES.map(({ icon: Icon, tag, title, body, image }, i) => (
-                <Reveal key={title} delay={i * 0.08} className={`${CARD} ${CARD_HOVER} overflow-hidden flex flex-col`}>
-                  <div className="p-6 lg:p-7 pb-5">
-                    <div className="inline-flex items-center gap-2 text-primary bg-surface px-2.5 py-1 rounded-md mb-4">
-                      <Icon size={16} />
-                      <span className="text-xs font-semibold">{tag}</span>
-                    </div>
-                    <h3 className={`${DISPLAY} text-xl lg:text-2xl font-bold tracking-tight mb-2`}>{title}</h3>
-                    <p className="text-muted leading-relaxed">{body}</p>
-                  </div>
-                  <div className="mt-auto px-5 lg:px-6">
-                    <div className="h-52 sm:h-60 rounded-t-xl overflow-hidden border border-b-0 border-slate-200 bg-surface">
-                      <Shot src={image.src} alt={image.alt} />
-                    </div>
-                  </div>
-                </Reveal>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 lg:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6">
               {TEXT_TILES.map(({ icon: Icon, tag, title, body, points }, i) => (
                 <Reveal key={title} delay={(i % 2) * 0.08} className={`${CARD} ${CARD_HOVER} p-6 lg:p-7 flex flex-col`}>
                   <div className="inline-flex self-start items-center gap-2 text-primary bg-surface px-2.5 py-1 rounded-md mb-4">

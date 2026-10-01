@@ -79,9 +79,17 @@ describe('LandingPage', () => {
       expect(text).toContain(phrase);
     }
     expect(text).toContain('Delivery charged to the customer vs. fee paid to the courier');
-    for (const unused of ['production', 'orders', 'gst', 'wastage', 'rnd']) {
+    for (const unused of ['production', 'orders', 'gst', 'wastage', 'rnd', 'recipes', 'inventory']) {
       expect(container.querySelector(`img[src="/landing/${unused}.webp"]`)).toBeNull();
     }
+  });
+
+  it('shows one screenshot on a laptop and another on a phone', () => {
+    const { container } = renderPage();
+    expect(container.querySelector('img[src="/landing/device-laptop.webp"]')).not.toBeNull();
+    expect(container.querySelector('img[src="/landing/device-phone.webp"]')).not.toBeNull();
+    expect(screen.getByAltText(/recipe costing screen on a laptop/i)).toBeTruthy();
+    expect(screen.getByAltText(/stock alerts on a phone/i)).toBeTruthy();
   });
 
   it('opens and closes FAQ answers with the right aria state', () => {
