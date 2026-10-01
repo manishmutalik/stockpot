@@ -171,4 +171,22 @@ describe('AddOrderModal — redesigned form', () => {
     expect(screen.getByText('10 available')).toBeTruthy();
     expect(screen.getByText('$20.00 each')).toBeTruthy();
   });
+
+  describe('payment', () => {
+    it('defaults to paid now', async () => {
+      const { onSave } = renderModal();
+      fireEvent.click(screen.getByRole('button', { name: /^Add Order/i }));
+      await vi.waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(onSave.mock.calls[0][0].paymentStatus).toBe('paid');
+    });
+    it('saves the order as unpaid when "Pay later" is chosen, and says what that means', async () => {
+      const { onSave } = renderModal();
+      fireEvent.click(screen.getByRole('radio', { name: 'Pay later' }));
+      expect((screen.getByRole('radio', { name: 'Pay later' }) as HTMLElement).getAttribute('aria-checked')).toBe('true');
+      expect(screen.getByText(/listed under pending payments/i)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /^Add Order/i }));
+      await vi.waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(onSave.mock.calls[0][0].paymentStatus).toBe('unpaid');
+    });
+  });
 });

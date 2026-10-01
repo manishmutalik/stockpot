@@ -178,4 +178,42 @@ describe('BillModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /Download/ }));
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
   });
+
+  describe('consolidated bill (statement)', () => {
+    const pending = [
+      order({ id: 'a1', date: '2026-03-02', quantity: 1 }),
+      order({ id: 'b2', date: '2026-03-08', menuItemId: 'cookie', quantity: 10 }),
+    ];
+    const renderStatement = () => render(<BillModal orders={pending} statement menu={menu} settings={{ ...baseSettings, upiId: 'asha@okhdfcbank' }} currency={INR} onClose={vi.fn()} />);
+
+    it('is titled as a consolidated bill and shows every order, dated, with the total due', async () => {
+      renderStatement();
+      expect(screen.getByRole('dialog', { name: 'Consolidated bill' })).toBeTruthy();
+      expect(screen.getByText('Chocolate Cake')).toBeTruthy();
+      expect(screen.getByText('Atta Cookie')).toBeTruthy();
+      expect(screen.getByText('2 Mar')).toBeTruthy();
+      expect(screen.getByText('8 Mar')).toBeTruthy();
+      expect(screen.getByText('Total due').nextElementSibling?.textContent).toBe('₹700.00'); // 500 + 10 x 20
+      expect(screen.getByText(/Statement · 2 orders/)).toBeTruthy();
+      expect(await screen.findByAltText(/UPI payment QR/i)).toBeTruthy();
+    });
+
+    it('asks the server for one statement link covering all the orders', async () => {
+      renderStatement();
+      await screen.findByAltText(/view this bill online/i);
+      expect(apiFetch).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(apiFetch.mock.calls[0][1].body)).toEqual({ orderIds: ['a1', 'b2'] });
+    });
+
+    it('sends a statement message with the amount due and its link over WhatsApp', async () => {
+      renderStatement();
+      await screen.findByAltText(/view this bill online/i);
+      fireEvent.click(screen.getByRole('button', { name: /Send via WhatsApp/ }));
+      await waitFor(() => expect(window.open).toHaveBeenCalled());
+      const text = decodeURIComponent(((window.open as any).mock.calls[0][0] as string).split('text=')[1]);
+      expect(text).toContain('your statement from Asha Bakes');
+      expect(text).toContain('₹700.00 due for 2 orders');
+      expect(text).toContain(`/bill/${TOKEN}`);
+    });
+  });
 });

@@ -332,3 +332,46 @@ describe('resetOrders — bulk-deleting a date, restoring stock aggregated per i
     expect(menuCalls[0][1].finishedGoodsStock).toBe(9); // 2 + 3 + 4
   });
 });
+
+describe('payment status', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const menu: MenuItem[] = [{ id: 'cake', name: 'Cake', sellingPrice: 20, recipe: [], finishedGoodsStock: 10 } as MenuItem];
+
+  it('stores pay-later orders as unpaid, and writes nothing for paid ones (no value means paid)', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn()));
+    await result.current.addOrderGroup({ date: '2026-04-01', paymentStatus: 'unpaid' }, [{ menuItemId: 'cake', quantity: 1 }]);
+    await result.current.addOrderGroup({ date: '2026-04-01', paymentStatus: 'paid' }, [{ menuItemId: 'cake', quantity: 1 }]);
+    const orderCalls = batchSet.mock.calls.filter(([ref]: any[]) => ref.path.includes('/orders/'));
+    expect(orderCalls[0][1].paymentStatus).toBe('unpaid');
+    expect('paymentStatus' in orderCalls[1][1]).toBe(false);
+  });
+
+  it('puts every item of a multi-item order on the same payment status', async () => {
+    const two = [...menu, { id: 'cookie', name: 'Cookie', sellingPrice: 5, recipe: [], finishedGoodsStock: 10 } as MenuItem];
+    const { result } = renderHook(() => useOrderActions(two, [], '2026-04-01', showConfirm, vi.fn()));
+    await result.current.addOrderGroup({ date: '2026-04-01', paymentStatus: 'unpaid' }, [{ menuItemId: 'cake', quantity: 1 }, { menuItemId: 'cookie', quantity: 1 }]);
+    const orderCalls = batchSet.mock.calls.filter(([ref]: any[]) => ref.path.includes('/orders/'));
+    expect(orderCalls.map(c => c[1].paymentStatus)).toEqual(['unpaid', 'unpaid']);
+  });
+
+  it('marks several orders paid in one atomic write, with no stock effect', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn()));
+    await result.current.markOrdersPaid(['a', 'b', 'c'], true);
+    expect(batchCommit).toHaveBeenCalledTimes(1);
+    expect(batchSet).toHaveBeenCalledTimes(3);
+    for (const call of batchSet.mock.calls) {
+      expect(call[0].path).toMatch(/\/orders\//);
+      expect(call[1]).toEqual({ paymentStatus: 'paid' });
+      expect(call[2]).toEqual({ merge: true });
+    }
+  });
+
+  it('can mark them unpaid again, and does nothing for an empty list', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn()));
+    await result.current.markOrdersPaid(['a'], false);
+    expect(batchSet.mock.calls[0][1]).toEqual({ paymentStatus: 'unpaid' });
+    vi.clearAllMocks();
+    await result.current.markOrdersPaid([], true);
+    expect(batchCommit).not.toHaveBeenCalled();
+  });
+});

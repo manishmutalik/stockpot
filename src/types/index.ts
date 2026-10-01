@@ -158,6 +158,16 @@ export interface Order {
    * "Generate Bill"; once set it is reused so QR codes and links already
    * shared with a customer keep working. Written by the server only. */
   billToken?: string;
+  /** Whether the customer has paid for this order. Absent means paid: every
+   * order made before payments were tracked, and every order saved as "Paid
+   * now", carries no value. Only "Pay later" orders are stored as 'unpaid',
+   * and those are what the Orders tab lists under pending payments. Applies
+   * to the whole multi-item order (its items are marked together). */
+  paymentStatus?: 'paid' | 'unpaid';
+  /** Same idea as `billToken`, for the consolidated bill (statement) that
+   * covers a customer's pending orders. Created once, reused, written by the
+   * server only. */
+  statementToken?: string;
 }
 
 /**
@@ -349,6 +359,8 @@ export interface AppViewProps {
   handleDiscardBatch: (b: any) => void;
   updateOrder: (id: string, f: string, v: any) => void;
   fulfillOrder: (order: Order) => void;
+  /** Marks orders paid or unpaid (every id given, in one write). */
+  markOrdersPaid: (ids: string[], paid: boolean) => void;
   deleteOrder: (id: string) => void;
   resetOrders: () => void;
   saveSettings: () => void;

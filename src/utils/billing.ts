@@ -20,6 +20,8 @@ export interface BillLine {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  /** Order date; set only on a statement, where lines come from different days. */
+  date?: string;
 }
 
 export interface Bill {
@@ -38,6 +40,10 @@ export interface Bill {
   currency: { code: string; symbol: string };
   /** Present only when the business set a UPI ID and bills in rupees. */
   upiId?: string;
+  /** 'statement' is a consolidated bill for several of a customer's pending orders. */
+  kind?: 'statement';
+  /** For a statement: how many orders it covers (a multi-item order counts once). */
+  orderCount?: number;
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -62,15 +68,25 @@ export function buildBill(input: {
   menu: MenuItem[];
   settings: Pick<BakerySettings, 'name' | 'address' | 'phone' | 'logo' | 'gstApplicable' | 'gstRate' | 'gstPricingMode' | 'upiId'>;
   currency: { code: string; symbol: string };
+  /** A consolidated bill for several orders (dated lines, "ST-" reference). */
+  statement?: boolean;
+  /** The statement's date, YYYY-MM-DD; defaults to today. */
+  today?: string;
 }): Bill {
-  const { orders, menu, settings, currency } = input;
-  const first = [...orders].sort((a, b) => a.id.localeCompare(b.id))[0];
+  const { orders, menu, settings, currency, statement } = input;
+  const byId = [...orders].sort((a, b) => a.id.localeCompare(b.id))[0];
+  const ordered = statement
+    ? [...orders].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))
+    : orders;
 
-  const lines: BillLine[] = orders.map(o => {
+  const lines: BillLine[] = ordered.map(o => {
     const item = menu.find(m => m.id === o.menuItemId);
     const unitPrice = item?.sellingPrice || 0;
     const quantity = o.quantity || 0;
-    return { name: item?.name || 'Item', quantity, unitPrice, lineTotal: round2(unitPrice * quantity) };
+    return {
+      name: item?.name || 'Item', quantity, unitPrice, lineTotal: round2(unitPrice * quantity),
+      ...(statement && { date: o.date }),
+    };
   });
   const itemsTotal = round2(lines.reduce((sum, l) => sum + l.lineTotal, 0));
   // Same rule as the dashboard: a shared delivery charge counts once per order.
@@ -85,9 +101,9 @@ export function buildBill(input: {
   const total = round2(gst && mode === 'exclusive' ? sale + gst.amount : sale);
 
   return {
-    reference: first.id.slice(0, 8).toUpperCase(),
-    date: first.date,
-    customerName: first.customerName || undefined,
+    reference: statement ? `ST-${byId.id.slice(0, 6).toUpperCase()}` : byId.id.slice(0, 8).toUpperCase(),
+    date: statement ? (input.today ?? new Date().toISOString().slice(0, 10)) : byId.date,
+    customerName: ordered.find(o => o.customerName)?.customerName || undefined,
     business: { name: settings.name, address: settings.address, phone: settings.phone, logo: usableLogo(settings.logo) },
     lines,
     itemsTotal,
@@ -96,6 +112,7 @@ export function buildBill(input: {
     total,
     currency,
     upiId: canPayByUpi(settings.upiId, currency.code) ? settings.upiId!.trim() : undefined,
+    ...(statement && { kind: 'statement' as const, orderCount: new Set(orders.map(o => o.orderGroupId || o.id)).size }),
   };
 }
 
@@ -141,7 +158,9 @@ export function formatMoney(amount: number, currency: { symbol: string }): strin
 /** The short message pre-filled in WhatsApp (it can't carry rich formatting). */
 export function buildBillMessage(bill: Bill, link?: string): string {
   const greeting = bill.customerName ? `Hi ${bill.customerName}, here's` : "Here's";
-  const base = `${greeting} your bill from ${bill.business.name} — ${formatMoney(bill.total, bill.currency)}.`;
+  const base = bill.kind === 'statement'
+    ? `${greeting} your statement from ${bill.business.name}: ${formatMoney(bill.total, bill.currency)} due for ${bill.orderCount} order${bill.orderCount === 1 ? '' : 's'}.`
+    : `${greeting} your bill from ${bill.business.name} — ${formatMoney(bill.total, bill.currency)}.`;
   return link ? `${base} View/pay: ${link}` : base;
 }
 
@@ -159,7 +178,10 @@ export function generateBillToken(): string {
  * one when this is the first bill. Reusing it keeps links and QR codes that
  * were already sent to a customer working.
  */
-export function resolveBillToken(orders: Pick<Order, 'billToken'>[]): { token: string; isNew: boolean } {
-  const existing = orders.map(o => o.billToken).find(isValidBillToken);
+export function resolveBillToken(
+  orders: Pick<Order, 'billToken' | 'statementToken'>[],
+  field: 'billToken' | 'statementToken' = 'billToken'
+): { token: string; isNew: boolean } {
+  const existing = orders.map(o => o[field]).find(isValidBillToken);
   return existing ? { token: existing, isNew: false } : { token: generateBillToken(), isNew: true };
 }
