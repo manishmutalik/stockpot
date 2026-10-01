@@ -60,6 +60,16 @@ describe('LandingPage', () => {
     });
   });
 
+  it('shows the banner and food photos with alt text', () => {
+    const { container } = renderPage();
+    const srcs = [...container.querySelectorAll('img, source')].map(el => el.getAttribute('src') ?? el.getAttribute('srcset'));
+    for (const name of ['banner-wide', 'banner-tablet', 'pastries', 'sourdough']) {
+      expect(srcs).toContain(`/landing/${name}.webp`);
+    }
+    expect(screen.getByAltText(/inventory and margin tracking on a tablet/i)).toBeTruthy();
+    expect(screen.getByAltText(/croissants, pain au chocolat/i)).toBeTruthy();
+  });
+
   it('opens and closes FAQ answers with the right aria state', () => {
     renderPage();
     const first = screen.getByRole('button', { name: /gst number/i });

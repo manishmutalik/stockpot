@@ -57,42 +57,46 @@ interface Tile {
   title: string;
   body: string;
   images: { src: string; alt: string }[];
-  span: string;
+  /** Optional food photo shown above the screenshot. */
+  photo?: { src: string; alt: string; caption: string };
+  /** Spans the full grid width instead of half. */
+  wide?: boolean;
 }
 
 const TILES: Tile[] = [
   {
-    icon: BookOpen, tag: 'Recipe engine', span: 'lg:col-span-4',
+    icon: BookOpen, wide: true, tag: 'Recipe engine',
     title: 'Real-time recipe costing, to the gram',
     body: 'Change the cost of an ingredient once, and every menu item recalculates its cost, margin and suggested price automatically.',
     images: [{ src: '/landing/recipes.webp', alt: 'Menu & Master Recipes in Stockpot' }],
+    photo: { src: '/landing/pastries.webp', alt: 'Croissants, pain au chocolat and bread on a rustic bakery counter', caption: 'Every bake, costed to the gram' },
   },
   {
-    icon: Boxes, tag: 'Smart inventory', span: 'lg:col-span-2',
+    icon: Boxes, tag: 'Smart inventory',
     title: 'Never run out mid-bake',
     body: 'Live stock for raw materials and packaging, with low-stock alerts before you are caught short.',
     images: [{ src: '/landing/inventory.webp', alt: 'Raw materials and stock alerts' }],
   },
   {
-    icon: Factory, tag: 'Batch yields', span: 'lg:col-span-3',
+    icon: Factory, tag: 'Batch yields',
     title: 'Automated stock logs',
     body: 'Logging a production run deducts the ingredients, adds finished stock and records the batch cost. No manual math, no double entry.',
     images: [{ src: '/landing/production.webp', alt: 'Production runs and finished goods' }],
   },
   {
-    icon: Truck, tag: 'Courier delivery', span: 'lg:col-span-3',
+    icon: Truck, tag: 'Courier delivery',
     title: 'True fulfilment profitability',
     body: 'Capture what couriers charge you against what you charge the customer for delivery, on every order.',
     images: [{ src: '/landing/orders.webp', alt: 'Customer & courier orders' }],
   },
   {
-    icon: Landmark, tag: 'GST & compliance', span: 'lg:col-span-2',
+    icon: Landmark, tag: 'GST & compliance',
     title: 'Built for India',
     body: 'Switch GST on when you register. Choose inclusive or exclusive pricing; GST is tracked separately from your food margins.',
     images: [{ src: '/landing/gst.webp', alt: 'Business profile and GST settings' }],
   },
   {
-    icon: FlaskConical, tag: 'Audit & testing', span: 'lg:col-span-4',
+    icon: FlaskConical, wide: true, tag: 'Audit & testing',
     title: 'See what spoilage really costs',
     body: 'Log wastage and recipe experiments separately from your real numbers, so testing a new item never messes with your books.',
     images: [
@@ -183,15 +187,33 @@ const LandingPage: React.FC = () => {
       </header>
 
       <main id="top">
-        {/* Hero */}
-        <section className="relative pt-12 sm:pt-16 lg:pt-20 pb-14 sm:pb-20">
+        {/* Hero: banner photo, headline and calls to action, then the product frame; one full-width column */}
+        <section className="relative pt-8 sm:pt-12 pb-14 sm:pb-20">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-[560px] bg-gradient-to-b from-primary/10 to-transparent" />
-          <div className={`${WRAP} relative grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] gap-12 lg:gap-14 items-center`}>
-            <div className="text-center lg:text-left">
+          <div className={`${WRAP} relative`}>
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="rounded-[20px] overflow-hidden border border-slate-200 shadow-md bg-white"
+            >
+              <picture>
+                <source media="(min-width: 1024px)" srcSet="/landing/banner-wide.webp" width={1376} height={768} />
+                <img
+                  src="/landing/banner-tablet.webp"
+                  alt="Stockpot inventory and margin tracking on a tablet, beside a notebook, scales and fresh bread on a bakery counter"
+                  width={1200}
+                  height={896}
+                  className="w-full h-auto block"
+                />
+              </picture>
+            </motion.div>
+
+            <div className="text-center max-w-4xl mx-auto mt-10 sm:mt-14">
               <motion.div
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
+                transition={{ duration: 0.5, delay: 0.08 }}
                 className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-surface border border-[#D0E4E2] text-xs font-semibold text-primary mb-6"
               >
                 <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
@@ -200,25 +222,25 @@ const LandingPage: React.FC = () => {
               <motion.h1
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.08 }}
-                className={`${DISPLAY} text-4xl sm:text-5xl lg:text-[3.25rem] 2xl:text-6xl font-bold tracking-[-0.03em] leading-[1.1] mb-5`}
+                transition={{ duration: 0.5, delay: 0.14 }}
+                className={`${DISPLAY} text-4xl sm:text-5xl lg:text-6xl font-bold tracking-[-0.03em] leading-[1.1] mb-5`}
               >
-                Know your real margins.{' '}
+                Know your real margins.<br className="hidden sm:block" />{' '}
                 <span className="text-primary">Down to the last gram.</span>
               </motion.h1>
               <motion.p
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.16 }}
-                className="text-lg sm:text-xl text-muted max-w-xl mx-auto lg:mx-0 leading-relaxed mb-8"
+                transition={{ duration: 0.5, delay: 0.2 }}
+                className="text-lg sm:text-xl text-muted max-w-2xl mx-auto leading-relaxed mb-8"
               >
                 Stockpot tracks your ingredients in real time, costs every recipe automatically, and shows which items are priced too low, so you never sell at a loss by accident.
               </motion.p>
               <motion.div
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.24 }}
-                className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-3"
+                transition={{ duration: 0.5, delay: 0.26 }}
+                className="flex flex-col sm:flex-row items-center justify-center gap-3"
               >
                 <Link to="/app" className={`${BTN_PRIMARY} w-full sm:w-auto`}>
                   Start your {TRIAL_DAYS}-day free trial
@@ -237,7 +259,7 @@ const LandingPage: React.FC = () => {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.3 }}
-              className="rounded-[20px] bg-white border border-slate-200 overflow-hidden shadow-[0_24px_48px_-12px_rgba(0,121,123,0.18)] text-left"
+              className="mt-12 sm:mt-16 max-w-6xl mx-auto rounded-[20px] bg-white border border-slate-200 overflow-hidden shadow-[0_24px_48px_-12px_rgba(0,121,123,0.18)] text-left"
             >
               <div className="flex items-center gap-3 px-4 py-3 bg-slate-100 border-b border-slate-200">
                 <div className="flex gap-1.5" aria-hidden="true">
@@ -278,6 +300,7 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
+
         {/* Features */}
         <section id="features" className={`scroll-mt-16 ${SECTION}`}>
           <div className={WRAP}>
@@ -289,9 +312,9 @@ const LandingPage: React.FC = () => {
               <p className="text-lg text-muted">Instant calculations, live stock balances and clear margins, in one place.</p>
             </Reveal>
 
-            <div className="grid grid-cols-1 lg:grid-cols-6 gap-5 lg:gap-6">
-              {TILES.map(({ icon: Icon, tag, title, body, images, span }, i) => (
-                <Reveal key={title} delay={(i % 2) * 0.08} className={`${CARD} ${CARD_HOVER} overflow-hidden flex flex-col ${span}`}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-6">
+              {TILES.map(({ icon: Icon, tag, title, body, images, photo, wide }, i) => (
+                <Reveal key={title} delay={(i % 2) * 0.08} className={`${CARD} ${CARD_HOVER} overflow-hidden flex flex-col ${wide ? 'lg:col-span-2' : ''}`}>
                   <div className="p-6 lg:p-7 pb-5">
                     <div className="inline-flex items-center gap-2 text-primary bg-surface px-2.5 py-1 rounded-md mb-4">
                       <Icon size={16} />
@@ -300,6 +323,12 @@ const LandingPage: React.FC = () => {
                     <h3 className={`${DISPLAY} text-xl lg:text-2xl font-bold tracking-tight mb-2`}>{title}</h3>
                     <p className="text-muted leading-relaxed">{body}</p>
                   </div>
+                  {photo && (
+                    <div className="relative mx-5 lg:mx-6 mb-4 h-44 sm:h-56 lg:h-64 rounded-xl overflow-hidden border border-slate-200">
+                      <img src={photo.src} alt={photo.alt} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                      <span className="absolute bottom-2 left-2 px-2.5 py-1 rounded-md bg-ink/80 backdrop-blur-sm text-white text-[11px] font-medium">{photo.caption}</span>
+                    </div>
+                  )}
                   <div className={`mt-auto px-5 lg:px-6 grid gap-3 ${images.length > 1 ? 'sm:grid-cols-2' : ''}`}>
                     {images.map(img => (
                       <div key={img.src} className="h-52 sm:h-60 rounded-t-xl overflow-hidden border border-b-0 border-slate-200 bg-surface">
@@ -341,6 +370,7 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
+
         {/* Pricing */}
         <section id="pricing" className={`scroll-mt-16 ${SECTION}`}>
           <div className={WRAP}>
@@ -350,44 +380,40 @@ const LandingPage: React.FC = () => {
                 Start free for {TRIAL_DAYS} days. A card is required to start, and you won&apos;t be charged if you cancel before the trial ends.
               </p>
             </Reveal>
-            <Reveal className={`${CARD} max-w-5xl mx-auto border-2 border-primary p-6 sm:p-9 shadow-[0_24px_48px_-12px_rgba(0,121,123,0.16)]`}>
-              <div className="grid md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-8 md:gap-10 items-center">
+            <Reveal className={`${CARD} max-w-2xl mx-auto border-2 border-primary p-6 sm:p-9 shadow-[0_24px_48px_-12px_rgba(0,121,123,0.16)]`}>
+              <div className="flex items-start justify-between gap-3 mb-5">
                 <div>
-                  <div className="flex items-start justify-between gap-3 mb-5">
-                    <div>
-                      <h3 className={`${DISPLAY} text-2xl font-bold`}>Stockpot Pro</h3>
-                      <p className="text-sm text-muted mt-0.5">All features, unlimited access</p>
-                    </div>
-                    <span className="px-3 py-1 rounded-full bg-surface border border-[#D0E4E2] text-primary text-xs font-semibold whitespace-nowrap">{TRIAL_DAYS}-Day Free Trial</span>
-                  </div>
-                  <div className="mb-6 flex items-baseline gap-1.5">
-                    <span className={`${DISPLAY} text-5xl font-bold tracking-tight tabular-nums`}>{PRICE.symbol}{PRICE.amount}</span>
-                    <span className="text-muted font-medium">/ {PRICE.period}</span>
-                  </div>
-                  <Link to="/app" className={`${BTN_PRIMARY} w-full`}>Start Free Trial</Link>
-                  <p className="text-center text-xs text-muted mt-3">Cancel anytime from Settings → Manage Billing.</p>
+                  <h3 className={`${DISPLAY} text-2xl font-bold`}>Stockpot Pro</h3>
+                  <p className="text-sm text-muted mt-0.5">All features, unlimited access</p>
                 </div>
-                <ul className="space-y-4 md:border-l md:border-slate-200 md:pl-10">
-                  {PLAN_FEATURES.map(f => (
-                    <li key={f} className="flex items-start gap-3">
-                      <CircleCheck size={20} className="text-primary shrink-0 mt-0.5" />
-                      <span>{f}</span>
-                    </li>
-                  ))}
-                </ul>
+                <span className="px-3 py-1 rounded-full bg-surface border border-[#D0E4E2] text-primary text-xs font-semibold whitespace-nowrap">{TRIAL_DAYS}-Day Free Trial</span>
               </div>
+              <div className="mb-6 pb-6 border-b border-slate-200 flex items-baseline gap-1.5">
+                <span className={`${DISPLAY} text-5xl font-bold tracking-tight tabular-nums`}>{PRICE.symbol}{PRICE.amount}</span>
+                <span className="text-muted font-medium">/ {PRICE.period}</span>
+              </div>
+              <ul className="space-y-3.5 mb-7">
+                {PLAN_FEATURES.map(f => (
+                  <li key={f} className="flex items-start gap-3">
+                    <CircleCheck size={20} className="text-primary shrink-0 mt-0.5" />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link to="/app" className={`${BTN_PRIMARY} w-full`}>Start Free Trial</Link>
+              <p className="text-center text-xs text-muted mt-3">Cancel anytime from Settings → Manage Billing.</p>
             </Reveal>
           </div>
         </section>
 
         {/* FAQ */}
         <section id="faq" className={`scroll-mt-16 ${BAND} ${SECTION}`}>
-          <div className={`${WRAP} grid lg:grid-cols-[minmax(0,4fr)_minmax(0,7fr)] gap-8 lg:gap-14`}>
-            <Reveal className="text-center lg:text-left lg:pt-2">
+          <div className={WRAP}>
+            <Reveal className="text-center max-w-2xl mx-auto mb-10">
               <h2 className={`${DISPLAY} text-3xl sm:text-4xl font-bold tracking-tight mb-3`}>Questions, answered</h2>
               <p className="text-lg text-muted">Everything you need to know about Stockpot.</p>
             </Reveal>
-            <div className="space-y-3">
+            <div className="max-w-3xl mx-auto space-y-3">
               {FAQS.map(({ q, a }, i) => {
                 const open = openFaq === i;
                 return (
@@ -415,11 +441,12 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        {/* Final CTA */}
+        {/* Final CTA, over a bakery photo */}
         <section className={SECTION}>
           <div className={WRAP}>
-            <Reveal className="relative rounded-[20px] bg-primary text-white text-center px-6 py-14 sm:py-16 overflow-hidden shadow-xl">
-              <div className="pointer-events-none absolute -top-24 right-0 w-[28rem] h-[28rem] rounded-full bg-white/10 blur-3xl" />
+            <Reveal className="relative rounded-[20px] text-white text-center px-6 py-16 sm:py-20 overflow-hidden shadow-xl bg-primary">
+              <img src="/landing/sourdough.webp" alt="" aria-hidden="true" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-primary/85" />
               <div className="relative">
                 <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center mx-auto mb-6">
                   <PiggyBank size={28} />
@@ -434,6 +461,7 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
       </main>
+
 
       {/* Footer */}
       <footer className="bg-white border-t border-slate-200 pt-12 pb-8">
