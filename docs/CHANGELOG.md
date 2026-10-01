@@ -1,5 +1,26 @@
 # Changelog
 
+## Demo sandbox: India-specific data
+
+Stockpot is focused on the Indian market for now, so the demo sandbox is now an
+Indian bakery (`src/utils/demoData.ts`):
+
+- **Rupees, GST on.** Currency is INR (₹), and GST is switched on at 5%
+  with prices inclusive, so the Dashboard shows GST collected. The business
+  address and phone are in Bengaluru (+91), and customers have Indian names and
+  +91 phone numbers. The 5% rate is a placeholder for the demo, not tax advice.
+- **Typical Indian prices** (per kg unless noted): maida ₹45, whole wheat
+  atta ₹48, sugar ₹48, unsalted butter ₹570, chocolate chips ₹600,
+  instant yeast ₹700, milk ₹68 a litre, eggs ₹7 each, bakery box ₹12.
+- **Menu:** Butter Croissant ₹150, Chocolate Muffin ₹120 and a Whole Wheat
+  Atta Loaf ₹90 (replacing the sourdough loaf), with recipes costed from the
+  prices above (₹57.12, ₹51.46 and ₹28.62 a unit). The R&D experiment is now
+  an atta croissant trial and atta is a new raw material.
+- Everything dependent is still derived, so batch costs, stock and shelf
+  stock add up; tests cover the new figures.
+- The ten landing-page screenshots in `public/landing/` were retaken, so they
+  show rupees too. Real new accounts still default to USD; only the demo changed.
+
 ## Landing page: price is $24 / month
 
 The pricing card now shows $24 / month (`PRICE` in `src/LandingPage.tsx`),

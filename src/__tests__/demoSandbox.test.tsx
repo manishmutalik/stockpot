@@ -63,7 +63,7 @@ describe('Demo sandbox', () => {
     const docs = (kind: string) => [...fake.current.store.entries()].filter(([k]) => k.includes(`/${kind}/`)).map(([, v]) => v as any);
     const [materials, menu, orders, runs, experiments] = ['materials', 'menu', 'orders', 'productionRuns', 'experiments'].map(docs);
     const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
-    const money = (n: number) => `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const money = (n: number) => `₹${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const valueOf = (label: string) => screen.getByText(label).nextElementSibling?.textContent;
     const open = async (nav: RegExp, heading: string) => {
       fireEvent.click(screen.getAllByRole('button', { name: nav })[0]);
@@ -91,7 +91,7 @@ describe('Demo sandbox', () => {
     const value = sum(materials.map((m: any) => Math.max(m.initialStock - projectedUse(m.id), 0) * m.costPerUnit));
     expect(screen.getByText('Raw Inventory Value').closest('div.surface-card')?.textContent).toContain(money(value));
     const low = materials.filter((m: any) => m.threshold > 0 && m.initialStock - projectedUse(m.id) <= m.threshold);
-    expect(low.map((m: any) => m.name)).toEqual(['Active Dry Yeast']);
+    expect(low.map((m: any) => m.name)).toEqual(['Instant Dry Yeast']);
     expect(screen.getByText('Under Threshold').closest('div.surface-card')?.textContent).toContain('1 SKU');
 
     // Dashboard (today): income - materials used = net profit
