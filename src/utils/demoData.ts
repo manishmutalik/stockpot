@@ -49,22 +49,25 @@ export function buildDemoData(userId: string, today: string) {
 
   // ── Materials: what was bought (opening stock), price, and alert level ─────
   // Current stock is worked out below from what the production runs used.
+  // Prices are typical Indian retail/wholesale rates in rupees, per gram / ml / piece.
   const purchases = [
-    { id: 'm_flour', name: 'All-Purpose Flour', unit: 'g', bought: 60000, costPerUnit: 0.002, category: 'Raw Materials', threshold: 10000 },
-    { id: 'm_sugar', name: 'Granulated Sugar', unit: 'g', bought: 25000, costPerUnit: 0.0015, category: 'Raw Materials', threshold: 5000 },
-    { id: 'm_butter', name: 'Unsalted Butter', unit: 'g', bought: 12000, costPerUnit: 0.012, category: 'Raw Materials', threshold: 2000 },
-    { id: 'm_eggs', name: 'Large Eggs', unit: 'pcs', bought: 150, costPerUnit: 0.25, category: 'Raw Materials', threshold: 30 },
-    { id: 'm_milk', name: 'Whole Milk', unit: 'ml', bought: 20000, costPerUnit: 0.0012, category: 'Raw Materials', threshold: 4000 },
+    { id: 'm_flour', name: 'Maida (All-Purpose Flour)', unit: 'g', bought: 60000, costPerUnit: 0.045, category: 'Raw Materials', threshold: 10000 }, // ₹45/kg
+    { id: 'm_atta', name: 'Whole Wheat Atta', unit: 'g', bought: 40000, costPerUnit: 0.048, category: 'Raw Materials', threshold: 5000 }, // ₹48/kg
+    { id: 'm_sugar', name: 'Sugar', unit: 'g', bought: 25000, costPerUnit: 0.048, category: 'Raw Materials', threshold: 5000 }, // ₹48/kg
+    { id: 'm_butter', name: 'Unsalted Butter', unit: 'g', bought: 12000, costPerUnit: 0.57, category: 'Raw Materials', threshold: 2000 }, // ₹570/kg
+    { id: 'm_eggs', name: 'Eggs', unit: 'pcs', bought: 150, costPerUnit: 7, category: 'Raw Materials', threshold: 30 }, // ₹7 each
+    { id: 'm_milk', name: 'Full Cream Milk', unit: 'ml', bought: 20000, costPerUnit: 0.068, category: 'Raw Materials', threshold: 4000 }, // ₹68/litre
     // Deliberately runs low so the demo shows a Low Stock alert.
-    { id: 'm_yeast', name: 'Active Dry Yeast', unit: 'g', bought: 1000, costPerUnit: 0.05, category: 'Raw Materials', threshold: 300 },
-    { id: 'm_chips', name: 'Chocolate Chips', unit: 'g', bought: 8000, costPerUnit: 0.008, category: 'Raw Materials', threshold: 1500 },
-    { id: 'm_box', name: 'Packaging Box', unit: 'pcs', bought: 300, costPerUnit: 0.50, category: 'Packaging Materials', threshold: 50 },
+    { id: 'm_yeast', name: 'Instant Dry Yeast', unit: 'g', bought: 900, costPerUnit: 0.7, category: 'Raw Materials', threshold: 300 }, // ₹700/kg
+    { id: 'm_chips', name: 'Chocolate Chips', unit: 'g', bought: 8000, costPerUnit: 0.6, category: 'Raw Materials', threshold: 1500 }, // ₹600/kg
+    { id: 'm_box', name: 'Bakery Box', unit: 'pcs', bought: 300, costPerUnit: 12, category: 'Packaging Materials', threshold: 50 }, // ₹12 each
   ];
+
 
   // ── Menu: recipes are per single unit ──────────────────────────────────────
   const menuBase = [
     {
-      id: 'menu_croissant', name: 'Classic Croissant', sellingPrice: 4.50, emoji: '🥐',
+      id: 'menu_croissant', name: 'Butter Croissant', sellingPrice: 150, emoji: '🥐',
       recipe: [
         { materialId: 'm_flour', amount: 150, unit: 'g' },
         { materialId: 'm_sugar', amount: 15, unit: 'g' },
@@ -74,24 +77,27 @@ export function buildDemoData(userId: string, today: string) {
       ],
     },
     {
-      id: 'menu_muffin', name: 'Chocolate Muffin', sellingPrice: 3.75, emoji: '🧁',
+      id: 'menu_muffin', name: 'Chocolate Muffin', sellingPrice: 120, emoji: '🧁',
       recipe: [
         { materialId: 'm_flour', amount: 120, unit: 'g' },
-        { materialId: 'm_sugar', amount: 80, unit: 'g' },
-        { materialId: 'm_butter', amount: 50, unit: 'g' },
+        { materialId: 'm_sugar', amount: 60, unit: 'g' },
+        { materialId: 'm_butter', amount: 30, unit: 'g' },
         { materialId: 'm_eggs', amount: 1, unit: 'pcs' },
         { materialId: 'm_milk', amount: 60, unit: 'ml' },
-        { materialId: 'm_chips', amount: 40, unit: 'g' },
+        { materialId: 'm_chips', amount: 25, unit: 'g' },
       ],
     },
     {
-      id: 'menu_sourdough', name: 'Sourdough Loaf', sellingPrice: 6.00, emoji: '🍞',
+      id: 'menu_bread', name: 'Whole Wheat Atta Loaf', sellingPrice: 90, emoji: '🍞',
       recipe: [
-        { materialId: 'm_flour', amount: 500, unit: 'g' },
-        { materialId: 'm_yeast', amount: 10, unit: 'g' },
+        { materialId: 'm_atta', amount: 400, unit: 'g' },
+        { materialId: 'm_flour', amount: 100, unit: 'g' },
+        { materialId: 'm_sugar', amount: 15, unit: 'g' },
+        { materialId: 'm_yeast', amount: 6, unit: 'g' },
       ],
     },
   ];
+
 
   const recipeUnitCost = (menuId: string) => {
     const item = menuBase.find(m => m.id === menuId)!;
@@ -104,22 +110,22 @@ export function buildDemoData(userId: string, today: string) {
   // ── Orders (one per customer) ──────────────────────────────────────────────
   const orderRows: [string, number, number, string, string][] = [
     // [menu item, quantity, days ago, customer, phone]
-    ['menu_croissant', 8, 0, 'John Smith', '555-0101'],
-    ['menu_muffin', 12, 0, 'Alice Green', '555-0102'],
-    ['menu_sourdough', 4, 0, 'Robert Vance', '555-0103'],
-    ['menu_croissant', 15, 1, 'Cafe Central', '555-0201'],
-    ['menu_muffin', 8, 1, 'David Lee', '555-0202'],
-    ['menu_sourdough', 6, 1, 'Emily Davis', '555-0203'],
-    ['menu_croissant', 6, 2, 'Local Inn', '555-0301'],
-    ['menu_muffin', 10, 2, 'Bake Fanatic', '555-0302'],
-    ['menu_sourdough', 8, 3, 'George Miller', '555-0401'],
-    ['menu_croissant', 12, 3, 'Sarah Connor', '555-0402'],
-    ['menu_muffin', 14, 4, 'Kevin Hart', '555-0501'],
-    ['menu_croissant', 5, 4, 'Office Gathering', '555-0502'],
-    ['menu_sourdough', 10, 5, 'Daily Grind', '555-0601'],
-    ['menu_croissant', 10, 5, 'Hotel Continental', '555-0602'],
-    ['menu_muffin', 15, 6, 'School Event', '555-0701'],
-    ['menu_sourdough', 5, 6, 'Community Center', '555-0702'],
+    ['menu_croissant', 8, 0, 'Priya Sharma', '+91 98450 10101'],
+    ['menu_muffin', 12, 0, 'Rohan Mehta', '+91 98450 10102'],
+    ['menu_bread', 4, 0, 'Sunita Iyer', '+91 98450 10103'],
+    ['menu_croissant', 15, 1, 'Brew & Bite Café', '+91 98860 20201'],
+    ['menu_muffin', 8, 1, 'Arjun Nair', '+91 98860 20202'],
+    ['menu_bread', 6, 1, 'Kavita Reddy', '+91 98860 20203'],
+    ['menu_croissant', 6, 2, 'Hotel Sai Residency', '+91 99001 30301'],
+    ['menu_muffin', 10, 2, 'Tapri Corner Café', '+91 99001 30302'],
+    ['menu_bread', 8, 3, 'Imran Qureshi', '+91 99720 40401'],
+    ['menu_croissant', 12, 3, 'Neha Gupta', '+91 99720 40402'],
+    ['menu_muffin', 14, 4, 'Vikram Singh', '+91 97420 50501'],
+    ['menu_croissant', 5, 4, 'Infosys Road Office Party', '+91 97420 50502'],
+    ['menu_bread', 10, 5, 'Daily Fresh Grocers', '+91 90350 60601'],
+    ['menu_croissant', 10, 5, 'Hotel Udupi Grand', '+91 90350 60602'],
+    ['menu_muffin', 15, 6, 'Greenfield School Fete', '+91 80410 70701'],
+    ['menu_bread', 5, 6, 'Residents Welfare Association', '+91 80410 70702'],
   ];
   const orders: DemoOrder[] = orderRows.map(([menuItemId, quantity, daysAgo, customerName, customerPhone], i) => ({
     id: `ord_${i + 1}`, menuItemId, quantity, date: at(daysAgo), customerName, customerPhone,
@@ -130,13 +136,13 @@ export function buildDemoData(userId: string, today: string) {
   const runRows: [string, string, number, number | undefined, number, number][] = [
     ['run_1', 'menu_croissant', 30, undefined, 6, 2],
     ['run_2', 'menu_muffin', 30, undefined, 6, 3],
-    ['run_3', 'menu_sourdough', 15, undefined, 6, 2],
+    ['run_3', 'menu_bread', 15, undefined, 6, 2],
     ['run_4', 'menu_croissant', 20, undefined, 4, 2],
     ['run_5', 'menu_muffin', 20, 19, 4, 3], // one muffin lost at the bench
-    ['run_6', 'menu_sourdough', 15, undefined, 4, 2],
+    ['run_6', 'menu_bread', 15, undefined, 4, 2],
     ['run_7', 'menu_croissant', 25, undefined, 1, 2],
     ['run_8', 'menu_muffin', 25, undefined, 2, 3],
-    ['run_9', 'menu_sourdough', 15, undefined, 2, 2],
+    ['run_9', 'menu_bread', 15, undefined, 2, 2],
   ];
 
   // Units ordered per item are taken from the oldest batches first (FIFO).
@@ -195,25 +201,26 @@ export function buildDemoData(userId: string, today: string) {
   const experiments = [
     {
       id: 'exp_1',
-      name: 'Gluten-Free Croissant Attempt',
+      name: 'Atta Croissant Trial',
       date: at(2),
       materials: [
-        { materialId: 'm_flour', amount: 200, unit: 'g' },
+        { materialId: 'm_atta', amount: 200, unit: 'g' },
         { materialId: 'm_sugar', amount: 20, unit: 'g' },
         { materialId: 'm_butter', amount: 80, unit: 'g' },
       ],
-      notes: 'Tried replacing AP Flour with almond flour. Dough was too crumbly, did not rise well. Tastes good but texture is off.',
+      notes: 'Tried replacing maida with whole wheat atta. Layers did not separate well and the crumb was dense. Tastes good but the texture is off.',
     },
   ];
+
 
   const settings = {
     name: 'Stockpot Demo Kitchen',
     logo: '',
     primaryColor: '#10b981',
-    address: '123 Market Street, Foodville',
-    phone: '555-0199',
+    address: '14, 80 Feet Road, Indiranagar, Bengaluru 560038',
+    phone: '+91 98450 00199',
     email: `${userId}@demo.stockpot.app`,
-    currency: { code: 'USD', symbol: '$' },
+    currency: { code: 'INR', symbol: '₹' },
     categories: ['Raw Materials', 'Packaging Materials'],
   };
 

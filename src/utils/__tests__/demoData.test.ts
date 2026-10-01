@@ -23,19 +23,21 @@ describe('demo data adds up', () => {
     for (const r of demo.productionRuns) expect(demo.menu.some(m => m.id === r.recipeId)).toBe(true);
   });
 
-  it('prices a croissant at 1.5325 of materials, worked out by hand', () => {
-    // 150g flour x 0.002 + 15g sugar x 0.0015 + 75g butter x 0.012 + 50ml milk x 0.0012 + 5g yeast x 0.05
-    expect(recipeCost('menu_croissant')).toBeCloseTo(0.3 + 0.0225 + 0.9 + 0.06 + 0.25, 6);
-    expect(recipeCost('menu_croissant')).toBeCloseTo(1.5325, 6);
-    expect(recipeCost('menu_sourdough')).toBeCloseTo(1.5, 6); // 500g flour + 10g yeast
+  it('prices a croissant at ₹57.12 of materials, worked out by hand', () => {
+    // 150g maida x 0.045 + 15g sugar x 0.048 + 75g butter x 0.57 + 50ml milk x 0.068 + 5g yeast x 0.7
+    expect(recipeCost('menu_croissant')).toBeCloseTo(6.75 + 0.72 + 42.75 + 3.4 + 3.5, 6);
+    expect(recipeCost('menu_croissant')).toBeCloseTo(57.12, 6);
+    // 400g atta x 0.048 + 100g maida x 0.045 + 15g sugar x 0.048 + 6g yeast x 0.7
+    expect(recipeCost('menu_bread')).toBeCloseTo(19.2 + 4.5 + 0.72 + 4.2, 6);
+    expect(recipeCost('menu_bread')).toBeCloseTo(28.62, 6);
   });
 
   it('costs every production run at quantity produced x recipe cost', () => {
     for (const run of demo.productionRuns) {
       expect(run.costTotal).toBeCloseTo(run.quantityProduced * recipeCost(run.recipeId), 1);
     }
-    // 25 croissants: about 38.31, not thousands
-    expect(byId(demo.productionRuns, 'run_7').costTotal).toBe(38.31);
+    // 25 croissants at ₹57.12 each
+    expect(byId(demo.productionRuns, 'run_7').costTotal).toBe(1428);
   });
 
   it('shelf stock is units made (after waste) minus units ordered, and matches the batches', () => {
@@ -44,7 +46,7 @@ describe('demo data adds up', () => {
     expect(ordered('menu_croissant')).toBe(56);
     expect(byId(demo.menu, 'menu_croissant').finishedGoodsStock).toBe(75 - 56);
     expect(byId(demo.menu, 'menu_muffin').finishedGoodsStock).toBe(74 - 59); // 30 + 19 (one lost) + 25 made
-    expect(byId(demo.menu, 'menu_sourdough').finishedGoodsStock).toBe(45 - 33);
+    expect(byId(demo.menu, 'menu_bread').finishedGoodsStock).toBe(45 - 33);
     for (const item of demo.menu) {
       expect(item.finishedGoodsStock).toBe(produced(item.id) - ordered(item.id));
       const left = sum(demo.productionRuns.filter(r => r.recipeId === item.id).map(r => r.remainingQuantity));
@@ -79,11 +81,13 @@ describe('demo data adds up', () => {
       const req = byId(demo.menu, run.recipeId).recipe.find(r => r.materialId === materialId);
       return req ? convertAmount(req.amount, req.unit, byId(demo.materials, materialId).unit) * run.quantityProduced : 0;
     }));
-    // flour: 75 croissants x 150g + 75 muffins x 120g + 45 loaves x 500g = 42,750g of 60,000g bought
-    expect(used('m_flour')).toBe(42750);
-    expect(byId(demo.materials, 'm_flour').initialStock).toBe(60000 - 42750);
-    // yeast: 75 x 5g + 45 x 10g = 825g of 1,000g bought
-    expect(byId(demo.materials, 'm_yeast').initialStock).toBe(1000 - 825);
+    // maida: 75 croissants x 150g + 75 muffins x 120g + 45 loaves x 100g = 24,750g of 60,000g bought
+    expect(used('m_flour')).toBe(24750);
+    expect(byId(demo.materials, 'm_flour').initialStock).toBe(60000 - 24750);
+    // atta: 45 loaves x 400g = 18,000g of 40,000g bought
+    expect(byId(demo.materials, 'm_atta').initialStock).toBe(40000 - 18000);
+    // yeast: 75 x 5g + 45 x 6g = 645g of 900g bought
+    expect(byId(demo.materials, 'm_yeast').initialStock).toBe(900 - 645);
     // eggs: one per muffin, all 75 baked (the lost muffin still used its egg)
     expect(byId(demo.materials, 'm_eggs').initialStock).toBe(150 - 75);
     // packaging is not part of any recipe, so untouched
@@ -112,6 +116,20 @@ describe('demo data adds up', () => {
     for (const item of demo.menu) {
       const margin = (item.sellingPrice - recipeCost(item.id)) / item.sellingPrice;
       expect(margin).toBeGreaterThan(0.5);
+    }
+  });
+
+  it('is set up for an Indian business: rupees (GST off), and rupee-scale prices', () => {
+    expect(demo.settings.currency).toEqual({ code: 'INR', symbol: '₹' });
+    expect((demo.settings as any).gstApplicable).toBeFalsy();
+    expect(demo.settings.phone).toMatch(/^\+91 /);
+    for (const o of demo.orders) expect(o.customerPhone).toMatch(/^\+91 /);
+    // typical Indian retail prices: staples cost tens of rupees a kilo, butter hundreds
+    expect(byId(demo.materials, 'm_flour').costPerUnit * 1000).toBeCloseTo(45, 6);
+    expect(byId(demo.materials, 'm_butter').costPerUnit * 1000).toBeCloseTo(570, 6);
+    for (const item of demo.menu) {
+      expect(item.sellingPrice).toBeGreaterThanOrEqual(50);
+      expect(item.sellingPrice).toBeLessThanOrEqual(300);
     }
   });
 
