@@ -15,7 +15,7 @@ const renderPage = () => render(<MemoryRouter><LandingPage /></MemoryRouter>);
 describe('LandingPage', () => {
   it('sends every sign-up / log-in call to action to the app', () => {
     renderPage();
-    for (const name of [/log in/i, /start free trial/i, /start your 14-day free trial/i, /explore the demo/i, /get started free/i]) {
+    for (const name of [/log in/i, /start free trial/i, /start your 14-day free trial/i, /get started free/i]) {
       const links = screen.getAllByRole('link', { name });
       expect(links.length).toBeGreaterThan(0);
       links.forEach(l => expect(l.getAttribute('href')).toBe('/app'));
@@ -30,9 +30,17 @@ describe('LandingPage', () => {
 
   it('shows the monthly price in rupees', () => {
     const { container } = renderPage();
-    expect(container.textContent).toContain('Rs.1200');
+    expect(container.textContent).toContain('₹1,200');
     expect(container.textContent).toContain('/ month');
     expect(container.textContent).not.toMatch(/\$\d/);
+    expect(container.textContent).not.toMatch(/₹499/);
+  });
+
+  it('makes no invented claims: no testimonials or made-up statistics', () => {
+    const { container } = renderPage();
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/founder voices|case study|trusted by/i);
+    expect(text).not.toMatch(/-22%|4\.2h|\b12% waste/i);
   });
 
   it('is honest that a card is required for the trial', () => {

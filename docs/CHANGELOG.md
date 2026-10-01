@@ -1,5 +1,33 @@
 # Changelog
 
+## Landing page: revised design, wider desktop layout, rupee price
+
+`src/LandingPage.tsx` follows the revised Stitch landing-page design: a
+two-column hero (headline left, recipe-costing screenshot right), a
+"hidden leaks" problem band, the feature bento, four compact workflow cards,
+a wide single-plan pricing card, a two-column FAQ and a closing call to action.
+
+- **Responsive.** The page was a narrow centred column on desktop; content now
+  spans up to 1,600px with 48px gutters, and the hero, bento, workflow,
+  pricing and FAQ use the extra width. Phone and tablet layouts are unchanged
+  in spirit (single column, no horizontal scroll).
+- **Price is ₹1,200 / month** (was "Rs.1200"), matching the design and the
+  ₹ used throughout the app. The Stripe price behind `STRIPE_PRICE_ID` must be
+  ₹1,200 / month in INR.
+- **Left out of the design on purpose:** the "Founder Voices" testimonials,
+  named case study and results ("food cost variance 8% to 1.5%"), and the
+  invented statistics (-22% margin, 4.2h lost a week, 12% waste, +78% target
+  margin, 35.7% COGS, +₹115 delivery delta). None of them come from real
+  customers or data, so they are not shown; a testimonials section can be added
+  once there are real quotes. Also omitted: the stock-photo hero, the
+  US/India price toggle, the About / Community / Support / Security links
+  (no such pages), the invented browser-bar URL, and "no credit card required"
+  (Stripe Checkout collects a card for the trial, so the page says so).
+- The hero's secondary button now scrolls to the features instead of opening
+  the demo; the demo is still linked from the footer and the FAQ.
+- Every screenshot on the page is a real capture of the app on the (rupee)
+  demo data in `public/landing/`.
+
 ## Demo sandbox: India-specific data
 
 Stockpot is focused on the Indian market for now, so the demo sandbox is now an
