@@ -1,5 +1,15 @@
 # Changelog
 
+## Landing page: laptop and phone showcase
+
+Under "A metric-first kitchen operating system" the two separate screenshot
+cards are replaced by one composition: the recipe-costing screen on a laptop
+with the stock-alerts screen on a phone overlapping its corner (stacked on
+phones). Both are real captures of the app on the rupee demo data (the phone
+one at a 390px mobile layout), in `public/landing/device-laptop.webp` and
+`device-phone.webp`. The recipe and inventory descriptions moved into text
+cards with checked points, so all six features are now cards in a 3 x 2 grid.
+
 ## Landing page: fewer screenshots, more words
 
 The page had eight app screenshots plus three photos. Now it has three app
