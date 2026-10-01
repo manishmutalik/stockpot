@@ -1,5 +1,51 @@
 # Changelog
 
+## Bills: Generate Bill, WhatsApp send and QR codes
+
+Each order, and each multi-item order as a whole, now has a **Generate Bill**
+button (Orders tab). It opens an itemised bill with the business details, line
+items, delivery charge, a GST line when GST is on, and the total, plus two QR
+codes and ways to send it:
+
+- **Scan to pay (UPI)**: a `upi://pay` QR with the business's UPI ID, name,
+  exact amount and the bill reference. Shown only when a **UPI ID** is set
+  (new optional field under Settings > Business & GST) and the currency is
+  INR; otherwise the bill has no payment QR at all.
+- **View bill online**: a QR (and link) to a read-only copy of the bill at
+  `/bill/<token>`. The token is 128 random bits, created the first time a bill
+  is generated, stored on the order(s) as `billToken` and reused afterwards, so
+  links already sent keep working. Generating again refreshes what the page
+  shows, on the same link.
+- **Send via WhatsApp**: on phones, the share sheet opens with the bill image
+  attached; on desktop the image is saved and `wa.me/<number>` opens with a
+  short pre-filled message and the bill link. Nothing is sent automatically
+  (that needs the paid WhatsApp Business API, which was deliberately
+  deferred). Phone numbers are cleaned for `wa.me` (spaces, `+`, leading `0`,
+  `0091`; a bare 10-digit number is taken as Indian). With no usable phone
+  number the button is disabled with an explanation.
+- **Download** saves the bill as a PNG.
+
+How it differs from the original handoff plan, and why:
+
+- The public link is `/bill/<token>`, not `/bill/<orderId>/<token>`. Orders
+  live under `users/{uid}/orders`, so the server could not find one from an
+  order id alone. Instead the server builds the bill itself from Firestore
+  (never from what the browser sends) and stores a snapshot at the top-level
+  `bills/{token}` document, and the public page reads only that. Firestore
+  rules are unchanged in effect (`bills` is denied to every client, as is
+  everything not listed); orders are never exposed or queried publicly.
+- The snapshot has no customer phone, no other orders and no inventory or
+  financials. A wrong, malformed or unknown token gets the same 404 page.
+- The captured bill uses inline hex colours rather than Tailwind classes:
+  `html2canvas` throws on the `oklch()` colours Tailwind v4 emits, which broke
+  Download and Send in a real browser.
+- There is no ESLint in this project (`npm run lint` is `tsc --noEmit`).
+
+New dependency: `qrcode` (+ `@types/qrcode`). New server pieces:
+`lib/billStore.ts`, `lib/billHtml.ts`, `lib/billRoutes.ts`; shared logic in
+`src/utils/billing.ts` (GST goes through the same `splitSaleForGst` as the
+dashboard, with the delivery charge counted once per order).
+
 ## Landing page: laptop and phone showcase
 
 Under "A metric-first kitchen operating system" the two separate screenshot

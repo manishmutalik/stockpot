@@ -10,6 +10,8 @@ import { saveCredentials, getCredentials, deleteCredentials } from "./lib/integr
 import { getStripe } from "./lib/stripe";
 import { setBillingInfo, getBillingInfo, findUidByStripeCustomerId, SubscriptionStatus } from "./lib/subscriptionStore";
 import { searchUsda, searchOpenFoodFacts } from "./lib/nutritionSearch";
+import { createOrRefreshBill, getPublicBill } from "./lib/billStore";
+import { createBillHandler, createPublicBillHandler } from "./lib/billRoutes";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -566,7 +568,19 @@ async function startServer() {
     }
   });
 
+  // --- Customer Bills ---
+  // Creating a bill acts on the signed-in owner's own order, so it is an
+  // authenticated route. (This is separate from /billing above, which is
+  // Stockpot's own subscription billing.)
+  api.post("/bills", requireCsrf, createBillHandler(createOrRefreshBill));
+
   app.use("/api", api);
+
+  // The public, read-only bill a customer opens from the QR code or WhatsApp
+  // link. No sign-in: the unguessable token in the URL is the access check.
+  // Registered before the Vite/static handlers below so the SPA never
+  // swallows it.
+  app.get("/bill/:token", createPublicBillHandler(getPublicBill));
 
   // --- Vite Middleware ---
 
