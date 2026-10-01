@@ -119,9 +119,9 @@ describe('demo data adds up', () => {
     }
   });
 
-  it('is set up for an Indian business: rupees, GST on, and rupee-scale prices', () => {
+  it('is set up for an Indian business: rupees (GST off), and rupee-scale prices', () => {
     expect(demo.settings.currency).toEqual({ code: 'INR', symbol: '₹' });
-    expect(demo.settings.gstApplicable).toBe(true);
+    expect((demo.settings as any).gstApplicable).toBeFalsy();
     expect(demo.settings.phone).toMatch(/^\+91 /);
     for (const o of demo.orders) expect(o.customerPhone).toMatch(/^\+91 /);
     // typical Indian retail prices: staples cost tens of rupees a kilo, butter hundreds

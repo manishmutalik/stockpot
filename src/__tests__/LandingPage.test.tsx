@@ -28,6 +28,13 @@ describe('LandingPage', () => {
     expect(screen.getByRole('link', { name: /privacy policy/i }).getAttribute('href')).toBe('/privacy');
   });
 
+  it('shows the monthly price in rupees', () => {
+    const { container } = renderPage();
+    expect(container.textContent).toContain('Rs.1200');
+    expect(container.textContent).toContain('/ month');
+    expect(container.textContent).not.toMatch(/\$\d/);
+  });
+
   it('is honest that a card is required for the trial', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';

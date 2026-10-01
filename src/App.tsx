@@ -325,7 +325,7 @@ import { getExperimentMaterialUsage } from './utils/experimentMaterialUsage';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
 
-/** Supported display currencies. The first entry (USD) is the default. */
+/** Supported display currencies. The first entry (INR) is the default. */
 // CURRENCIES moved to ./utils/conversions.ts alongside UNIT_CONVERSIONS/convertAmount.
 
 // ─── Root Component ─────────────────────────────────────────────────────────────
@@ -628,7 +628,7 @@ function BakeryApp() {
    * Seeds realistic demo data for a newly created demo user in Firestore.
    * Sets up settings, materials, menu items, sales orders, production runs, and R&D sessions.
    * Uses a single atomic writeBatch to ensure all writes complete together.
-   * Default currency is set to INR (Indian Rupee, code: 'INR', symbol: '₹'), with GST on at 5% (prices inclusive).
+   * Default currency is set to INR (Indian Rupee, code: 'INR', symbol: '₹').
    * The data itself lives in utils/demoData.ts, where every dependent number
    * (batch costs, ingredient and shelf stock) is derived so the demo adds up.
    */

@@ -46,13 +46,13 @@ export function convertAmount(amount: number, fromUnit: string, toUnit: string):
   return conversion !== undefined ? amount * conversion : amount;
 }
 
-/** Supported display currencies. The first entry (USD) is the default. */
+/** Supported display currencies. The first entry (INR) is the default. */
 export const CURRENCIES = [
+  { code: 'INR', symbol: '₹' },
   { code: 'USD', symbol: '$' },
   { code: 'EUR', symbol: '€' },
   { code: 'GBP', symbol: '£' },
   { code: 'JPY', symbol: '¥' },
-  { code: 'INR', symbol: '₹' },
   { code: 'CAD', symbol: 'CA$' },
   { code: 'AUD', symbol: 'A$' },
 ];

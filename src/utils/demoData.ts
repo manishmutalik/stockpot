@@ -221,9 +221,6 @@ export function buildDemoData(userId: string, today: string) {
     phone: '+91 98450 00199',
     email: `${userId}@demo.stockpot.app`,
     currency: { code: 'INR', symbol: '₹' },
-    gstApplicable: true,
-    gstRate: 5,
-    gstPricingMode: 'inclusive',
     categories: ['Raw Materials', 'Packaging Materials'],
   };
 

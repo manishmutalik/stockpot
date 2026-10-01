@@ -5,10 +5,9 @@
 Stockpot is focused on the Indian market for now, so the demo sandbox is now an
 Indian bakery (`src/utils/demoData.ts`):
 
-- **Rupees, GST on.** Currency is INR (₹), and GST is switched on at 5%
-  with prices inclusive, so the Dashboard shows GST collected. The business
-  address and phone are in Bengaluru (+91), and customers have Indian names and
-  +91 phone numbers. The 5% rate is a placeholder for the demo, not tax advice.
+- **Rupees.** Currency is INR (₹). GST is left off in the demo (it can still
+  be switched on in Settings). The business address and phone are in
+  Bengaluru (+91), and customers have Indian names and +91 phone numbers.
 - **Typical Indian prices** (per kg unless noted): maida ₹45, whole wheat
   atta ₹48, sugar ₹48, unsalted butter ₹570, chocolate chips ₹600,
   instant yeast ₹700, milk ₹68 a litre, eggs ₹7 each, bakery box ₹12.
@@ -19,7 +18,12 @@ Indian bakery (`src/utils/demoData.ts`):
 - Everything dependent is still derived, so batch costs, stock and shelf
   stock add up; tests cover the new figures.
 - The ten landing-page screenshots in `public/landing/` were retaken, so they
-  show rupees too. Real new accounts still default to USD; only the demo changed.
+  show rupees too; the GST screenshot is taken with GST switched on.
+- **INR is the default currency** for every account (it was USD): it is now the
+  first entry in `CURRENCIES`. Other currencies are still in the selector.
+- **Landing page price is Rs.1200 / month** (was $24). The Stripe price behind
+  `STRIPE_PRICE_ID` must be Rs.1200 / month in INR, or customers will be charged
+  something different from what the page shows.
 
 ## Landing page: price is $24 / month
 
