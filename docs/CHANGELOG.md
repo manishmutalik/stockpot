@@ -1,5 +1,47 @@
 # Changelog
 
+## Security: Firestore rules rewritten (needs deploying)
+
+**Any signed-in user could grant themselves free access and read other
+customers' data.** The deny rules in `firestore.rules` for the user document
+and `integrationCredentials` did nothing. Firestore rules are additive: when
+several `match` blocks cover a document, access is granted if *any* of them
+allows it, so a specific `allow ... if false` never overrides a broader
+`allow`. The catch-all `match /{document=**}` under `/users/{userId}` also
+matches the user document itself (a recursive wildcard matches zero segments),
+so the owner could write it. Confirmed against the Firestore emulator: an
+ordinary user could
+
+- write `role: 'admin'` on their own user document, and then read and write
+  **every other user's data** (the admin check reads that `role`);
+- write their own `billing` field (subscription status), bypassing payment;
+- read, overwrite and delete their stored Shopify and Odoo tokens;
+- edit and delete ingredient price log entries.
+
+The file no longer uses a recursive wildcard. Each collection the apps use
+(`materials`, `menu`, `orders`, `experiments`, `productionRuns`, `wastageLogs`,
+`settings`) is listed; `priceLog` is create-and-read only; the user document is
+read-only for everyone; and everything not listed (other subcollections, deeper
+nesting, `integrationCredentials`, `bills`) is denied by omission, which another
+rule cannot undo. Admin access (by `role` or the verified owner address) is
+unchanged for business data. The server uses the Admin SDK and is unaffected.
+
+- **Tests.** `npm run test:rules` runs 32 tests against the Firestore emulator
+  (`test/rules/firestore.rules.test.ts`), and a `firestore-rules` job runs them
+  in CI. The same tests fail 10 ways against the old rules. Needs Java 21.
+- **Adding a collection.** A new client-side collection under `users/{uid}` must
+  be added to `isBusinessCollection` in `firestore.rules` (and to the test), or
+  the app will be denied. This is deliberate: it fails closed.
+- **Deploying.** Changing the file does not change production. Publish it with
+  `npx firebase-tools deploy --only firestore:rules --project stockpot-adffe`
+  (a `firebase.json` is now in the repo), or paste it into the Firebase console
+  under Firestore, Rules. Until it is deployed the old, open rules are live.
+- **Still worth doing.** Check whether any user document already has a `role` or
+  a `billing` value nobody put there, and whether any account is a stranger's.
+  Rotating Shopify and Odoo tokens is only needed if you suspect abuse.
+- Also fixed: an ESLint error (a ref assigned during render) in the inventory
+  hook added by the price log, which would have failed CI's ESLint step.
+
 ## True profit, part 3: ingredient price log and per-product profit
 
 The last of the three True Profit steps.
@@ -40,12 +82,10 @@ The last of the three True Profit steps.
 - **Demo.** The demo bakery has a price history for every material; butter,
   eggs, chocolate chips and yeast were topped up at a different price, and the
   history is worked out so the average ends at each material's current cost.
-- **Known limits.** Firestore rules cannot enforce append-only on the log: the
-  existing per-user wildcard rule already allows every write under
-  `users/{uid}`, and rules are additive, so an extra deny would do nothing
-  (this is the same reason the `integrationCredentials` deny is believed to be
-  ineffective). Append-only is therefore a rule of the app code. Dates use UTC,
-  like the rest of the app.
+- **Known limits.** At the time, append-only was only a rule of the app code,
+  because the old rules' wildcard allowed every write (see "Firestore rules
+  rewritten" above, which now enforces it). Dates use UTC, like the rest of the
+  app.
 
 ## True profit, part 2: discounts, payment fees, fixed costs and "Made"
 
