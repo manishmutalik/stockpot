@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { convertAmount } from '../conversions';
+import { convertAmount, enterableUnits } from '../conversions';
 import { getDefaultRecipeUnit } from '../../types';
 
 describe('convertAmount', () => {
@@ -78,5 +78,24 @@ describe('getDefaultRecipeUnit', () => {
 
   it('passes through other units unchanged', () => {
     expect(getDefaultRecipeUnit('pcs')).toBe('pcs');
+  });
+});
+
+describe('enterableUnits', () => {
+  it('offers grams and kilos for a weight, and millilitres and litres for a volume, either way round', () => {
+    expect(enterableUnits('kg')).toEqual(['g', 'kg']);
+    expect(enterableUnits('g')).toEqual(['g', 'kg']);
+    expect(enterableUnits('l')).toEqual(['ml', 'l']);
+    expect(enterableUnits('ml')).toEqual(['ml', 'l']);
+  });
+
+  it('does not mix weight and volume', () => {
+    expect(enterableUnits('kg')).not.toContain('l');
+    expect(enterableUnits('ml')).not.toContain('g');
+  });
+
+  it('offers only itself for a counted or custom unit', () => {
+    expect(enterableUnits('pcs')).toEqual(['pcs']);
+    expect(enterableUnits('bunch')).toEqual(['bunch']);
   });
 });

@@ -1,5 +1,27 @@
 # Changelog
 
+## Fix: restocking in grams, and GST shown when GST is off
+
+- **Quantity in another unit.** The restock form only took the item's own unit,
+  so "500" for an item kept in kg added 500 kg, and the price paid for 500 g
+  was treated as the price for 500 kg. The quantity now has a unit picker next
+  to it (g or kg, ml or l; items counted in pcs have none), starting on the
+  item's own unit. What is typed is converted to the item's unit, and the price
+  paid is for that whole quantity, so 520 for 500 g adds 0.5 kg at 1,040 a kg.
+  The form says so as you type ("Adds 0.5 kg to stock", "Cost per unit: 1,040.00
+  / kg", "For the whole quantity above, 500 g"). Weight and volume are not mixed.
+  The price log entry records the converted quantity and the price per item
+  unit.
+- **GST only when GST is on.** The form always showed "GST (5%)" and a "Total
+  paid" that included it, using a made-up 5% for any item without a rate. It
+  was display only (stock and cost were never changed by it), but it looked as
+  if tax was being added. With GST off, nothing about GST appears and the price
+  box is just "Total price paid". With GST on, the GST and total show for items
+  that have a GST rate; an item without one says so instead of assuming a rate,
+  and the price box reads "before GST".
+- Cancelling a restock now clears what was typed, so the next restock does not
+  open with the previous item's numbers.
+
 ## Security: Firestore rules rewritten (needs deploying)
 
 **Any signed-in user could grant themselves free access and read other

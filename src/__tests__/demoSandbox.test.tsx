@@ -171,7 +171,7 @@ describe('Demo sandbox', () => {
       const before = logs().filter(l => l.materialId === 'm_flour').length;
       fireEvent.click(screen.getByRole('button', { name: 'Restock Maida (All-Purpose Flour)' }));
       fireEvent.change(await screen.findByLabelText(/Quantity added/), { target: { value: '10000' } });
-      fireEvent.change(screen.getByLabelText('Total base price paid'), { target: { value: '520' } });
+      fireEvent.change(screen.getByLabelText('Total price paid'), { target: { value: '520' } });
       fireEvent.click(screen.getByRole('button', { name: 'Confirm Restock' }));
       await waitFor(() => expect(logs().filter(l => l.materialId === 'm_flour' && l.source === 'restock')).toHaveLength(1), { timeout: 5000 });
       expect(logs().filter(l => l.materialId === 'm_flour')).toHaveLength(before + 1);
@@ -184,6 +184,20 @@ describe('Demo sandbox', () => {
       const dialog = await screen.findByRole('dialog', { name: /Price history: Maida/ });
       expect(dialog.textContent).toContain('0.052');
       expect(dialog.textContent).toContain('10000 g');
+    }, 30000);
+
+    it('lets a restock be typed in kilos for an item kept in grams, and shows no GST while GST is off', async () => {
+      await openInventory();
+      fireEvent.click(screen.getByRole('button', { name: 'Restock Maida (All-Purpose Flour)' }));
+      const dialog = within(await screen.findByRole('dialog', { name: /Restock Maida/ }));
+      expect(dialog.queryByText(/GST/)).toBeNull();
+      fireEvent.change(dialog.getByLabelText('Unit of the quantity added'), { target: { value: 'kg' } });
+      fireEvent.change(dialog.getByLabelText(/Quantity added/), { target: { value: '10' } });
+      fireEvent.change(dialog.getByLabelText('Total price paid'), { target: { value: '520' } });
+      expect(dialog.getByText(/Adds/).textContent).toContain('10000 g');
+      fireEvent.click(dialog.getByRole('button', { name: 'Confirm Restock' }));
+      await waitFor(() => expect(logs().filter(l => l.materialId === 'm_flour' && l.source === 'restock')).toHaveLength(1), { timeout: 5000 });
+      expect(logs().find(l => l.materialId === 'm_flour' && l.source === 'restock')).toMatchObject({ unit: 'g', unitCost: 0.052, quantity: 10000 });
     }, 30000);
 
     it('starts a new material\'s history when it is added with a cost, and not when it has none', async () => {

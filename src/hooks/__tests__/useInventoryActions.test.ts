@@ -83,6 +83,72 @@ describe('handleRestock — the price log', () => {
   });
 });
 
+describe('handleRestock — the quantity can be entered in another unit', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const almonds = { id: 'almonds', name: 'Almonds', unit: 'kg', initialStock: 1, costPerUnit: 900 } as RawMaterial;
+
+  const restockIn = async (material: RawMaterial, qty: string, unit: string, total: string) => {
+    const { result } = renderHook(() => useInventoryActions([material], ['Raw Materials'], [], vi.fn(), vi.fn()));
+    act(() => { result.current.setRestockMaterial(material); result.current.setRestockQty(qty); result.current.setRestockQtyUnit(unit); result.current.setRestockBaseTotal(total); });
+    await act(async () => { await result.current.handleRestock({ preventDefault: () => {} } as any); });
+    return { saved: materialWrite()[1] as { initialStock: number; costPerUnit: number }, entry: logWrites()[0][1], result };
+  };
+
+  it('adds 500 g to an item kept in kg as half a kilo, and 520 paid for it is 1,040 a kilo', async () => {
+    const { saved, entry } = await restockIn(almonds, '500', 'g', '520');
+    expect(saved.initialStock).toBe(1.5);
+    // (1 kg at 900 + 520) / 1.5 kg
+    expect(saved.costPerUnit).toBeCloseTo(1420 / 1.5, 5);
+    expect(entry).toMatchObject({ unit: 'kg', unitCost: 1040, quantity: 0.5, source: 'restock' });
+  });
+
+  it('is the same as entering 0.5 in kg', async () => {
+    const a = await restockIn(almonds, '500', 'g', '520');
+    vi.clearAllMocks();
+    const b = await restockIn(almonds, '0.5', 'kg', '520');
+    expect(b.saved).toEqual(a.saved);
+    expect(b.entry).toMatchObject({ unitCost: 1040, quantity: 0.5 });
+  });
+
+  it('uses the item\'s own unit when none is chosen', async () => {
+    const { saved, entry } = await restockIn(almonds, '2', '', '1800');
+    expect(saved.initialStock).toBe(3);
+    expect(entry).toMatchObject({ unit: 'kg', unitCost: 900, quantity: 2 });
+  });
+
+  it('converts kilos typed for an item kept in grams', async () => {
+    const flour = { id: 'f', name: 'Flour', unit: 'g', initialStock: 0, costPerUnit: 0 } as RawMaterial;
+    const { saved, entry } = await restockIn(flour, '2', 'kg', '90');
+    expect(saved.initialStock).toBe(2000);
+    expect(saved.costPerUnit).toBe(0.045);
+    expect(entry).toMatchObject({ unit: 'g', unitCost: 0.045, quantity: 2000 });
+  });
+
+  it('converts millilitres for an item kept in litres', async () => {
+    const milk = { id: 'm', name: 'Milk', unit: 'l', initialStock: 0, costPerUnit: 0 } as RawMaterial;
+    const { saved } = await restockIn(milk, '250', 'ml', '20');
+    expect(saved.initialStock).toBe(0.25);
+    expect(saved.costPerUnit).toBe(80);
+  });
+
+  it('does not leave floating-point noise in the stock', async () => {
+    const { saved } = await restockIn({ ...almonds, initialStock: 0, costPerUnit: 0 }, '333', 'g', '300');
+    expect(saved.initialStock).toBe(0.333);
+  });
+
+  it('clears everything typed when the restock is done or cancelled, including the unit', async () => {
+    const { result } = await restockIn(almonds, '500', 'g', '520');
+    expect(result.current.restockMaterial).toBeNull();
+    expect(result.current.restockQty).toBe('');
+    expect(result.current.restockBaseTotal).toBe('');
+    expect(result.current.restockQtyUnit).toBe('');
+
+    act(() => { result.current.setRestockMaterial(almonds); result.current.setRestockQty('7'); result.current.setRestockQtyUnit('g'); result.current.setRestockBaseTotal('9'); result.current.setRestockExpiryDate('2026-05-01'); });
+    act(() => { result.current.closeRestock(); });
+    expect(result.current).toMatchObject({ restockMaterial: null, restockQty: '', restockBaseTotal: '', restockQtyUnit: '', restockExpiryDate: '' });
+  });
+});
+
 describe('importing materials from CSV — the price log', () => {
   beforeEach(() => { vi.clearAllMocks(); });
   const importRows = async (rows: any[]) => {
