@@ -42,7 +42,7 @@ export const ModalShell: React.FC<{
   );
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-ink/40 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4 bg-ink/40 backdrop-blur-sm"
       onMouseDown={closeOnBackdrop ? (e) => { if (e.target === e.currentTarget) onClose(); } : undefined}
     >
       <div
