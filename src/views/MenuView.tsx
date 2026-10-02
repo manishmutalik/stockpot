@@ -9,7 +9,9 @@ import { MetricCard } from '../components/MetricCard';
 import { NutritionCard } from '../components/NutritionCard';
 import { convertAmount } from '../utils/conversions';
 import { calculateRecipeNutrition } from '../utils/nutritionCalculations';
-import { getMarginInfo, MarginTier, recipeCost, suggestedPrice, summarizeMenu } from '../utils/menuStats';
+import { getMarginInfo, MarginTier, recipeCost, SALES_PERIODS, SalesPeriod, salesPeriodRange, suggestedPrice, summarizeMenu } from '../utils/menuStats';
+import { productProfits } from '../utils/profit';
+import { ProductPerformance } from '../components/ProductPerformance';
 
 type MarginFilter = 'all' | MarginTier;
 
@@ -104,7 +106,7 @@ const RecipeLine: React.FC<{
 
 export const MenuView: React.FC<AppViewProps> = (props) => {
   const {
-    materials, categories, menu, settings, currency, expandedRecipeId, setExpandedRecipeId,
+    materials, categories, menu, orders, settings, currency, expandedRecipeId, setExpandedRecipeId,
     setIsIngredientSelectorOpen, setActiveRecipeItemId, addMenuItem, updateMenuItem, updateMenuItemField,
     deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe
   } = props;
@@ -155,11 +157,20 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
 
   const [search, setSearch] = useState('');
   const [marginFilter, setMarginFilter] = useState<MarginFilter>('all');
+  const [salesPeriod, setSalesPeriod] = useState<SalesPeriod>('30');
 
   const money = (n: number) =>
     `${currency.symbol}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const summary = useMemo(() => summarizeMenu(menu, materials), [menu, materials]);
+
+  // What each product sold and made over the chosen period, from the same sums as the Orders and Summary screens.
+  const productSales = useMemo(() => {
+    const { start, end } = salesPeriodRange(salesPeriod, new Date().toISOString().split('T')[0]);
+    const inPeriod = (orders ?? []).filter(o => o.date <= end && (start === null || o.date >= start));
+    return productProfits(inPeriod, menu, materials, settings);
+  }, [orders, menu, materials, settings.gstApplicable, settings.gstRate, settings.gstPricingMode, salesPeriod]);
+  const periodPhrase = SALES_PERIODS.find(p => p.value === salesPeriod)!.phrase;
 
   const q = search.trim().toLowerCase();
   const visible = useMemo(
@@ -264,6 +275,9 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
           <option value="high">60% and up</option>
           <option value="mid">40% – 60%</option>
           <option value="low">Under 40% / unpriced</option>
+        </select>
+        <select aria-label="Sales period" value={salesPeriod} onChange={(e) => setSalesPeriod(e.target.value as SalesPeriod)} className={selectCls}>
+          {SALES_PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
         <span className="font-mono text-[11px] text-muted sm:ml-auto">
           {visible.length} of {menu.length} item{menu.length === 1 ? '' : 's'}
@@ -424,6 +438,18 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                     <span className={LABEL}>Suggest</span>
                     <div className="font-mono text-base font-semibold text-primary mt-0.5">{currency.symbol}{suggested.toFixed(2)}</div>
                   </button>
+                </div>
+
+                {/* What it sold and what it made over the period chosen above */}
+                <div className="rounded-xl border border-stone-100 px-3 py-2.5">
+                  <div className={`${LABEL} mb-1.5`}>{SALES_PERIODS.find(p => p.value === salesPeriod)!.label}</div>
+                  <ProductPerformance
+                    name={item.name}
+                    profit={productSales.get(item.id)}
+                    recipe={{ tier, margin }}
+                    money={money}
+                    periodLabel={periodPhrase}
+                  />
                 </div>
 
                 {/* Shown on the menu PDF you share with customers */}

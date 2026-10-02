@@ -149,6 +149,86 @@ export function orderContribution(
   };
 }
 
+export interface ProductProfit {
+  menuItemId: string;
+  /** Units sold. */
+  unitsSold: number;
+  /** Orders (a multi-item order counts once) that include this product. */
+  orderCount: number;
+  /** Item sales after this product's share of any discount, pre-GST base. Delivery charged is not in it. */
+  revenue: number;
+  /** What the product made: its revenue, plus its share of delivery charged, minus its own ingredients and packaging and its share of courier and payment fees. */
+  contribution: number;
+  /** contribution / unitsSold. */
+  avgContributionPerUnit: number;
+  /** True if any order of it used today's price or cost because it predates stamping. */
+  estimated: boolean;
+}
+
+/**
+ * What each product made over a set of orders (the caller filters by date).
+ * A product's own sales, ingredients and packaging are exact. The charges an
+ * order shares between its items (delivery charged, discount, courier fee,
+ * payment fee) are split in proportion to each item's sales in that order, so
+ * the products' contributions always add up to the orders' contributions.
+ */
+export function productProfits(
+  orders: Order[],
+  menu: MenuItem[],
+  materials: RawMaterial[],
+  settings: GstSettings
+): Map<string, ProductProfit> {
+  const result = new Map<string, ProductProfit>();
+  for (const cluster of clusterOrdersByGroup(orders)) {
+    const members = cluster.type === 'single' ? [cluster.order] : cluster.orders;
+    const whole = orderContribution(members, menu, materials, settings);
+    const sale = saleAmounts(members, menu, settings);
+    // Each item's weight is its sales; with nothing priced, its units.
+    const weightOf = (o: Order) => (sale.itemsGross > 0 ? resolveUnitPrice(o, menu).value * (o.quantity || 0) : o.quantity || 0);
+    const totalWeight = members.reduce((sum, o) => sum + weightOf(o), 0);
+    const shared = whole.deliveryCharged - whole.discount - whole.courierFee - whole.paymentFee;
+
+    const lines = new Map<string, Order[]>();
+    for (const o of members) lines.set(o.menuItemId, [...(lines.get(o.menuItemId) ?? []), o]);
+
+    for (const [menuItemId, items] of lines) {
+      const share = totalWeight > 0 ? items.reduce((sum, o) => sum + weightOf(o), 0) / totalWeight : 0;
+      let gross = 0, ingredients = 0, packaging = 0, units = 0, estimated = false;
+      for (const o of items) {
+        const qty = o.quantity || 0;
+        const price = resolveUnitPrice(o, menu);
+        const costs = resolveUnitCosts(o, menu, materials);
+        gross += price.value * qty * sale.baseScale;
+        ingredients += costs.ingredients * qty;
+        packaging += costs.packaging * qty;
+        units += qty;
+        estimated ||= price.estimated || costs.estimated;
+      }
+      const entry = result.get(menuItemId) ?? { menuItemId, unitsSold: 0, orderCount: 0, revenue: 0, contribution: 0, avgContributionPerUnit: 0, estimated: false };
+      entry.unitsSold += units;
+      entry.orderCount += 1;
+      entry.revenue += gross - whole.discount * share;
+      entry.contribution += gross + shared * share - ingredients - packaging;
+      entry.estimated ||= estimated;
+      result.set(menuItemId, entry);
+    }
+  }
+  for (const entry of result.values()) entry.avgContributionPerUnit = entry.unitsSold > 0 ? entry.contribution / entry.unitsSold : 0;
+  return result;
+}
+
+/** What one product made over a set of orders. Zeros if it has no orders in them. */
+export function productProfit(
+  menuItemId: string,
+  orders: Order[],
+  menu: MenuItem[],
+  materials: RawMaterial[],
+  settings: GstSettings
+): ProductProfit {
+  return productProfits(orders, menu, materials, settings).get(menuItemId)
+    ?? { menuItemId, unitsSold: 0, orderCount: 0, revenue: 0, contribution: 0, avgContributionPerUnit: 0, estimated: false };
+}
+
 const pad = (n: number) => String(n).padStart(2, '0');
 const daysInMonth = (year: number, month: number) => new Date(Date.UTC(year, month, 0)).getUTCDate();
 const dayNumber = (iso: string) => {

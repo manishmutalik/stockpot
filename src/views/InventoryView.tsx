@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
   AlertCircle, ChevronLeft, ChevronRight, CircleCheck, Download, Package, PackageMinus, Plus,
-  RefreshCw, Salad, Search, ShoppingCart, SlidersHorizontal, Trash2, TriangleAlert, Upload, Wallet
+  History, RefreshCw, Salad, Search, ShoppingCart, SlidersHorizontal, Trash2, TriangleAlert, Upload, Wallet
 } from 'lucide-react';
 import { AppViewProps } from '../types';
 import { UNIT_CONVERSIONS } from '../utils/conversions';
+import { PriceHistoryModal } from '../components/PriceHistoryModal';
 import { getExpiryInfo, getParDeficitPercent, getStockStatus, StockStatus } from '../utils/inventoryStatus';
 
 const PAGE_SIZE = 15;
@@ -30,9 +32,11 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
     handleImportCSV, setAddMaterialCategory, setShowAddMaterialModal, categories, settings,
     currency, inventorySortBy, setInventorySortBy, inventorySortOrder, setInventorySortOrder,
     sortedRemainingInventory, remainingInventory, lowStockItems, refreshData, updateMaterial,
-    deleteMaterial, setRestockMaterial, setDiscardTarget, openNutritionEditor
+    deleteMaterial, setRestockMaterial, setDiscardTarget, openNutritionEditor, priceLog
   } = props;
 
+  // The material whose price history is open (kept by id, so it follows the material if it is renamed).
+  const [historyForId, setHistoryForId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -502,6 +506,14 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
                           {isLow && 'Restock'}
                         </button>
                         <button
+                          onClick={() => setHistoryForId(mat.id)}
+                          className="p-2 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                          title="Price history"
+                          aria-label={`Price history of ${mat.name}`}
+                        >
+                          <History size={16} />
+                        </button>
+                        <button
                           onClick={() => openNutritionEditor(mat)}
                           className="p-2 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
                           title="Nutrition & allergens"
@@ -582,6 +594,15 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
           </div>
         )}
       </div>
+
+      {historyForId && (() => {
+        const material = remainingInventory.find(m => m.id === historyForId);
+        // In a portal, so the screen's entrance animation can't offset the fixed overlay.
+        return material ? createPortal(
+          <PriceHistoryModal material={material} entries={priceLog ?? []} currencySymbol={currency.symbol} onClose={() => setHistoryForId(null)} />,
+          document.body
+        ) : null;
+      })()}
     </motion.div>
   );
 };

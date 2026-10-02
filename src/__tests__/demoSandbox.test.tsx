@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 
 // Runs the real App against an in-memory Firebase (see fakeFirebase.ts) so the
 // sign-in -> seed -> render path is exercised end to end without a backend.
@@ -148,4 +148,86 @@ describe('Demo sandbox', () => {
       fake.current.module.writeBatch = realCommit;
     }
   });
+
+  describe('ingredient price log', () => {
+    const logs = () => [...fake.current.store.entries()].filter(([k]) => k.includes('/priceLog/')).map(([, v]) => v as any);
+    const openInventory = async () => {
+      await startDemo();
+      await waitFor(() => expect([...fake.current.store.keys()].some((k: string) => k.includes('/productionRuns/run_9'))).toBe(true), { timeout: 5000 });
+      await screen.findAllByText('Stockpot Demo Kitchen', {}, { timeout: 5000 });
+      fireEvent.click(screen.getAllByRole('button', { name: /Stock \/ Inventory/ })[0]);
+      await screen.findByText('Raw Materials & Inventory', {}, { timeout: 8000 });
+    };
+
+    it('seeds a price history for every material', async () => {
+      await startDemo();
+      await waitFor(() => expect(logs().length).toBeGreaterThan(0), { timeout: 5000 });
+      const materials = [...fake.current.store.entries()].filter(([k]) => k.includes('/materials/')).map(([, v]) => v as any);
+      for (const m of materials) expect(logs().some(l => l.materialId === m.id)).toBe(true);
+    });
+
+    it('records the price paid when something is restocked, and shows it in the history', async () => {
+      await openInventory();
+      const before = logs().filter(l => l.materialId === 'm_flour').length;
+      fireEvent.click(screen.getByRole('button', { name: 'Restock Maida (All-Purpose Flour)' }));
+      fireEvent.change(await screen.findByLabelText(/Quantity added/), { target: { value: '10000' } });
+      fireEvent.change(screen.getByLabelText('Total base price paid'), { target: { value: '520' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm Restock' }));
+      await waitFor(() => expect(logs().filter(l => l.materialId === 'm_flour' && l.source === 'restock')).toHaveLength(1), { timeout: 5000 });
+      expect(logs().filter(l => l.materialId === 'm_flour')).toHaveLength(before + 1);
+      const entry = logs().find(l => l.materialId === 'm_flour' && l.unitCost === 0.052)!;
+      expect(entry).toMatchObject({ unit: 'g', quantity: 10000, source: 'restock' });
+      expect(entry.macAfter).toBeGreaterThan(0.045);
+      expect(entry.macAfter).toBeLessThan(0.052);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Price history of Maida (All-Purpose Flour)' }));
+      const dialog = await screen.findByRole('dialog', { name: /Price history: Maida/ });
+      expect(dialog.textContent).toContain('0.052');
+      expect(dialog.textContent).toContain('10000 g');
+    }, 30000);
+
+    it('starts a new material\'s history when it is added with a cost, and not when it has none', async () => {
+      await openInventory();
+      const add = async (name: string, cost: string) => {
+        fireEvent.click(screen.getAllByRole('button', { name: /Add Item/ })[0]);
+        const dialog = within(await screen.findByRole('dialog'));
+        fireEvent.change(dialog.getByLabelText(/Item name/), { target: { value: name } });
+        if (cost) fireEvent.change(dialog.getByLabelText(/Cost per unit/), { target: { value: cost } });
+        fireEvent.change(dialog.getByLabelText('Initial stock'), { target: { value: '5' } });
+        fireEvent.click(dialog.getByRole('button', { name: /Add Item/ }));
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), { timeout: 5000 });
+      };
+      await add('Saffron', '300');
+      await add('Tap Water', '');
+      const mats = [...fake.current.store.entries()].filter(([k]) => k.includes('/materials/')).map(([, v]) => v as any);
+      const saffron = mats.find(m => m.name === 'Saffron'), water = mats.find(m => m.name === 'Tap Water');
+      expect(saffron).toBeTruthy();
+      expect(water).toBeTruthy();
+      expect(logs().filter(l => l.materialId === saffron.id)).toEqual([expect.objectContaining({ unitCost: 300, quantity: 5, macAfter: 300, source: 'initial' })]);
+      expect(logs().some(l => l.materialId === water.id)).toBe(false);
+    }, 30000);
+
+    it('records one entry for a cost edited by hand, once the typing has stopped', async () => {
+      await openInventory();
+      const before = logs().length;
+      const input = screen.getByLabelText('Cost per unit of Maida (All-Purpose Flour)');
+      for (const v of ['5', '50', '0.05']) fireEvent.change(input, { target: { value: v } });
+      expect(logs()).toHaveLength(before); // nothing yet: still typing
+      await waitFor(() => expect(logs()).toHaveLength(before + 1), { timeout: 4000 });
+      expect(logs().find(l => l.source === 'manual_edit')).toMatchObject({ materialId: 'm_flour', unit: 'g', unitCost: 0.05 });
+    }, 30000);
+  });
+
+  it('shows what each product sold and made on the Menu screen, matching the seeded orders', async () => {
+    await startDemo();
+    await waitFor(() => expect([...fake.current.store.keys()].some((k: string) => k.includes('/productionRuns/run_9'))).toBe(true), { timeout: 5000 });
+    await screen.findAllByText('Stockpot Demo Kitchen', {}, { timeout: 5000 });
+    const orders = [...fake.current.store.entries()].filter(([k]) => k.includes('/orders/')).map(([, v]) => v as any);
+    fireEvent.click(screen.getAllByRole('button', { name: /Recipes . Menus/ })[0]);
+    const sales = await screen.findByRole('group', { name: 'Sales of Butter Croissant' }, { timeout: 8000 });
+    const units = orders.filter(o => o.menuItemId === 'menu_croissant').reduce((n, o) => n + o.quantity, 0);
+    expect(sales.textContent).toContain(`${units} units`);
+    const revenue = orders.filter(o => o.menuItemId === 'menu_croissant').reduce((n, o) => n + o.unitPriceAtSale * o.quantity - (o.discount || 0), 0);
+    expect(sales.textContent).toContain(revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  }, 30000);
 });

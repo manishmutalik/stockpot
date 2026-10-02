@@ -171,4 +171,29 @@ describe('demo data adds up', () => {
     for (const c of demo.settings.fixedCosts!) expect(c.monthlyAmount).toBeGreaterThan(0);
     expect(new Set(demo.settings.fixedCosts!.map(c => c.id)).size).toBe(demo.settings.fixedCosts!.length);
   });
+
+  it('has a price history for every material, ending at the material\'s current cost', () => {
+    for (const mat of demo.materials) {
+      const entries = demo.priceLog.filter(e => e.materialId === mat.id).sort((a, b) => a.date.localeCompare(b.date) || a.createdAt - b.createdAt);
+      expect(entries.length).toBeGreaterThan(0);
+      expect(entries[0].source).toBe('initial');
+      for (const e of entries) { expect(e.unit).toBe(mat.unit); expect(e.unitCost).toBeGreaterThan(0); }
+      const last = entries[entries.length - 1];
+      expect(last.macAfter).toBeCloseTo(mat.costPerUnit, 5);
+    }
+    expect(new Set(demo.priceLog.map(e => e.id)).size).toBe(demo.priceLog.length);
+    expect(demo.priceLog.every(e => demo.materials.some(m => m.id === e.materialId))).toBe(true);
+  });
+
+  it('shows prices that moved: some materials were topped up at a different price, with the average in between', () => {
+    const butter = demo.priceLog.filter(e => e.materialId === 'm_butter').sort((a, b) => a.createdAt - b.createdAt);
+    expect(butter).toHaveLength(2);
+    expect(butter[1].unitCost).toBeGreaterThan(butter[0].unitCost);
+    expect(butter[1].macAfter!).toBeGreaterThan(butter[0].unitCost);
+    expect(butter[1].macAfter!).toBeLessThan(butter[1].unitCost);
+    // What was bought in the two lots is the material's opening stock in the demo
+    const bought = butter.reduce((sum, e) => sum + e.quantity!, 0);
+    const blended = butter.reduce((sum, e) => sum + e.quantity! * e.unitCost, 0) / bought;
+    expect(blended).toBeCloseTo(byId(demo.materials, 'm_butter').costPerUnit, 5);
+  });
 });

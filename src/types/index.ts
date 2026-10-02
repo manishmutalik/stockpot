@@ -19,6 +19,33 @@ export interface InventoryBatch {
   dateAdded: string;
 }
 
+/** Why a price was recorded in the price log. 'goods_receipt' is reserved for Purchase Management. */
+export type PriceLogSource = 'initial' | 'restock' | 'manual_edit' | 'goods_receipt';
+
+/**
+ * One price paid for a material (`users/{uid}/priceLog/{id}`). Append-only: the
+ * app only ever adds entries, never edits or deletes them (deleting a material
+ * leaves its history behind). Nothing here feeds a calculation; it is a record
+ * that Price & Margin Intelligence can read later, and it only accumulates from
+ * the day logging started.
+ */
+export interface PriceLogEntry {
+  id: string;
+  materialId: string;
+  date: string; // YYYY-MM-DD
+  /** Price paid per `unit`, excluding input GST. */
+  unitCost: number;
+  /** The unit `unitCost` and `quantity` are in. A material can later change unit; the entry keeps the one it was recorded in. */
+  unit: string;
+  /** How much was bought, in `unit`, when known. */
+  quantity?: number;
+  /** The material's moving-average cost per `unit` once this entry was applied. */
+  macAfter?: number;
+  source: PriceLogSource;
+  /** When the entry was written (ms), to order entries made on the same day. */
+  createdAt: number;
+}
+
 export interface RawMaterial {
   id: string;
   name: string;
@@ -314,6 +341,8 @@ export interface AppViewProps {
   productionRuns: ProductionRun[];
   setProductionRuns: (p: ProductionRun[]) => void;
   wastageLogs: WastageLog[];
+  /** Every price recorded for any material (append-only), newest or oldest in no particular order; see utils/priceLog. */
+  priceLog: PriceLogEntry[];
   setWastageLogs: (w: WastageLog[]) => void;
   
   isProductionRunModalOpen: boolean;

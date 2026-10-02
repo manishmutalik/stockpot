@@ -1,6 +1,6 @@
 import { convertAmount } from './conversions';
 import { stampFor, type OrderStamp } from './orderPricing';
-import type { PaymentMethod } from '../types';
+import type { PaymentMethod, PriceLogEntry } from '../types';
 
 /**
  * Sample data for the demo sandbox.
@@ -249,5 +249,35 @@ export function buildDemoData(userId: string, today: string) {
     ],
   };
 
-  return { settings, materials, menu, orders, productionRuns, experiments };
+  // ── Price log: what was paid for each material ────────────────────────────
+  // Everything opened at its price 30 days ago. Butter, eggs, chocolate chips and yeast were topped up
+  // later at a different price, so the history has something to show. The opening and the top-up are
+  // worked out so that the blended average comes out at the material's current cost (what `purchases`
+  // says), the same way a real restock would leave it.
+  const topUps: Record<string, { share: number; openedAt: number; daysAgo: number }> = {
+    m_butter: { share: 0.4, openedAt: 0.92, daysAgo: 12 },   // butter got dearer
+    m_eggs: { share: 0.4, openedAt: 0.9, daysAgo: 9 },       // so did eggs
+    m_chips: { share: 0.35, openedAt: 0.95, daysAgo: 16 },
+    m_yeast: { share: 0.3, openedAt: 1.1, daysAgo: 7 },      // yeast got cheaper
+  };
+  const round6 = (n: number) => Math.round((n + Number.EPSILON) * 1e6) / 1e6;
+  const priceLog: PriceLogEntry[] = purchases.flatMap(m => {
+    const opened = at(30);
+    const entry = (n: number, date: string, unitCost: number, quantity: number, macAfter: number, source: PriceLogEntry['source']): PriceLogEntry => ({
+      id: `pl_${m.id}_${n}`, materialId: m.id, date, unit: m.unit, unitCost: round6(unitCost), quantity: round6(quantity),
+      macAfter: round6(macAfter), source, createdAt: Date.parse(`${date}T08:00:00Z`) + n,
+    });
+    const topUp = topUps[m.id];
+    if (!topUp) return [entry(1, opened, m.costPerUnit, m.bought, m.costPerUnit, 'initial')];
+    const firstQty = m.bought * (1 - topUp.share);
+    const firstCost = m.costPerUnit * topUp.openedAt;
+    const laterQty = m.bought * topUp.share;
+    const laterCost = (m.costPerUnit * m.bought - firstQty * firstCost) / laterQty;
+    return [
+      entry(1, opened, firstCost, firstQty, firstCost, 'initial'),
+      entry(2, at(topUp.daysAgo), laterCost, laterQty, m.costPerUnit, 'restock'),
+    ];
+  });
+
+  return { settings, materials, menu, orders, productionRuns, experiments, priceLog };
 }

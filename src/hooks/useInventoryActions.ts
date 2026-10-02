@@ -11,15 +11,19 @@
  * pattern/rationale) and passed in as read-only parameters.
  */
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Papa from 'papaparse';
 import { auth, db, doc, setDoc, deleteDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { apiFetch } from '../utils/apiClient';
 import { RawMaterial, MenuItem } from '../types';
+import { newPriceLogEntry } from '../utils/priceLog';
 // Type-only: erased at build time, so the search functions themselves
 // (axios calls, USDA_API_KEY) never end up in the client bundle.
 import type { NutritionSearchResult } from '../../lib/nutritionSearch';
+
+/** How long the cost box must be quiet before a hand edit counts as a price. */
+export const COST_EDIT_LOG_DELAY_MS = 1000;
 
 export function useInventoryActions(
   materials: RawMaterial[],
@@ -122,6 +126,14 @@ export function useInventoryActions(
 
             const docRef = doc(db, 'users', userId, 'materials', id);
             batch.set(docRef, newMat);
+            // A material that arrives with a cost starts its price history with it.
+            if (newMat.costPerUnit > 0) {
+              const entry = newPriceLogEntry({
+                materialId: id, unit: newMat.unit, unitCost: newMat.costPerUnit, macAfter: newMat.costPerUnit, source: 'initial',
+                ...(newMat.initialStock > 0 && { quantity: newMat.initialStock }),
+              });
+              batch.set(doc(db, 'users', userId, 'priceLog', entry.id), entry);
+            }
             count++;
           });
 
@@ -187,6 +199,43 @@ export function useInventoryActions(
     );
   };
 
+  // ── Price log: cost edited by hand ───────────────────────────────────────
+  // The cost box saves on every keystroke, so typing "0.045" would write 0, 0.0,
+  // 0.04 and 0.045. Only where the edit settles is a price: a log entry is written
+  // once the box has been quiet for a moment, and none if it ended where it began.
+  // This lives here rather than in the Inventory screen so a pending entry still
+  // lands if the owner switches tabs straight after typing.
+  const materialsRef = useRef(materials);
+  materialsRef.current = materials;
+  const pendingCostEdits = useRef(new Map<string, { startCost: number; latest: number; timer: ReturnType<typeof setTimeout> }>());
+
+  const writeCostEditLog = (id: string, startCost: number, latest: number) => {
+    const mat = materialsRef.current.find(m => m.id === id);
+    if (!mat || !auth.currentUser || !(latest > 0) || latest === startCost) return;
+    const userId = auth.currentUser.uid;
+    const entry = newPriceLogEntry({ materialId: id, unit: mat.unit || 'g', unitCost: latest, macAfter: latest, source: 'manual_edit' });
+    setDoc(doc(db, 'users', userId, 'priceLog', entry.id), entry).catch(err => console.error('Could not record the price change', err));
+  };
+
+  const scheduleCostEditLog = (id: string, currentCost: number, newCost: number) => {
+    const pending = pendingCostEdits.current.get(id);
+    if (pending) clearTimeout(pending.timer);
+    const startCost = pending ? pending.startCost : currentCost;
+    const timer = setTimeout(() => {
+      pendingCostEdits.current.delete(id);
+      writeCostEditLog(id, startCost, newCost);
+    }, COST_EDIT_LOG_DELAY_MS);
+    pendingCostEdits.current.set(id, { startCost, latest: newCost, timer });
+  };
+
+  useEffect(() => () => {
+    for (const [id, { startCost, latest, timer }] of pendingCostEdits.current) {
+      clearTimeout(timer);
+      writeCostEditLog(id, startCost, latest);
+    }
+    pendingCostEdits.current.clear();
+  }, []);
+
   /**
    * Partially updates a material document in Firestore via `setDoc` with `merge: true`.
    */
@@ -194,6 +243,7 @@ export function useInventoryActions(
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const mat = materials.find(m => m.id === id);
+    if (field === 'costPerUnit' && mat) scheduleCostEditLog(id, mat.costPerUnit || 0, Number(value) || 0);
     try {
       if (mat) {
         await setDoc(doc(db, 'users', userId, 'materials', id), {
@@ -254,7 +304,15 @@ export function useInventoryActions(
       if (restockExpiryDate) {
         restockUpdate.expiryDate = restockExpiryDate;
       }
-      await setDoc(doc(db, 'users', userId, 'materials', restockMaterial.id), restockUpdate, { merge: true });
+      // The material and its price-log entry are written together, so a restock is never half recorded.
+      const entry = newPriceLogEntry({
+        materialId: restockMaterial.id, unit: restockMaterial.unit || 'g',
+        unitCost: baseTotal / qty, quantity: qty, macAfter: restockUpdate.costPerUnit, source: 'restock',
+      });
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', userId, 'materials', restockMaterial.id), restockUpdate, { merge: true });
+      batch.set(doc(db, 'users', userId, 'priceLog', entry.id), entry);
+      await batch.commit();
 
       setRestockMaterial(null);
       setRestockQty('');
