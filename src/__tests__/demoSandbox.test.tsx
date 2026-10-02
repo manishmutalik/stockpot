@@ -80,7 +80,7 @@ describe('Demo sandbox', () => {
 
     // Orders (default range is the last 7 days, which covers every seeded order)
     await open(/Orders/, 'Customer & Courier Orders');
-    const revenue = sum(orders.map((o: any) => menu.find((m: any) => m.id === o.menuItemId).sellingPrice * o.quantity));
+    const revenue = sum(orders.map((o: any) => menu.find((m: any) => m.id === o.menuItemId).sellingPrice * o.quantity - (o.discount || 0)));
     expect(valueOf('Total Orders')).toBe(String(orders.length));
     expect(valueOf('Revenue Booked')).toBe(money(revenue));
     expect(valueOf('Pending Fulfilment')).toBe(String(orders.filter((o: any) => !o.fulfilled).length));

@@ -250,3 +250,45 @@ describe('bills use the price and name the order was made at', () => {
     expect(first.total).toBe(450 * 3);
   });
 });
+
+describe('discount on a bill', () => {
+  it('shows the discount and takes it off the total', () => {
+    const bill = buildBill({ orders: [order('o1', { quantity: 2, discount: 100 })], menu, settings, currency: INR });
+    expect(bill.itemsTotal).toBe(1000);
+    expect(bill.discount).toBe(100);
+    expect(bill.total).toBe(900);
+  });
+
+  it('has a discount of 0 when none was given', () => {
+    expect(buildBill({ orders: [order('o1')], menu, settings, currency: INR }).discount).toBe(0);
+  });
+
+  it('counts a multi-item order\'s discount once', () => {
+    const orders = [
+      order('g1', { orderGroupId: 'g', discount: 50 }),
+      order('g2', { orderGroupId: 'g', menuItemId: 'cookie', quantity: 5 }),
+    ];
+    const bill = buildBill({ orders, menu, settings, currency: INR });
+    expect(bill.discount).toBe(50);
+    expect(bill.total).toBe(500 + 100 - 50);
+  });
+
+  it('charges GST on the discounted amount', () => {
+    const bill = buildBill({
+      orders: [order('o1', { discount: 100 })], menu, currency: INR,
+      settings: { ...settings, gstApplicable: true, gstRate: 10, gstPricingMode: 'exclusive' },
+    });
+    expect(bill.gst?.amount).toBe(40);
+    expect(bill.total).toBe(440);
+  });
+
+  it('adds up the discounts of each order on a statement', () => {
+    const orders = [
+      order('a', { date: '2026-03-01', discount: 30 }),
+      order('b', { date: '2026-03-02', menuItemId: 'cookie', quantity: 2, discount: 10 }),
+    ];
+    const bill = buildBill({ orders, menu, settings, currency: INR, statement: true, today: '2026-03-20' });
+    expect(bill.discount).toBe(40);
+    expect(bill.total).toBe(500 + 40 - 40);
+  });
+});

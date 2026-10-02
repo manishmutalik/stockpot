@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   ArrowRight, Calculator, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Factory,
-  Package, Percent, Plus, Trash2, TrendingUp, Truck, TriangleAlert
+  CreditCard, Package, Percent, Plus, Receipt, Tag, Trash2, TrendingUp, Truck, TriangleAlert, Wallet
 } from 'lucide-react';
 import { AppViewProps } from '../types';
 import { MetricCard } from '../components/MetricCard';
@@ -241,6 +241,35 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
         </div>
       )}
 
+      {/* What the business really made: after payment fees and fixed costs, and what each order made on average */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+        <MetricCard
+          label="True Profit"
+          value={fmt(financials.trueProfit ?? financials.profit)}
+          icon={Wallet}
+          tone="teal"
+          footLeft="After all costs"
+          footRight={income > 0 ? `${(((financials.trueProfit ?? financials.profit) / income) * 100).toFixed(1)}% of income` : null}
+        />
+        <MetricCard
+          label="Avg Order Contribution"
+          value={fmt(financials.avgOrderContribution ?? 0)}
+          icon={Calculator}
+          tone="slate"
+          footLeft={`${financials.orderCount ?? 0} order${financials.orderCount === 1 ? '' : 's'}`}
+          footRight="Made per order"
+        />
+        {(financials.fixedCosts ?? 0) > 0 && (
+          <MetricCard label="Fixed Costs" value={fmt(financials.fixedCosts)} icon={Receipt} tone="slate" footLeft="Overheads" footRight="Prorated" />
+        )}
+        {(financials.paymentFees ?? 0) > 0 && (
+          <MetricCard label="Payment Fees" value={fmt(financials.paymentFees)} icon={CreditCard} tone="coral" footLeft="Fees paid" footRight={ofIncome(financials.paymentFees)} />
+        )}
+        {(financials.discounts ?? 0) > 0 && (
+          <MetricCard label="Discounts" value={fmt(financials.discounts)} icon={Tag} tone="coral" footLeft="Given away" footRight={ofIncome(financials.discounts)} />
+        )}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
         {/* LEFT: trends + production */}
         <div className="lg:col-span-8 space-y-4 lg:space-y-6 min-w-0">
@@ -428,6 +457,9 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                 <div>{filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''} · {itemsSold} item{itemsSold !== 1 ? 's' : ''} sold</div>
                 {income === 0 && <div>No sales yet</div>}
                 {financials.experimentExpenses > 0 && <div>Operating Exp: {fmt(financials.experimentExpenses)} R&amp;D</div>}
+                {(financials.unpaidIncome ?? 0) > 0 && (
+                  <div className="normal-case tracking-normal">Includes {fmt(financials.unpaidIncome)} not yet paid</div>
+                )}
                 {financials.estimated && (
                   <div
                     className="normal-case tracking-normal"

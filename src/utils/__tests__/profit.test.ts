@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { financialsForRange, orderContribution } from '../profit';
+import { financialsForRange, fixedCostsForRange, orderContribution } from '../profit';
 import { stampFor } from '../orderPricing';
 
 const materials: any[] = [
@@ -218,5 +218,162 @@ describe('financialsForRange', () => {
   it('is all zeros for an empty range', () => {
     const f = financialsForRange({ ...base, ...range, orders: [] });
     expect(f).toMatchObject({ income: 0, profit: 0, orderCount: 0, avgOrderContribution: 0, estimated: false });
+  });
+});
+
+describe('discounts, payment fees and fixed costs', () => {
+  const base = { menu: [cake(100)], materials, experiments: [] as any[], wastageLogs: [] as any[], settings: NO_GST };
+  const range = { start: '2026-03-01', end: '2026-03-31' };
+
+  describe('discount', () => {
+    it('comes off what the customer pays and what the business made', () => {
+      const c = orderContribution([stamped('a', { quantity: 2, discount: 30 })], [cake(100)], materials, NO_GST);
+      expect(c.itemsRevenue).toBe(200);
+      expect(c.discount).toBe(30);
+      expect(c.customerPays).toBe(170);
+      expect(c.contribution).toBe(170 - 2 * 30);
+    });
+
+    it('is counted once for a multi-item order, however many items it has', () => {
+      const members = [
+        stamped('g1', { orderGroupId: 'g', discount: 25 }),
+        stamped('g2', { orderGroupId: 'g', quantity: 2 }),
+      ];
+      const c = orderContribution(members, [cake(100)], materials, NO_GST);
+      expect(c.discount).toBe(25);
+      expect(c.contribution).toBe(300 - 25 - 3 * 30);
+    });
+
+    it('cannot exceed what was billed', () => {
+      const c = orderContribution([stamped('a', { discount: 500 })], [cake(100)], materials, NO_GST);
+      expect(c.discount).toBe(100);
+      expect(c.customerPays).toBe(0);
+    });
+
+    it('is worked out before GST, so GST is charged on the discounted amount', () => {
+      const gst = { gstApplicable: true, gstRate: 10, gstPricingMode: 'exclusive' as const };
+      const c = orderContribution([stamped('a', { discount: 20 })], [cake(100)], materials, gst);
+      expect(c.gstOnSale).toBe(8);
+      expect(c.customerPays).toBe(88);
+    });
+
+    it('lowers income by the discount in the period totals', () => {
+      const f = financialsForRange({ ...base, ...range, orders: [stamped('a', { discount: 40 }), stamped('b')] });
+      expect(f.income).toBe(200 - 40);
+      expect(f.discounts).toBe(40);
+      expect(f.profit).toBe(160 - 60);
+    });
+
+    it('keeps an inclusive and an exclusive business level when both give the same discount', () => {
+      const orders = [stamped('a', { discount: 20 })];
+      const excl = financialsForRange({ ...base, ...range, orders, settings: { gstApplicable: true, gstRate: 18, gstPricingMode: 'exclusive' } });
+      const incl = financialsForRange({ ...base, menu: [cake(118)], ...range, orders: [stamped('a', { discount: 23.6 }, cake(118))], settings: { gstApplicable: true, gstRate: 18, gstPricingMode: 'inclusive' } });
+      expect(incl.income).toBeCloseTo(excl.income, 6);
+      expect(incl.profit).toBeCloseTo(excl.profit, 6);
+    });
+  });
+
+  describe('payment fee', () => {
+    it('is the stamped rate applied to what the customer paid', () => {
+      const c = orderContribution([stamped('a', { quantity: 2, paymentMethod: 'card', paymentFeeRate: 2 })], [cake(100)], materials, NO_GST);
+      expect(c.paymentFee).toBe(4);
+      expect(c.contribution).toBe(200 - 60 - 4);
+    });
+
+    it('is worked out on the amount after discount and including GST added on top', () => {
+      const gst = { gstApplicable: true, gstRate: 10, gstPricingMode: 'exclusive' as const };
+      const c = orderContribution([stamped('a', { discount: 20, paymentMethod: 'card', paymentFeeRate: 2 })], [cake(100)], materials, gst);
+      expect(c.paymentFee).toBeCloseTo(0.02 * 88, 10);
+    });
+
+    it('is not charged until the order is paid', () => {
+      const c = orderContribution([stamped('a', { paymentStatus: 'unpaid', paymentMethod: 'card', paymentFeeRate: 2 })], [cake(100)], materials, NO_GST);
+      expect(c.paymentFee).toBe(0);
+    });
+
+    it('is zero when no method was recorded', () => {
+      expect(orderContribution([stamped('a')], [cake(100)], materials, NO_GST).paymentFee).toBe(0);
+    });
+
+    it('uses the rate it was stamped with, not the current settings', () => {
+      const o = stamped('a', { paymentMethod: 'card', paymentFeeRate: 2 });
+      const before = orderContribution([o], [cake(100)], materials, { ...NO_GST, paymentFeeRates: { card: 2 } } as any);
+      const after = orderContribution([o], [cake(100)], materials, { ...NO_GST, paymentFeeRates: { card: 9 } } as any);
+      expect(after.paymentFee).toBe(before.paymentFee);
+    });
+
+    it('is counted once per order group, with the method taken from the items', () => {
+      const members = [
+        stamped('g1', { orderGroupId: 'g', paymentMethod: 'card', paymentFeeRate: 2 }),
+        stamped('g2', { orderGroupId: 'g', paymentMethod: 'card', paymentFeeRate: 2 }),
+      ];
+      expect(orderContribution(members, [cake(100)], materials, NO_GST).paymentFee).toBe(4);
+    });
+
+    it('shows up in the period totals', () => {
+      const f = financialsForRange({ ...base, ...range, orders: [stamped('a', { paymentMethod: 'card', paymentFeeRate: 3 })] });
+      expect(f.paymentFees).toBe(3);
+      expect(f.trueProfit).toBe(100 - 30 - 3);
+    });
+  });
+
+  describe('fixedCostsForRange', () => {
+    it('charges one full month for a range covering that month', () => {
+      expect(fixedCostsForRange([{ id: 'r', name: 'Rent', monthlyAmount: 3100 }], '2026-03-01', '2026-03-31')).toBeCloseTo(3100, 6);
+    });
+
+    it('prorates a part month by days', () => {
+      expect(fixedCostsForRange([{ id: 'r', name: 'Rent', monthlyAmount: 3100 }], '2026-03-01', '2026-03-10')).toBeCloseTo(1000, 6);
+    });
+
+    it('adds up each month a range crosses, using that month\'s length', () => {
+      const total = fixedCostsForRange([{ id: 'r', name: 'Rent', monthlyAmount: 2800 }], '2026-02-15', '2026-03-15');
+      expect(total).toBeCloseTo(2800 * (14 / 28) + 2800 * (15 / 31), 6);
+    });
+
+    it('starts and stops on the cost\'s own dates', () => {
+      const cost = { id: 'r', name: 'Loan', monthlyAmount: 3000, startDate: '2026-03-11', endDate: '2026-03-20' };
+      expect(fixedCostsForRange([cost], '2026-03-01', '2026-03-31')).toBeCloseTo(3000 * (10 / 31), 6);
+      expect(fixedCostsForRange([cost], '2026-04-01', '2026-04-30')).toBe(0);
+      expect(fixedCostsForRange([cost], '2026-02-01', '2026-02-28')).toBe(0);
+    });
+
+    it('is zero with no costs or an inverted range', () => {
+      expect(fixedCostsForRange(undefined, '2026-03-01', '2026-03-31')).toBe(0);
+      expect(fixedCostsForRange([{ id: 'r', name: 'Rent', monthlyAmount: 100 }], '2026-03-31', '2026-03-01')).toBe(0);
+    });
+  });
+
+  describe('true profit', () => {
+    it('is what the orders contributed, less wastage and the fixed costs for the period', () => {
+      const f = financialsForRange({
+        ...base, ...range,
+        orders: [stamped('a', { quantity: 2 })],
+        wastageLogs: [{ id: 'w', date: '2026-03-12', cost: 15 }] as any[],
+        settings: { ...NO_GST, fixedCosts: [{ id: 'r', name: 'Rent', monthlyAmount: 31 }] } as any,
+      });
+      expect(f.fixedCosts).toBeCloseTo(31, 6);
+      expect(f.totalContribution).toBe(200 - 60);
+      expect(f.trueProfit).toBeCloseTo(200 - 60 - 15 - 31, 6);
+    });
+
+    it('does not move net profit when fixed costs change', () => {
+      const orders = [stamped('a')];
+      const without = financialsForRange({ ...base, ...range, orders });
+      const withCosts = financialsForRange({ ...base, ...range, orders, settings: { ...NO_GST, fixedCosts: [{ id: 'r', name: 'Rent', monthlyAmount: 500 }] } as any });
+      expect(withCosts.profit).toBe(without.profit);
+    });
+  });
+
+  describe('unpaid income', () => {
+    it('counts unpaid orders as income, and reports how much of it is not yet paid', () => {
+      const f = financialsForRange({ ...base, ...range, orders: [stamped('a'), stamped('b', { paymentStatus: 'unpaid', quantity: 2 })] });
+      expect(f.income).toBe(300);
+      expect(f.unpaidIncome).toBe(200);
+    });
+
+    it('is zero when everything is paid', () => {
+      expect(financialsForRange({ ...base, ...range, orders: [stamped('a')] }).unpaidIncome).toBe(0);
+    });
   });
 });

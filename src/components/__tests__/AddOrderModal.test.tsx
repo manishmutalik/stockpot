@@ -130,7 +130,7 @@ describe('AddOrderModal', () => {
       const onSave = vi.fn().mockResolvedValue(undefined);
       renderModal(onSave, 'cookie');
 
-      const select = screen.getByRole('combobox') as HTMLSelectElement;
+      const select = screen.getByRole('combobox', { name: /item/i }) as HTMLSelectElement;
       expect(select.value).toBe('cookie');
 
       fireEvent.click(screen.getByRole('button', { name: 'Add Order' }));
@@ -142,7 +142,7 @@ describe('AddOrderModal', () => {
 
     it('still defaults to the first menu item when no preset is given', () => {
       renderModal(vi.fn(), undefined);
-      const select = screen.getByRole('combobox') as HTMLSelectElement;
+      const select = screen.getByRole('combobox', { name: /item/i }) as HTMLSelectElement;
       expect(select.value).toBe('cake');
     });
   });
@@ -187,6 +187,58 @@ describe('AddOrderModal — redesigned form', () => {
       fireEvent.click(screen.getByRole('button', { name: /^Add Order/i }));
       await vi.waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
       expect(onSave.mock.calls[0][0].paymentStatus).toBe('unpaid');
+    });
+  });
+
+  describe('discount and how it was paid', () => {
+    it('sends the discount and the payment method, and shows the total after the discount', async () => {
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      renderModal(onSave);
+      fireEvent.change(screen.getByPlaceholderText('Qty'), { target: { value: '2' } }); // 2 x 20 = 40
+      fireEvent.change(screen.getByLabelText(/Discount/), { target: { value: '5' } });
+      fireEvent.change(screen.getByLabelText(/Paid by/), { target: { value: 'upi' } });
+      expect(screen.getByText('$35.00')).toBeTruthy();
+      expect(screen.getByText(/after \$5.00 discount/)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Add Order' }));
+      await vi.waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(onSave.mock.calls[0][0]).toMatchObject({ paymentStatus: 'paid', paymentMethod: 'upi', discount: 5 });
+    });
+
+    it('sends neither when left blank', async () => {
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      renderModal(onSave);
+      fireEvent.click(screen.getByRole('button', { name: 'Add Order' }));
+      await vi.waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(onSave.mock.calls[0][0].discount).toBeUndefined();
+      expect(onSave.mock.calls[0][0].paymentMethod).toBeUndefined();
+    });
+
+    it('refuses a discount bigger than the order', () => {
+      const { onSave } = renderModal();
+      fireEvent.change(screen.getByLabelText(/Discount/), { target: { value: '25' } }); // order is $20
+      fireEvent.click(screen.getByRole('button', { name: 'Add Order' }));
+      expect(screen.getByText(/more than the order total/)).toBeTruthy();
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it('refuses a negative discount', () => {
+      const { onSave } = renderModal();
+      fireEvent.change(screen.getByLabelText(/Discount/), { target: { value: '-3' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Add Order' }));
+      expect(screen.getByText(/can't be negative/)).toBeTruthy();
+      expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it('hides "Paid by" for a pay-later order and sends no method', async () => {
+      const onSave = vi.fn().mockResolvedValue(undefined);
+      renderModal(onSave);
+      fireEvent.change(screen.getByLabelText(/Paid by/), { target: { value: 'card' } });
+      fireEvent.click(screen.getByRole('radio', { name: 'Pay later' }));
+      expect(screen.queryByLabelText(/Paid by/)).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Add Order' }));
+      await vi.waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+      expect(onSave.mock.calls[0][0]).toMatchObject({ paymentStatus: 'unpaid' });
+      expect(onSave.mock.calls[0][0].paymentMethod).toBeUndefined();
     });
   });
 });

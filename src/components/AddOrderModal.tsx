@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar, Check, CirclePlus, Phone, ShoppingBag, Trash2, User } from 'lucide-react';
 import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
+import { PAYMENT_METHODS, type PaymentMethod } from '../types';
 
 interface MenuItem {
   id: string;
@@ -26,7 +27,7 @@ interface AddOrderModalProps {
    * open and the user can retry; nothing partially saves.
    */
   onSave: (
-    common: { date: string; customerName?: string; customerPhone?: string; paymentStatus?: 'paid' | 'unpaid' },
+    common: { date: string; customerName?: string; customerPhone?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number },
     lineItems: OrderLineItem[]
   ) => Promise<void>;
   /** When set, the modal opens with a single line item pre-filled to this
@@ -55,6 +56,8 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
   const [customerName,  setCustomerName]  = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [payLater,      setPayLater]      = useState(false);
+  const [method,        setMethod]        = useState<PaymentMethod | ''>('');
+  const [discountText,  setDiscountText]  = useState('');
   const [lineItems,     setLineItems]     = useState<OrderLineItem[]>([EMPTY_LINE_ITEM(menu)]);
   const [isSaving,      setIsSaving]      = useState(false);
   const [error,         setError]         = useState('');
@@ -80,10 +83,12 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, menu, presetMenuItemId]);
 
-  const totalValue = useMemo(() => lineItems.reduce((sum, li) => {
+  const subtotal = useMemo(() => lineItems.reduce((sum, li) => {
     const item = menu.find(m => m.id === li.menuItemId);
     return sum + (item ? item.sellingPrice * li.quantity : 0);
   }, 0), [lineItems, menu]);
+  const discount = Math.max(parseFloat(discountText) || 0, 0);
+  const totalValue = Math.max(subtotal - discount, 0);
 
   const updateLineItem = (index: number, patch: Partial<OrderLineItem>) => {
     setLineItems(prev => prev.map((li, i) => i === index ? { ...li, ...patch } : li));
@@ -100,6 +105,8 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
     setCustomerName('');
     setCustomerPhone('');
     setPayLater(false);
+    setMethod('');
+    setDiscountText('');
     setLineItems([EMPTY_LINE_ITEM(menu)]);
     setInvalidRowIndex(null);
   };
@@ -125,6 +132,15 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
       return;
     }
 
+    if ((parseFloat(discountText) || 0) < 0) {
+      setError("A discount can't be negative.");
+      return;
+    }
+    if (discount > subtotal) {
+      setError(`The discount (${currency.symbol}${discount.toFixed(2)}) is more than the order total (${currency.symbol}${subtotal.toFixed(2)}).`);
+      return;
+    }
+
     // Stock is a hard cap — combine quantities first, since the same item
     // can appear in more than one row and each row passing individually
     // doesn't mean their total fits what's actually available.
@@ -145,7 +161,8 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
     setIsSaving(true);
     try {
       await onSave(
-        { date, customerName: customerName.trim() || undefined, customerPhone: customerPhone.trim() || undefined, paymentStatus: payLater ? 'unpaid' : 'paid' },
+        { date, customerName: customerName.trim() || undefined, customerPhone: customerPhone.trim() || undefined, paymentStatus: payLater ? 'unpaid' : 'paid',
+          paymentMethod: !payLater && method ? method : undefined, discount: discount > 0 ? discount : undefined },
         lineItems
       );
       resetForm();
@@ -202,6 +219,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
               <div key={i}>
                 <div className="flex gap-2 items-stretch">
                   <select
+                    aria-label={lineItems.length > 1 ? `Item ${i + 1}` : 'Item'}
                     value={li.menuItemId}
                     onChange={e => updateLineItem(i, { menuItemId: e.target.value })}
                     className={`${modalField(invalidRowIndex === i && !li.menuItemId)} flex-1 min-w-0 font-semibold`}
@@ -310,9 +328,42 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
         </div>
         {payLater && (
           <p className="text-xs text-muted mt-1.5">
-            This order will be listed under pending payments, so you can send the customer one consolidated bill later.
+            This order will be listed under pending payments, so you can send the customer one consolidated bill later. You can record how it was paid when you mark it paid.
           </p>
         )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {!payLater && (
+          <div>
+            <label htmlFor="order-method" className={MODAL_LABEL}>Paid by (optional)</label>
+            <select
+              id="order-method"
+              value={method}
+              onChange={e => setMethod(e.target.value as PaymentMethod | '')}
+              className={modalField()}
+            >
+              <option value="">Not recorded</option>
+              {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+        )}
+        <div>
+          <label htmlFor="order-discount" className={MODAL_LABEL}>Discount (optional)</label>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-muted">{currency.symbol}</span>
+            <input
+              id="order-discount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={discountText}
+              onChange={e => setDiscountText(e.target.value)}
+              placeholder="0"
+              className={`${modalField()} font-mono`}
+            />
+          </div>
+        </div>
       </div>
 
       {lineItems.length > 1 && (
@@ -328,6 +379,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
           <div className="text-2xl font-mono font-semibold text-ink mt-0.5">
             {currency.symbol}{totalValue.toFixed(2)}
           </div>
+          {discount > 0 && <div className="font-mono text-[11px] text-muted mt-0.5">after {currency.symbol}{discount.toFixed(2)} discount</div>}
         </div>
         <div className="w-12 h-12 rounded-xl bg-white shadow-sm flex items-center justify-center text-primary">
           <ShoppingBag size={22} />

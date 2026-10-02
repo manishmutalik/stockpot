@@ -24,7 +24,7 @@ function makeProps(overrides: Record<string, any> = {}) {
     setSummaryDateStart: vi.fn(),
     setSummaryDateEnd: vi.fn(),
     handleRangeChange: vi.fn(),
-    financials: { income: 1000, orderExpenses: 250, deliveryExpenses: 100, wastageExpenses: 50, experimentExpenses: 0, gstCollected: 0, gstPaid: 0, profit: 600 },
+    financials: { income: 1000, orderExpenses: 250, deliveryExpenses: 100, wastageExpenses: 50, experimentExpenses: 0, gstCollected: 0, gstPaid: 0, profit: 600, trueProfit: 600, avgOrderContribution: 0, orderCount: 0, fixedCosts: 0, paymentFees: 0, discounts: 0, unpaidIncome: 0 },
     chartData: [{ name: 'W1', income: 0, expenses: 0, profit: 0 }],
     currency: { code: 'USD', symbol: '$' },
     settings: { name: 'Test Bakery', gstApplicable: false },
@@ -39,7 +39,7 @@ function makeProps(overrides: Record<string, any> = {}) {
 
 describe('SummaryView (dashboard)', () => {
   it('shows the headline figures with thousands separators and cost-as-share-of-income footers', () => {
-    render(<SummaryView {...makeProps({ financials: { income: 5171.19, orderExpenses: 1243.97, deliveryExpenses: 737, wastageExpenses: 66.7, experimentExpenses: 0, gstCollected: 0, gstPaid: 0, profit: 3123.52 } })} />);
+    render(<SummaryView {...makeProps({ financials: { income: 5171.19, orderExpenses: 1243.97, deliveryExpenses: 737, wastageExpenses: 66.7, experimentExpenses: 0, gstCollected: 0, gstPaid: 0, profit: 3123.52, trueProfit: 2900, avgOrderContribution: 312.35, orderCount: 10 } })} />);
     expect(screen.getByText('$1,243.97')).toBeTruthy();
     expect(screen.getByText('$3,123.52')).toBeTruthy(); // net profit
     expect(screen.getByText('24.1% of income')).toBeTruthy(); // COGS / income
@@ -93,6 +93,31 @@ describe('SummaryView (dashboard)', () => {
     expect(screen.queryByRole('button', { name: /Log Production Run/ })).toBeNull();
     rerender(<SummaryView {...makeProps()} />);
     expect(screen.getByRole('button', { name: /Log Production Run/ })).toBeTruthy();
+  });
+
+  describe('true profit, fees, fixed costs and discounts', () => {
+    const rich = { ...makeProps().financials, income: 1000, profit: 600, trueProfit: 480, avgOrderContribution: 120, orderCount: 4, fixedCosts: 90, paymentFees: 30, discounts: 50, unpaidIncome: 200 };
+    it('shows True Profit and the average each order made', () => {
+      render(<SummaryView {...makeProps({ financials: rich })} />);
+      expect(screen.getByText('True Profit').nextElementSibling?.textContent).toBe('$480.00');
+      expect(screen.getByText('Avg Order Contribution').nextElementSibling?.textContent).toBe('$120.00');
+      expect(screen.getByText(/^4 orders$/)).toBeTruthy();
+    });
+    it('shows fixed costs, payment fees and discounts when there are any', () => {
+      render(<SummaryView {...makeProps({ financials: rich })} />);
+      expect(screen.getByText('Fixed Costs').nextElementSibling?.textContent).toBe('$90.00');
+      expect(screen.getByText('Payment Fees').nextElementSibling?.textContent).toBe('$30.00');
+      expect(screen.getByText('Discounts').nextElementSibling?.textContent).toBe('$50.00');
+    });
+    it('leaves those cards out when there are none, so a simple business sees no clutter', () => {
+      render(<SummaryView {...makeProps()} />);
+      for (const label of ['Fixed Costs', 'Payment Fees', 'Discounts']) expect(screen.queryByText(label)).toBeNull();
+      expect(screen.getByText('True Profit')).toBeTruthy();
+    });
+    it('says how much of the income is still unpaid', () => {
+      render(<SummaryView {...makeProps({ financials: rich })} />);
+      expect(screen.getByText('Includes $200.00 not yet paid')).toBeTruthy();
+    });
   });
 
   describe('estimated figures and GST labelling', () => {

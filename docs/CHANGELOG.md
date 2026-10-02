@@ -1,5 +1,43 @@
 # Changelog
 
+## True profit, part 2: discounts, payment fees, fixed costs and "Made"
+
+The second of three steps. Orders now show what they actually made, and the
+dashboard shows a True Profit that includes the costs that aren't tied to any
+one order.
+
+- **Made on every order.** The Orders tab shows "Made ₹743" under each order
+  (and once for a multi-item order, in its header), coloured by the same margin
+  bands as menu items. Click it for the sums: items, delivery charged, discount,
+  ingredients, packaging, courier fee, payment fee, then what was made. A loss
+  reads "Lost". Orders from before prices were recorded are marked "est.".
+- **Discounts.** Add Order has an optional discount off the whole order, and
+  it can be edited later from the order's details. It is stored once per order
+  (on the first item), comes off income and profit once however many items the
+  order has, shows as a Discount line on the bill and the public bill page, and
+  GST is worked out on the discounted amount. It can't exceed the order total.
+- **Payment method and fees.** "Paid by" (UPI, cash, card, other) on Add Order
+  and in an order's details. Settings has a fee percentage per method. The rate
+  is stamped on the order when the method is recorded (`paymentMethod`,
+  `paymentFeeRate`), so changing a rate later never rewrites past profit. The
+  fee is a percentage of what the customer paid and only counts once the order
+  is paid. Marking a pay-later order paid, singly or as a customer's whole
+  pending list, now asks how it was paid.
+- **Fixed monthly costs.** Rent, gas, salaries and the like, in Settings, each
+  with an optional From and Until date. They are spread evenly over the days of
+  each month and counted for whatever period the dashboard shows, so a cost that
+  stops or changes keeps the right history if you end it and add a new line.
+- **Dashboard.** New cards: True Profit (contribution minus wastage, payment
+  fees and fixed costs), Average Order Contribution, and Fixed Costs, Payment
+  Fees and Discounts when there are any. Net Profit keeps its old meaning
+  (before fees and fixed costs). Unpaid orders count as income, with an
+  "Includes ₹x not yet paid" note.
+- **One set of sums.** `saleAmounts` in `src/utils/profit.ts` is shared by the
+  bill, the Orders tab and the dashboard, so a bill's total is exactly the
+  amount the payment fee is worked out on.
+- **Demo.** The demo bakery has UPI, cash and card payments (card 2%), one
+  discounted café order and three fixed costs, so every new figure shows.
+
 ## True profit, part 1: stable history and one place for the maths
 
 Profit now means what the business actually made, and past figures no longer

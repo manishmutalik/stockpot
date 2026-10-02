@@ -21,7 +21,7 @@
  *
  * Pure: no React, Firebase or DOM, so it is unit tested on its own.
  */
-import type { BakerySettings, MenuItem, Order, RawMaterial, RecipeExperiment, WastageLog } from '../types';
+import type { BakerySettings, FixedCost, MenuItem, Order, RawMaterial, RecipeExperiment, WastageLog } from '../types';
 import { convertAmount } from './conversions';
 import { splitSaleForGst } from './gstCalculations';
 import { attributeDeliveryFieldByGroup, clusterOrdersByGroup } from './orderClustering';
@@ -31,20 +31,80 @@ export { resolveItemName, resolveUnitCosts, resolveUnitPrice, stampFor } from '.
 
 type GstSettings = Pick<BakerySettings, 'gstApplicable' | 'gstRate' | 'gstPricingMode'>;
 
+const sumValues = (map: Map<string, number>) => Array.from(map.values()).reduce((a, b) => a + b, 0);
+
+/** An order is waiting for payment when it was saved as pay-later and not yet marked paid. */
+export const isUnpaidOrder = (order: Pick<Order, 'paymentStatus'>) => order.paymentStatus === 'unpaid';
+
+export interface SaleAmounts {
+  /** Sum of unit price x quantity, as billed (GST-inclusive in inclusive pricing). */
+  itemsGross: number;
+  /** Delivery charged to the customer, once per order, as billed. */
+  deliveryGross: number;
+  /** Discount, once per order, never more than the items and delivery it comes off. */
+  discount: number;
+  /** What GST is worked out on: items plus delivery minus discount. */
+  sale: number;
+  gstAmount: number;
+  /** What the customer pays: the sale, plus GST on top in exclusive pricing. */
+  customerPays: number;
+  /** Multiplies a billed amount to get its pre-GST base: 1/(1+rate) in inclusive pricing, else 1. */
+  baseScale: number;
+  /** True if any item was priced at today's menu price because the order predates stamping. */
+  estimated: boolean;
+}
+
+/**
+ * The money side of one order or multi-item order (pass all its items): what
+ * is billed, the discount, the GST and what the customer pays. The bill and
+ * the profit figures both use this, so they can never disagree about the
+ * amount the customer paid (which is also what a payment fee is charged on).
+ */
+export function saleAmounts(members: Order[], menu: MenuItem[], settings: GstSettings): SaleAmounts {
+  let itemsGross = 0;
+  let estimated = false;
+  for (const order of members) {
+    const price = resolveUnitPrice(order, menu);
+    itemsGross += price.value * (order.quantity || 0);
+    estimated ||= price.estimated;
+  }
+  const deliveryGross = sumValues(attributeDeliveryFieldByGroup(members, 'deliveryCharge'));
+  const billedBeforeDiscount = itemsGross + deliveryGross;
+  const discount = Math.min(Math.max(sumValues(attributeDeliveryFieldByGroup(members, 'discount')), 0), billedBeforeDiscount);
+  const sale = billedBeforeDiscount - discount;
+
+  const rate = settings.gstApplicable ? settings.gstRate || 0 : 0;
+  const mode = settings.gstPricingMode || 'exclusive';
+  const split = rate > 0 ? splitSaleForGst(sale, rate, mode) : null;
+  return {
+    itemsGross, deliveryGross, discount, sale,
+    gstAmount: split?.gstAmount ?? 0,
+    customerPays: sale + (split && mode === 'exclusive' ? split.gstAmount : 0),
+    baseScale: split && mode === 'inclusive' ? 1 / (1 + rate / 100) : 1,
+    estimated,
+  };
+}
+
 export interface OrderContribution {
-  /** Item sales, pre-GST base. */
+  /** Item sales, pre-GST base, before any discount. */
   itemsRevenue: number;
   /** Delivery charged to the customer, pre-GST base, counted once per order. */
   deliveryCharged: number;
+  /** Discount given, pre-GST base, counted once per order. */
+  discount: number;
   /** GST on the sale. Owed to the government, never revenue. */
   gstOnSale: number;
   ingredients: number;
   packaging: number;
   /** Courier fee paid, counted once per order. */
   courierFee: number;
+  /** Fee charged on the payment: the amount paid x the rate stamped when the method was recorded. Nothing until the order is paid. */
+  paymentFee: number;
   /** Input GST contained in the ingredient and packaging costs (not a cost). */
   inputGst: number;
-  /** Revenue minus ingredients, packaging and courier fee. */
+  /** What the customer pays for the order. */
+  customerPays: number;
+  /** Revenue after discount, minus ingredients, packaging, courier fee and payment fee. */
   contribution: number;
   /** True if any item used today's price or cost because the order predates stamping. */
   estimated: boolean;
@@ -57,48 +117,74 @@ export function orderContribution(
   materials: RawMaterial[],
   settings: GstSettings
 ): OrderContribution {
-  let itemsGross = 0;
-  let ingredients = 0;
-  let packaging = 0;
-  let inputGst = 0;
-  let estimated = false;
-
+  const sale = saleAmounts(members, menu, settings);
+  let ingredients = 0, packaging = 0, inputGst = 0;
+  let estimated = sale.estimated;
   for (const order of members) {
     const qty = order.quantity || 0;
-    const price = resolveUnitPrice(order, menu);
     const costs = resolveUnitCosts(order, menu, materials);
-    itemsGross += price.value * qty;
     ingredients += costs.ingredients * qty;
     packaging += costs.packaging * qty;
     inputGst += costs.inputGst * qty;
-    estimated ||= price.estimated || costs.estimated;
+    estimated ||= costs.estimated;
   }
+  const courierFee = sumValues(attributeDeliveryFieldByGroup(members, 'deliveryFee'));
 
-  const sum = (map: Map<string, number>) => Array.from(map.values()).reduce((a, b) => a + b, 0);
-  const chargeGross = sum(attributeDeliveryFieldByGroup(members, 'deliveryCharge'));
-  const courierFee = sum(attributeDeliveryFieldByGroup(members, 'deliveryFee'));
+  // The payment fee is charged on what the customer paid, at the rate stamped when the method was recorded.
+  // An unpaid order has paid nothing yet, so it has no fee.
+  const payer = [...members].sort((a, b) => a.id.localeCompare(b.id)).find(o => o.paymentMethod);
+  const paid = !members.some(isUnpaidOrder);
+  const paymentFee = payer && paid ? sale.customerPays * ((payer.paymentFeeRate || 0) / 100) : 0;
 
-  // The amount the customer is billed for, then GST split out of it exactly as the bill does.
-  const sale = itemsGross + chargeGross;
-  const rate = settings.gstApplicable ? settings.gstRate || 0 : 0;
-  const mode = settings.gstPricingMode || 'exclusive';
-  const split = rate > 0 ? splitSaleForGst(sale, rate, mode) : null;
-  // Inclusive: the price contains GST, so revenue is the base, shared out pro rata. Exclusive: the price is already the base.
-  const scale = split && mode === 'inclusive' && sale > 0 ? split.baseAmount / sale : 1;
-
-  const itemsRevenue = itemsGross * scale;
-  const deliveryCharged = chargeGross * scale;
+  const itemsRevenue = sale.itemsGross * sale.baseScale;
+  const deliveryCharged = sale.deliveryGross * sale.baseScale;
+  const discount = sale.discount * sale.baseScale;
   return {
-    itemsRevenue, deliveryCharged,
-    gstOnSale: split?.gstAmount ?? 0,
-    ingredients, packaging, courierFee, inputGst,
-    contribution: itemsRevenue + deliveryCharged - ingredients - packaging - courierFee,
+    itemsRevenue, deliveryCharged, discount,
+    gstOnSale: sale.gstAmount,
+    ingredients, packaging, courierFee, paymentFee, inputGst,
+    customerPays: sale.customerPays,
+    contribution: itemsRevenue + deliveryCharged - discount - ingredients - packaging - courierFee - paymentFee,
     estimated,
   };
 }
 
+const pad = (n: number) => String(n).padStart(2, '0');
+const daysInMonth = (year: number, month: number) => new Date(Date.UTC(year, month, 0)).getUTCDate();
+const dayNumber = (iso: string) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return Date.UTC(y, m - 1, d) / 86_400_000;
+};
+
+/**
+ * Fixed costs falling in an inclusive date range: each cost's monthly amount
+ * spread evenly over the days of every calendar month the range touches
+ * (amount x days in range that month / days in that month), counting only
+ * the days inside the cost's own start and end dates. A range inside one
+ * month gets that fraction of the month; a range of whole months gets the
+ * full amounts.
+ */
+export function fixedCostsForRange(costs: FixedCost[] | undefined, start: string, end: string): number {
+  if (!costs?.length || start > end) return 0;
+  const [startYear, startMonth] = start.split('-').map(Number);
+  const [endYear, endMonth] = end.split('-').map(Number);
+  let total = 0;
+  for (let y = startYear, m = startMonth; y < endYear || (y === endYear && m <= endMonth); m === 12 ? (y++, m = 1) : m++) {
+    const dim = daysInMonth(y, m);
+    const monthStart = `${y}-${pad(m)}-01`;
+    const monthEnd = `${y}-${pad(m)}-${pad(dim)}`;
+    for (const cost of costs) {
+      const lo = [start, monthStart, cost.startDate || ''].reduce((a, b) => (a > b ? a : b));
+      const hi = [end, monthEnd, cost.endDate || '9999-12-31'].reduce((a, b) => (a < b ? a : b));
+      if (lo > hi) continue;
+      total += (cost.monthlyAmount || 0) * ((dayNumber(hi) - dayNumber(lo) + 1) / dim);
+    }
+  }
+  return total;
+}
+
 export interface Financials {
-  /** Pre-GST sales: items plus delivery charged. */
+  /** Pre-GST sales after discounts: items plus delivery charged, minus discounts. */
   income: number;
   expenses: number;
   /** Ingredients and packaging for what was sold. */
@@ -111,11 +197,22 @@ export interface Financials {
   wastageExpenses: number;
   gstCollected: number;
   gstPaid: number;
+  /** Income minus ingredients, packaging, courier fees and wastage. Payment fees and fixed costs come off in `trueProfit`. */
   profit: number;
-  /** Sum of every order's contribution (income minus order costs and courier fees). */
+  /** Discounts given in the range (already out of `income`). */
+  discounts: number;
+  /** Fees paid on payments received. */
+  paymentFees: number;
+  /** Fixed monthly costs prorated to the range. */
+  fixedCosts: number;
+  /** Sum of every order's contribution (income minus order costs, courier and payment fees). */
   totalContribution: number;
+  /** Contribution minus wastage minus fixed costs: what the business really made. */
+  trueProfit: number;
   orderCount: number;
   avgOrderContribution: number;
+  /** The part of `income` still waiting to be paid (pay-later orders not yet marked paid). */
+  unpaidIncome: number;
   /** True if any order in the range predates stamping, so some figures use today's values. */
   estimated: boolean;
 }
@@ -123,8 +220,10 @@ export interface Financials {
 /**
  * The business's figures for an inclusive date range. Keeps every key
  * `getFinancialsForRange` always returned, with the same meaning except that
- * income is the pre-GST base (so in GST-inclusive pricing, income and profit
- * are lower than before by the GST collected).
+ * income is the pre-GST base after discounts (so in GST-inclusive pricing,
+ * income and profit are lower than they used to be by the GST collected).
+ * Unpaid orders count as income, as they always have; `unpaidIncome` says how
+ * much of it is still owed.
  */
 export function financialsForRange(input: {
   orders: Order[];
@@ -132,7 +231,7 @@ export function financialsForRange(input: {
   materials: RawMaterial[];
   experiments: RecipeExperiment[];
   wastageLogs: WastageLog[];
-  settings: GstSettings;
+  settings: GstSettings & Pick<BakerySettings, 'fixedCosts'>;
   start: string;
   end: string;
 }): Financials {
@@ -140,14 +239,19 @@ export function financialsForRange(input: {
   const rangeOrders = input.orders.filter(o => o.date >= start && o.date <= end);
 
   let income = 0, ingredients = 0, packaging = 0, courierFees = 0, gstCollected = 0, gstPaid = 0;
+  let discounts = 0, paymentFees = 0, unpaidIncome = 0;
   let totalContribution = 0, orderCount = 0, estimated = false;
   for (const cluster of clusterOrdersByGroup(rangeOrders)) {
     const members = cluster.type === 'single' ? [cluster.order] : cluster.orders;
     const c = orderContribution(members, menu, materials, settings);
-    income += c.itemsRevenue + c.deliveryCharged;
+    const net = c.itemsRevenue + c.deliveryCharged - c.discount;
+    income += net;
+    if (members.some(isUnpaidOrder)) unpaidIncome += net;
+    discounts += c.discount;
     ingredients += c.ingredients;
     packaging += c.packaging;
     courierFees += c.courierFee;
+    paymentFees += c.paymentFee;
     gstCollected += c.gstOnSale;
     gstPaid += c.inputGst;
     totalContribution += c.contribution;
@@ -168,6 +272,7 @@ export function financialsForRange(input: {
     .filter(w => w.date >= start && w.date <= end)
     .reduce((total, w) => total + (w.cost || 0), 0);
 
+  const fixedCosts = fixedCostsForRange(settings.fixedCosts, start, end);
   const orderExpenses = ingredients + packaging;
   return {
     income,
@@ -180,9 +285,14 @@ export function financialsForRange(input: {
     gstCollected,
     gstPaid,
     profit: income - orderExpenses - courierFees - wastageExpenses,
+    discounts,
+    paymentFees,
+    fixedCosts,
     totalContribution,
+    trueProfit: totalContribution - wastageExpenses - fixedCosts,
     orderCount,
     avgOrderContribution: orderCount > 0 ? totalContribution / orderCount : 0,
+    unpaidIncome,
     estimated,
   };
 }

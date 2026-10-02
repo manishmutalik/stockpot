@@ -1,13 +1,16 @@
 import { MenuItem, Order } from '../types';
 import { attributeDeliveryFieldByGroup, clusterOrdersByGroup } from './orderClustering';
 import { resolveUnitPrice } from './orderPricing';
+import { saleAmounts } from './profit';
 
 export interface OrderStats {
   /** Customer orders: a multi-item order counts once, not once per item. */
   orderCount: number;
   itemsSold: number;
-  /** Item sales plus delivery charged to customers (same rule as the dashboard's income). */
+  /** Item sales plus delivery charged to customers, minus discounts: what customers are billed before any GST added on top. */
   revenue: number;
+  /** Discounts given, counted once per order. */
+  discounts: number;
   /** Delivery charged to customers, counted once per order. */
   deliveryCharged: number;
   /** Delivery fees paid out, counted once per order. */
@@ -35,11 +38,9 @@ export function summarizeOrders(orders: Order[], menu: MenuItem[]): OrderStats {
   const chargeByOrder = attributeDeliveryFieldByGroup(orders, 'deliveryCharge');
   const feeByOrder = attributeDeliveryFieldByGroup(orders, 'deliveryFee');
 
-  let itemRevenue = 0;
   let itemsSold = 0;
   let pendingItems = 0;
   for (const o of orders) {
-    itemRevenue += orderLineTotal(o, menu);
     itemsSold += o.quantity || 0;
     if (!o.fulfilled) pendingItems += o.quantity || 0;
   }
@@ -52,10 +53,19 @@ export function summarizeOrders(orders: Order[], menu: MenuItem[]): OrderStats {
   const clusters = clusterOrdersByGroup(orders);
   const membersOf = (c: (typeof clusters)[number]) => (c.type === 'single' ? [c.order] : c.orders);
   const courierDeliveries = clusters.filter(c => membersOf(c).some(o => o.deliveryMethod === 'third_party')).length;
+  // Billed per order (a multi-item order together), so its shared delivery charge and discount count once.
+  let revenue = 0;
+  let discounts = 0;
+  for (const c of clusters) {
+    const sale = saleAmounts(membersOf(c), menu, {});
+    revenue += sale.sale;
+    discounts += sale.discount;
+  }
   return {
     orderCount: clusters.length,
     itemsSold,
-    revenue: itemRevenue + deliveryCharged,
+    revenue,
+    discounts,
     deliveryCharged,
     courierCost,
     courierDeliveries,

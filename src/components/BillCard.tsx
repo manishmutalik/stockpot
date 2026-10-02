@@ -65,6 +65,9 @@ export const BillCard: React.FC<{ bill: Bill; upiLink: string | null; online: On
         {bill.deliveryCharge > 0 && (
           <div style={row}><span style={{ color: MUTED }}>Delivery</span><span style={{ fontFamily: MONO }}>{money(bill.deliveryCharge)}</span></div>
         )}
+        {bill.discount > 0 && (
+          <div style={row}><span style={{ color: MUTED }}>Discount</span><span style={{ fontFamily: MONO }}>-{money(bill.discount)}</span></div>
+        )}
         {bill.gst && (
           <div style={row}>
             <span style={{ color: MUTED }}>GST ({bill.gst.rate}%{bill.gst.mode === 'inclusive' ? ', included' : ''})</span>

@@ -181,30 +181,41 @@ describe('OrdersView', () => {
       expect(within(dialog).getAllByText('$140.00').length).toBeGreaterThan(0);
     });
 
-    it('marks all of a customer\'s orders paid after confirming', () => {
+    it("asks how it was paid, then marks all of a customer's orders paid", () => {
       const props = withUnpaid();
-      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
-      render(<OrdersView {...props} />);
-      fireEvent.click(screen.getByRole('button', { name: 'Mark everything paid for Priya' }));
-      expect(confirm).toHaveBeenCalled();
-      expect(props.markOrdersPaid).toHaveBeenCalledWith(['p1', 'p2'], true);
-      confirm.mockRestore();
-    });
-
-    it('does nothing when the confirmation is declined', () => {
-      const props = withUnpaid();
-      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
       render(<OrdersView {...props} />);
       fireEvent.click(screen.getByRole('button', { name: 'Mark everything paid for Priya' }));
       expect(props.markOrdersPaid).not.toHaveBeenCalled();
-      confirm.mockRestore();
+      const dialog = screen.getByRole('dialog');
+      fireEvent.change(within(dialog).getByLabelText(/Paid by/), { target: { value: 'upi' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: /Mark as paid/ }));
+      expect(props.markOrdersPaid).toHaveBeenCalledWith(['p1', 'p2'], true, 'upi');
+      expect(screen.queryByRole('dialog')).toBeNull();
     });
 
-    it('tags an unpaid order, and one click marks it paid', () => {
+    it('marks paid without a method when none is chosen', () => {
+      const props = withUnpaid();
+      render(<OrdersView {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Mark everything paid for Priya' }));
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Mark as paid/ }));
+      expect(props.markOrdersPaid).toHaveBeenCalledWith(['p1', 'p2'], true, undefined);
+    });
+
+    it('does nothing when the mark-paid dialog is cancelled', () => {
+      const props = withUnpaid();
+      render(<OrdersView {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Mark everything paid for Priya' }));
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+      expect(props.markOrdersPaid).not.toHaveBeenCalled();
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('tags an unpaid order, and marking it paid asks for the method', () => {
       const props = withUnpaid({ orders: [o('solo', { customerName: 'Solo', paymentStatus: 'unpaid' })] });
       render(<OrdersView {...props} />);
       fireEvent.click(screen.getByRole('button', { name: 'Unpaid, mark as paid' }));
-      expect(props.markOrdersPaid).toHaveBeenCalledWith(['solo'], true);
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /Mark as paid/ }));
+      expect(props.markOrdersPaid).toHaveBeenCalledWith(['solo'], true, undefined);
     });
 
     it('tags a multi-item order once, in its header, and marks every item paid together', () => {
@@ -216,7 +227,10 @@ describe('OrdersView', () => {
       const tags = screen.getAllByRole('button', { name: /^Unpaid, mark/ });
       expect(tags).toHaveLength(1);
       fireEvent.click(tags[0]);
-      expect(props.markOrdersPaid).toHaveBeenCalledWith(['g1', 'g2'], true);
+      const dialog = screen.getByRole('dialog');
+      fireEvent.change(within(dialog).getByLabelText(/Paid by/), { target: { value: 'cash' } });
+      fireEvent.click(within(dialog).getByRole('button', { name: /Mark as paid/ }));
+      expect(props.markOrdersPaid).toHaveBeenCalledWith(['g1', 'g2'], true, 'cash');
     });
 
     it('lets an order be marked unpaid from its details', () => {
@@ -259,5 +273,85 @@ describe('OrdersView', () => {
     expect(screen.getAllByText('$120.00').length).toBeGreaterThan(1); // the row total (2 x 60) and the day header
     expect(screen.queryByText('$200.00')).toBeNull(); // not 2 x today's 100
     expect(screen.getByText('Revenue Booked').nextElementSibling?.textContent).toBe('$120.00');
+  });
+
+  describe('what an order made', () => {
+    // 1 cake sold at 100 that cost 30 to make and package.
+    const stamp = { unitPriceAtSale: 100, unitIngredientCostAtSale: 20, unitPackagingCostAtSale: 10, unitInputGstAtSale: 0, itemNameAtSale: 'Cake' };
+    const made = (id: string, over: Record<string, any> = {}) => o(id, { customerName: 'Nisha', ...stamp, ...over });
+    const render1 = (list: any[], over: Record<string, any> = {}) =>
+      render(<OrdersView {...makeProps({ orders: list, materials: [], setOrdersPaymentMethod: vi.fn(), markOrdersPaid: vi.fn(), ...over })} />);
+
+    it('shows Made on a single order, and opens the breakdown on a click', () => {
+      render1([made('m1')]);
+      const badge = screen.getByRole('button', { name: 'Made $70.00. Show breakdown' });
+      expect(screen.queryByRole('group', { name: 'How this was worked out' })).toBeNull();
+      fireEvent.click(badge);
+      const g = within(screen.getByRole('group', { name: 'How this was worked out' }));
+      expect(g.getByText('Items')).toBeTruthy();
+      expect(g.getByText('Ingredients')).toBeTruthy();
+      expect(g.getByText('Packaging')).toBeTruthy();
+      expect(g.getByText('Made on this order')).toBeTruthy();
+      fireEvent.click(badge);
+      expect(screen.queryByRole('group', { name: 'How this was worked out' })).toBeNull();
+    });
+
+    it('shows Lost when the order cost more than it brought in', () => {
+      render1([made('m1', { unitPriceAtSale: 10 })]);
+      expect(screen.getByRole('button', { name: 'Lost $20.00. Show breakdown' })).toBeTruthy();
+    });
+
+    it('takes a discount off what was made, and the breakdown shows it', () => {
+      render1([made('m1', { discount: 15 })]);
+      fireEvent.click(screen.getByRole('button', { name: 'Made $55.00. Show breakdown' }));
+      expect(within(screen.getByRole('group', { name: 'How this was worked out' })).getByText('Discount')).toBeTruthy();
+    });
+
+    it('takes the payment fee off, using the rate the order was stamped with', () => {
+      render1([made('m1', { paymentMethod: 'card', paymentFeeRate: 3 })]);
+      expect(screen.getByRole('button', { name: 'Made $67.00. Show breakdown' })).toBeTruthy();
+    });
+
+    it('shows one Made figure for a multi-item order, with the shared discount counted once', () => {
+      render1([
+        made('g1', { orderGroupId: 'g', discount: 20 }),
+        made('g2', { orderGroupId: 'g', menuItemId: 'cookie', unitPriceAtSale: 10, unitIngredientCostAtSale: 2, unitPackagingCostAtSale: 0 }),
+      ]);
+      // 100 + 10 - 20 discount - 30 - 2 costs
+      expect(screen.getAllByRole('button', { name: /^Made / })).toHaveLength(1);
+      expect(screen.getByRole('button', { name: 'Made $58.00. Show breakdown' })).toBeTruthy();
+    });
+
+    it('marks an order from before prices were recorded as estimated', () => {
+      render1([o('old1', { customerName: 'Nisha' })]);
+      expect(screen.getByRole('button', { name: /\(estimated\)/ })).toBeTruthy();
+    });
+
+    it('records how a paid order was paid, from its details', () => {
+      const props = makeProps({ orders: [made('m1')], materials: [], setOrdersPaymentMethod: vi.fn() });
+      render(<OrdersView {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Delivery details' }));
+      fireEvent.change(screen.getByLabelText('Paid by'), { target: { value: 'upi' } });
+      expect(props.setOrdersPaymentMethod).toHaveBeenCalledWith(['m1'], 'upi');
+    });
+
+    it('does not ask how an unpaid order was paid', () => {
+      render1([made('m1', { paymentStatus: 'unpaid' })]);
+      fireEvent.click(screen.getByRole('button', { name: 'Delivery details' }));
+      expect(screen.queryByLabelText('Paid by')).toBeNull();
+    });
+
+    it('edits the discount once for the whole of a multi-item order', () => {
+      const props = makeProps({
+        orders: [made('g1', { orderGroupId: 'g' }), made('g2', { orderGroupId: 'g', menuItemId: 'cookie' })],
+        materials: [], setOrdersPaymentMethod: vi.fn(),
+      });
+      render(<OrdersView {...props} />);
+      for (const b of screen.getAllByRole('button', { name: 'Delivery details' })) fireEvent.click(b);
+      const fields = screen.getAllByLabelText('Discount on the whole order');
+      expect(fields).toHaveLength(1);
+      fireEvent.change(fields[0], { target: { value: '12' } });
+      expect(props.updateOrder).toHaveBeenCalledWith('g1', 'discount', 12);
+    });
   });
 });

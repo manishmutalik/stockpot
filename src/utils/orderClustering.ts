@@ -20,8 +20,8 @@ export function clusterOrdersByGroup(orders: Order[]): OrderCluster[] {
 }
 
 /**
- * Maps each order to how much of a delivery-related field (`deliveryCharge`
- * or `deliveryFee`) it should be attributed for financial totals: orders
+ * Maps each order to how much of a shared order-level field (`deliveryCharge`,
+ * `deliveryFee` or `discount`) it should be attributed for financial totals: orders
  * sharing an `orderGroupId` share one delivery, so summing every member's
  * value would multiply-count it by the group size. Only one representative
  * member of each group is attributed the value — its own, if it actually
@@ -42,7 +42,7 @@ export function clusterOrdersByGroup(orders: Order[]): OrderCluster[] {
  */
 export function attributeDeliveryFieldByGroup(
   orders: Order[],
-  field: 'deliveryCharge' | 'deliveryFee'
+  field: 'deliveryCharge' | 'deliveryFee' | 'discount'
 ): Map<string, number> {
   const attribution = new Map<string, number>();
 

@@ -189,6 +189,39 @@ export interface Order {
   unitInputGstAtSale?: number;
   /** The item's name when the order was created. */
   itemNameAtSale?: string;
+  /** Amount knocked off the whole order, in the business's currency (not a
+   * percentage). Shared by a multi-item order exactly like `deliveryCharge`:
+   * entered once, counted once per order. It lowers the sale amount, so GST is
+   * worked out on what the customer actually pays. */
+  discount?: number;
+  /** How the customer paid. Only meaningful once the order is paid; it decides
+   * the payment fee. Absent means not recorded, so no fee. */
+  paymentMethod?: PaymentMethod;
+  /** The fee rate (% of the amount paid) in force when the payment method was
+   * recorded, so changing the rates in Settings later never changes past
+   * profit. */
+  paymentFeeRate?: number;
+}
+
+export type PaymentMethod = 'upi' | 'cash' | 'card' | 'other';
+
+export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
+  { value: 'upi', label: 'UPI' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'card', label: 'Card' },
+  { value: 'other', label: 'Other' },
+];
+
+/** A recurring monthly cost that isn't tied to any order (rent, gas, salaries). */
+export interface FixedCost {
+  id: string;
+  name: string;
+  monthlyAmount: number;
+  /** First day (YYYY-MM-DD) the cost applies. Absent means from the beginning. */
+  startDate?: string;
+  /** Last day (YYYY-MM-DD) the cost applies. Absent means still running. Set it
+   * when a cost stops or changes, so past months keep what they really cost. */
+  endDate?: string;
 }
 
 /**
@@ -249,6 +282,12 @@ export interface BakerySettings {
    * upi://pay link in a bill's payment QR. Absent means bills simply have no
    * payment QR; it is optional and never required to use the app. */
   upiId?: string;
+  /** Fee the business pays per payment method, as a % of the amount collected
+   * (e.g. { card: 2, upi: 0 }). A missing method means 0%. */
+  paymentFeeRates?: Partial<Record<PaymentMethod, number>>;
+  /** Recurring monthly costs not tied to any order, prorated by day for the
+   * period being looked at. */
+  fixedCosts?: FixedCost[];
 }
 
 /**
@@ -381,11 +420,13 @@ export interface AppViewProps {
   updateOrder: (id: string, f: string, v: any) => void;
   fulfillOrder: (order: Order) => void;
   /** Marks orders paid or unpaid (every id given, in one write). */
-  markOrdersPaid: (ids: string[], paid: boolean) => void;
+  markOrdersPaid: (ids: string[], paid: boolean, method?: PaymentMethod) => void;
+  /** Records how already-paid orders were paid. */
+  setOrdersPaymentMethod: (ids: string[], method: PaymentMethod) => void;
   deleteOrder: (id: string) => void;
   resetOrders: () => void;
   saveSettings: () => void;
-  updateSettingsField: (field: any, value: string | number | boolean) => void;
+  updateSettingsField: (field: any, value: any) => void;
   handleRestock: (e: React.FormEvent) => void;
   restockMaterial: RawMaterial | null;
   setDiscardTarget: (t: { id: string; name: string; type: 'material' | 'recipe'; batchId?: string; maxQty: number; unit: string; costPerUnit: number; presetReason?: string } | null) => void;

@@ -43,7 +43,7 @@ describe('summarizeOrders', () => {
 
   it('is all zeros for no orders', () => {
     expect(summarizeOrders([], menu)).toEqual({
-      orderCount: 0, itemsSold: 0, revenue: 0, deliveryCharged: 0, courierCost: 0,
+      orderCount: 0, itemsSold: 0, revenue: 0, discounts: 0, deliveryCharged: 0, courierCost: 0,
       courierDeliveries: 0, pendingOrders: 0, pendingItems: 0,
     });
   });

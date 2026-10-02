@@ -20,7 +20,7 @@
  */
 import { auth, db, doc, setDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { MenuItem, Order, RawMaterial } from '../types';
+import { MenuItem, Order, PaymentMethod, RawMaterial } from '../types';
 import { stampFor } from '../utils/orderPricing';
 
 export function useOrderActions(
@@ -30,8 +30,13 @@ export function useOrderActions(
   showConfirm: (title: string, message: string, onConfirm: () => void) => void,
   showAlert: (title: string, message: string) => void,
   /** Needed to stamp each new order with what its item costs to make right now. */
-  materials: RawMaterial[]
+  materials: RawMaterial[],
+  /** Fee % per payment method (Settings). The rate is copied onto an order when its method is recorded, so later changes don't alter past profit. */
+  paymentFeeRates: Partial<Record<PaymentMethod, number>> = {}
 ) {
+  /** What to write to record how an order was paid, with the fee rate in force right now. */
+  const paymentFields = (method: PaymentMethod) => ({ paymentMethod: method, paymentFeeRate: paymentFeeRates[method] ?? 0 });
+
   /**
    * Creates one or more Order documents from a single "Add Order"
    * submission — e.g. a customer ordering several different items at once
@@ -66,7 +71,7 @@ export function useOrderActions(
    * then claimed atomically in the same batch as the order documents.
    */
   const addOrderGroup = async (
-    common: { date: string; customerName?: string; customerPhone?: string; paymentStatus?: 'paid' | 'unpaid' },
+    common: { date: string; customerName?: string; customerPhone?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number },
     lineItems: { menuItemId: string; quantity: number }[]
   ) => {
     if (!auth.currentUser || lineItems.length === 0) return;
@@ -98,7 +103,7 @@ export function useOrderActions(
 
     try {
       const batch = writeBatch(db);
-      for (const item of lineItems) {
+      for (const [index, item] of lineItems.entries()) {
         const id = Math.random().toString(36).substr(2, 9);
         const newOrder: Order = {
           id,
@@ -112,6 +117,10 @@ export function useOrderActions(
           ...(orderGroupId && { orderGroupId }),
           // Only "pay later" is stored; an order with no value counts as paid.
           ...(common.paymentStatus === 'unpaid' && { paymentStatus: 'unpaid' as const }),
+          // How it was paid (a pay-later order has not been paid yet), with the fee rate in force now.
+          ...(common.paymentStatus !== 'unpaid' && common.paymentMethod && paymentFields(common.paymentMethod)),
+          // A discount belongs to the whole order, so it goes on the first item only and is counted once.
+          ...(index === 0 && (common.discount ?? 0) > 0 && { discount: common.discount }),
         };
         batch.set(doc(db, 'users', userId, 'orders', id), newOrder);
       }
@@ -154,18 +163,35 @@ export function useOrderActions(
   };
 
   /**
-   * Marks orders paid or unpaid in one atomic write. "Paid" stores
-   * `paymentStatus: 'paid'`; an order with no value also counts as paid, so
-   * the explicit value just records that it was once pending.
+   * Marks orders paid or unpaid in one atomic write, optionally recording how
+   * they were paid. A paid order with no `paymentStatus` counts as paid, so the
+   * explicit 'paid' just records that it was once pending. The method, when
+   * given, is stored with the fee rate in force now.
    */
-  const markOrdersPaid = async (ids: string[], paid: boolean) => {
+  const markOrdersPaid = async (ids: string[], paid: boolean, method?: PaymentMethod) => {
     if (!auth.currentUser || ids.length === 0) return;
     const userId = auth.currentUser.uid;
     try {
       const batch = writeBatch(db);
       for (const id of ids) {
-        batch.set(doc(db, 'users', userId, 'orders', id), { paymentStatus: paid ? 'paid' : 'unpaid' }, { merge: true });
+        batch.set(doc(db, 'users', userId, 'orders', id), {
+          paymentStatus: paid ? 'paid' : 'unpaid',
+          ...(paid && method && paymentFields(method)),
+        }, { merge: true });
       }
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders`);
+    }
+  };
+
+  /** Records how already-paid orders were paid (every item of a multi-item order together). */
+  const setOrdersPaymentMethod = async (ids: string[], method: PaymentMethod) => {
+    if (!auth.currentUser || ids.length === 0) return;
+    const userId = auth.currentUser.uid;
+    try {
+      const batch = writeBatch(db);
+      for (const id of ids) batch.set(doc(db, 'users', userId, 'orders', id), paymentFields(method), { merge: true });
       await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders`);
@@ -316,6 +342,7 @@ export function useOrderActions(
     addOrderGroup,
     fulfillOrder,
     markOrdersPaid,
+    setOrdersPaymentMethod,
     updateOrder,
     deleteOrder,
     resetOrders,

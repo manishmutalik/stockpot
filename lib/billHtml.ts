@@ -62,6 +62,7 @@ export function renderBillHtml(bill: Bill): string {
     </table>
     <div class="row"><span>Items</span><span>${money(bill.itemsTotal)}</span></div>
     ${bill.deliveryCharge > 0 ? `<div class="row"><span>Delivery</span><span>${money(bill.deliveryCharge)}</span></div>` : ''}
+    ${bill.discount > 0 ? `<div class="row"><span>Discount</span><span>-${money(bill.discount)}</span></div>` : ''}
     ${bill.gst ? `<div class="row"><span>${gstLabel}</span><span>${money(bill.gst.amount)}</span></div>` : ''}
     <div class="row total"><span>${statement ? 'Total due' : 'Total'}</span><span>${money(bill.total)}</span></div>
     ${upi}

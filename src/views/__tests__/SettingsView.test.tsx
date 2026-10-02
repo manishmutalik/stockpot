@@ -5,6 +5,7 @@ import { SettingsView } from '../SettingsView';
 const makeProps = (over: Record<string, any> = {}) => ({
   settings: { name: 'Test Bakery', phone: '555', address: '1 Main St', logo: '', primaryColor: '#10b981', gstApplicable: false, gstRate: 5 },
   activeSettingsTab: 'bakery',
+  currency: { code: 'INR', symbol: '₹' },
   setActiveSettingsTab: vi.fn(),
   updateSettingsField: vi.fn(),
   saveSettings: vi.fn(),
@@ -154,6 +155,66 @@ describe('SettingsView', () => {
       expect(screen.queryByLabelText('Delete Raw Materials')).toBeNull();
       fireEvent.click(screen.getByLabelText('Delete Packaging Materials'));
       expect(props.deleteCategory).toHaveBeenCalledWith('Packaging Materials');
+    });
+  });
+
+  describe('payment fees', () => {
+    it('shows each method\'s fee and saves an edit with the other rates kept', () => {
+      const props = makeProps({ settings: { ...makeProps().settings, paymentFeeRates: { card: 2, upi: 0.5 } } });
+      render(<SettingsView {...props} />);
+      expect((screen.getByLabelText('Card fee (%)') as HTMLInputElement).value).toBe('2');
+      expect((screen.getByLabelText('Cash fee (%)') as HTMLInputElement).value).toBe('');
+      fireEvent.change(screen.getByLabelText('Card fee (%)'), { target: { value: '2.5' } });
+      expect(props.updateSettingsField).toHaveBeenCalledWith('paymentFeeRates', { card: 2.5, upi: 0.5 });
+    });
+
+    it('clears a rate when the field is emptied, and never saves a negative one', () => {
+      const props = makeProps({ settings: { ...makeProps().settings, paymentFeeRates: { card: 2, upi: 0.5 } } });
+      render(<SettingsView {...props} />);
+      fireEvent.change(screen.getByLabelText('Card fee (%)'), { target: { value: '' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('paymentFeeRates', { upi: 0.5 });
+      fireEvent.change(screen.getByLabelText('Cash fee (%)'), { target: { value: '-4' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('paymentFeeRates', { card: 2, upi: 0.5, cash: 0 });
+    });
+  });
+
+  describe('fixed monthly costs', () => {
+    const costs = [{ id: 'r', name: 'Rent', monthlyAmount: 15000, startDate: '2026-01-01' }];
+    const withCosts = () => makeProps({ settings: { ...makeProps().settings, fixedCosts: costs } });
+
+    it('adds a blank cost', () => {
+      const props = makeProps();
+      render(<SettingsView {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: /Add a fixed cost/ }));
+      const [key, value] = props.updateSettingsField.mock.calls.at(-1);
+      expect(key).toBe('fixedCosts');
+      expect(value).toEqual([{ id: expect.any(String), name: '', monthlyAmount: 0 }]);
+    });
+
+    it('shows a saved cost with its amount and dates', () => {
+      render(<SettingsView {...withCosts()} />);
+      expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Rent');
+      expect((screen.getByLabelText(/Per month/) as HTMLInputElement).value).toBe('15000');
+      expect((screen.getByLabelText(/From/) as HTMLInputElement).value).toBe('2026-01-01');
+      expect((screen.getByLabelText(/Until/) as HTMLInputElement).value).toBe('');
+    });
+
+    it('edits the amount and sets an end date, leaving the rest alone', () => {
+      const props = withCosts();
+      render(<SettingsView {...props} />);
+      fireEvent.change(screen.getByLabelText(/Per month/), { target: { value: '16000' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('fixedCosts', [{ ...costs[0], monthlyAmount: 16000 }]);
+      fireEvent.change(screen.getByLabelText(/Until/), { target: { value: '2026-06-30' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('fixedCosts', [{ ...costs[0], endDate: '2026-06-30' }]);
+    });
+
+    it('clears an end date, and removes a cost', () => {
+      const props = makeProps({ settings: { ...makeProps().settings, fixedCosts: [{ ...costs[0], endDate: '2026-06-30' }] } });
+      render(<SettingsView {...props} />);
+      fireEvent.change(screen.getByLabelText(/Until/), { target: { value: '' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('fixedCosts', [{ ...costs[0], endDate: undefined }]);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Rent' }));
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('fixedCosts', []);
     });
   });
 });

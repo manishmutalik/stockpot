@@ -1,5 +1,6 @@
 import { convertAmount } from './conversions';
 import { stampFor, type OrderStamp } from './orderPricing';
+import type { PaymentMethod } from '../types';
 
 /**
  * Sample data for the demo sandbox.
@@ -31,11 +32,14 @@ export interface DemoOrder {
   customerName: string; customerPhone: string; fulfilled: boolean;
 }
 /** A demo order carries its price and cost stamp, like every order made in the app. */
-export type DemoOrderWithStamp = DemoOrder & OrderStamp;
+export type DemoOrderWithStamp = DemoOrder & OrderStamp & { paymentMethod: PaymentMethod; paymentFeeRate: number; discount?: number };
 export interface DemoRun {
   id: string; recipeId: string; quantityProduced: number; quantityYield?: number; remainingQuantity: number;
   date: string; expiryDate: string; purpose: string; costTotal: number; createdAt: number;
 }
+
+/** Fee % the demo business pays per payment method. */
+export const DEMO_FEE_RATES: Partial<Record<PaymentMethod, number>> = { upi: 0, card: 2 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const round2 = (n: number) => parseFloat(n.toFixed(2));
@@ -132,11 +136,19 @@ export function buildDemoData(userId: string, today: string) {
   ];
   // Each order is stamped with what its item sold for and cost to make, as the app does when an
   // order is created, so the demo's figures are exact rather than "estimated".
-  const orders: DemoOrderWithStamp[] = orderRows.map(([menuItemId, quantity, daysAgo, customerName, customerPhone], i) => ({
-    id: `ord_${i + 1}`, menuItemId, quantity, date: at(daysAgo), customerName, customerPhone,
-    fulfilled: daysAgo > 0,
-    ...stampFor(menuBase.find(m => m.id === menuItemId)!, purchases),
-  }));
+  // Orders are paid in a mix of ways, each carrying the fee rate in force (see DEMO_FEE_RATES), and one
+  // large café order was given a bulk discount, so the demo shows payment fees and discounts too.
+  const methods: PaymentMethod[] = ['upi', 'cash', 'upi', 'card', 'upi', 'cash'];
+  const orders: DemoOrderWithStamp[] = orderRows.map(([menuItemId, quantity, daysAgo, customerName, customerPhone], i) => {
+    const paymentMethod = methods[i % methods.length];
+    return {
+      id: `ord_${i + 1}`, menuItemId, quantity, date: at(daysAgo), customerName, customerPhone,
+      fulfilled: daysAgo > 0,
+      ...stampFor(menuBase.find(m => m.id === menuItemId)!, purchases),
+      paymentMethod, paymentFeeRate: DEMO_FEE_RATES[paymentMethod] ?? 0,
+      ...(customerName === 'Brew & Bite Café' && { discount: 150 }),
+    };
+  });
 
   // ── Production runs: [id, recipe, produced, sellable (if some was lost), days ago, shelf life in days] ──
   const runRows: [string, string, number, number | undefined, number, number][] = [
@@ -228,6 +240,13 @@ export function buildDemoData(userId: string, today: string) {
     email: `${userId}@demo.stockpot.app`,
     currency: { code: 'INR', symbol: '₹' },
     categories: ['Raw Materials', 'Packaging Materials'],
+    paymentFeeRates: DEMO_FEE_RATES,
+    // Typical monthly overheads for a small Bengaluru bakery, so the dashboard can show a True Profit.
+    fixedCosts: [
+      { id: 'fc_rent', name: 'Shop rent', monthlyAmount: 15000 },
+      { id: 'fc_power', name: 'Gas & electricity', monthlyAmount: 4500 },
+      { id: 'fc_helper', name: "Helper's salary", monthlyAmount: 12000 },
+    ],
   };
 
   return { settings, materials, menu, orders, productionRuns, experiments };

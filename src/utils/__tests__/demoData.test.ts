@@ -148,4 +148,27 @@ describe('demo data adds up', () => {
     // the box is not in any recipe, so there is no packaging cost on any demo order
     expect(demo.orders.every(o => o.unitPackagingCostAtSale === 0)).toBe(true);
   });
+
+  it('records how each order was paid, with the fee rate that applied, so the demo shows payment fees', () => {
+    const rates = demo.settings.paymentFeeRates!;
+    for (const o of demo.orders as any[]) {
+      expect(['upi', 'cash', 'card', 'other']).toContain(o.paymentMethod);
+      expect(o.paymentFeeRate).toBe(rates[o.paymentMethod as 'upi'] ?? 0);
+    }
+    expect(new Set((demo.orders as any[]).map(o => o.paymentMethod)).size).toBeGreaterThan(1);
+    expect(Object.values(rates).some(r => r > 0)).toBe(true);
+  });
+
+  it('gives one order a discount (on a past, fulfilled order), smaller than what it was billed', () => {
+    const discounted = (demo.orders as any[]).filter(o => o.discount);
+    expect(discounted).toHaveLength(1);
+    expect(discounted[0].fulfilled).toBe(true);
+    expect(discounted[0].discount).toBeLessThan(byId(demo.menu, discounted[0].menuItemId).sellingPrice * discounted[0].quantity);
+  });
+
+  it('has fixed monthly costs, so True Profit is lower than net profit', () => {
+    expect(demo.settings.fixedCosts!.length).toBeGreaterThan(0);
+    for (const c of demo.settings.fixedCosts!) expect(c.monthlyAmount).toBeGreaterThan(0);
+    expect(new Set(demo.settings.fixedCosts!.map(c => c.id)).size).toBe(demo.settings.fixedCosts!.length);
+  });
 });
