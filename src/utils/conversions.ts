@@ -46,6 +46,18 @@ export function convertAmount(amount: number, fromUnit: string, toUnit: string):
   return conversion !== undefined ? amount * conversion : amount;
 }
 
+/**
+ * The units a quantity of a material can be entered in: its own unit and the
+ * other unit of the same kind (grams for kilos, millilitres for litres). Weight
+ * and volume are not mixed here, since the g/ml equivalence in UNIT_CONVERSIONS
+ * is only a rule of thumb for recipes. A unit with no sibling (pcs, or a custom
+ * one) can only be entered as itself.
+ */
+export function enterableUnits(unit: string): string[] {
+  const family = [['g', 'kg'], ['ml', 'l']].find(f => f.includes(unit));
+  return family ?? [unit];
+}
+
 /** Supported display currencies. The first entry (INR) is the default. */
 export const CURRENCIES = [
   { code: 'INR', symbol: '₹' },

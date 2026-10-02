@@ -18,6 +18,7 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { apiFetch } from '../utils/apiClient';
 import { RawMaterial, MenuItem } from '../types';
 import { newPriceLogEntry } from '../utils/priceLog';
+import { convertAmount } from '../utils/conversions';
 // Type-only: erased at build time, so the search functions themselves
 // (axios calls, USDA_API_KEY) never end up in the client bundle.
 import type { NutritionSearchResult } from '../../lib/nutritionSearch';
@@ -36,6 +37,8 @@ export function useInventoryActions(
   const [restockMaterial, setRestockMaterial] = useState<RawMaterial | null>(null);
   const [restockQty, setRestockQty] = useState('');
   const [restockBaseTotal, setRestockBaseTotal] = useState('');
+  // The unit the quantity is typed in: blank means the material's own unit (grams can be entered for a kilo item).
+  const [restockQtyUnit, setRestockQtyUnit] = useState('');
   const [restockExpiryDate, setRestockExpiryDate] = useState('');
 
   // ── Nutrition & Allergens Modal State ────────────────────────────────────
@@ -278,6 +281,15 @@ export function useInventoryActions(
     }
   };
 
+  /** Closes the Restock modal and clears what was typed, so the next restock starts blank. */
+  const closeRestock = () => {
+    setRestockMaterial(null);
+    setRestockQty('');
+    setRestockBaseTotal('');
+    setRestockQtyUnit('');
+    setRestockExpiryDate('');
+  };
+
   /**
    * Submits the Restock modal: adds the new quantity to on-hand stock and
    * recalculates the material's moving-average cost per unit.
@@ -286,9 +298,13 @@ export function useInventoryActions(
     e.preventDefault();
     if (!restockMaterial || !auth.currentUser || !restockQty || !restockBaseTotal) return;
     try {
-      const qty = Number(restockQty);
       const baseTotal = Number(restockBaseTotal);
-      if (qty <= 0) return;
+      // The quantity may be typed in another unit of the same kind (500 g for an item kept in kg); stock and
+      // cost are always held in the material's own unit, so it is converted here, and the price paid then
+      // works out per that unit (520 for 500 g is 1,040 a kg).
+      const materialUnit = restockMaterial.unit || 'g';
+      const qty = Math.round(convertAmount(Number(restockQty), restockQtyUnit || materialUnit, materialUnit) * 1e6) / 1e6;
+      if (!(qty > 0)) return;
 
       const newStock = (restockMaterial.initialStock || 0) + qty;
       const oldTotalValue = (restockMaterial.initialStock || 0) * (restockMaterial.costPerUnit || 0);
@@ -314,10 +330,7 @@ export function useInventoryActions(
       batch.set(doc(db, 'users', userId, 'priceLog', entry.id), entry);
       await batch.commit();
 
-      setRestockMaterial(null);
-      setRestockQty('');
-      setRestockBaseTotal('');
-      setRestockExpiryDate('');
+      closeRestock();
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${auth.currentUser.uid}/materials/${restockMaterial.id}`);
     }
@@ -485,6 +498,9 @@ export function useInventoryActions(
     setRestockQty,
     restockBaseTotal,
     setRestockBaseTotal,
+    restockQtyUnit,
+    setRestockQtyUnit,
+    closeRestock,
     restockExpiryDate,
     setRestockExpiryDate,
     handleRestock,

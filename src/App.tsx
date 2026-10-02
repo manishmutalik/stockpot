@@ -723,7 +723,8 @@ function BakeryApp() {
     addMaterial, handleDownloadTemplate, handleImportCSV, addCategory, deleteCategory,
     updateMaterial, patchMaterial, deleteMaterial,
     restockMaterial, setRestockMaterial, restockQty, setRestockQty,
-    restockBaseTotal, setRestockBaseTotal, restockExpiryDate, setRestockExpiryDate,
+    restockBaseTotal, setRestockBaseTotal, restockQtyUnit, setRestockQtyUnit, closeRestock,
+    restockExpiryDate, setRestockExpiryDate,
     handleRestock,
     nutritionEditMaterial, setNutritionEditMaterial, openNutritionEditor,
     nutritionCalories, setNutritionCalories, nutritionProtein, setNutritionProtein,
@@ -1608,10 +1609,13 @@ function BakeryApp() {
             onQtyChange={setRestockQty}
             baseTotal={restockBaseTotal}
             onBaseTotalChange={setRestockBaseTotal}
+            qtyUnit={restockQtyUnit}
+            onQtyUnitChange={setRestockQtyUnit}
+            gstApplicable={!!settings.gstApplicable}
             expiryDate={restockExpiryDate}
             onExpiryDateChange={setRestockExpiryDate}
             onSubmit={handleRestock}
-            onClose={() => setRestockMaterial(null)}
+            onClose={closeRestock}
           />
         )}
 
