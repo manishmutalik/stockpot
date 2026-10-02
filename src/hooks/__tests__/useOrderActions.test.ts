@@ -14,9 +14,10 @@ vi.mock('../../firebase', () => ({
 }));
 
 import { useOrderActions } from '../useOrderActions';
-import type { MenuItem, Order } from '../../types';
+import type { MenuItem, Order, RawMaterial } from '../../types';
 
 const showConfirm = vi.fn();
+const materials: RawMaterial[] = [];
 
 describe('addOrderGroup — adding a customer order with one or more items', () => {
   beforeEach(() => {
@@ -31,7 +32,7 @@ describe('addOrderGroup — adding a customer order with one or more items', () 
   it('a single line item gets no orderGroupId, writes one order document, and claims stock', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert)
+      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert, materials)
     );
 
     await result.current.addOrderGroup(
@@ -54,7 +55,7 @@ describe('addOrderGroup — adding a customer order with one or more items', () 
   it('multiple line items share one orderGroupId and shared customer/date fields, written atomically', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert)
+      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert, materials)
     );
 
     await result.current.addOrderGroup(
@@ -81,7 +82,7 @@ describe('addOrderGroup — adding a customer order with one or more items', () 
   it('rejects an unknown menuItemId before writing anything', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert)
+      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert, materials)
     );
 
     await expect(
@@ -99,7 +100,7 @@ describe('addOrderGroup — adding a customer order with one or more items', () 
   it('omits customerName/customerPhone entirely when left blank, rather than writing empty strings', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert)
+      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert, materials)
     );
 
     await result.current.addOrderGroup({ date: '2026-04-01' }, [{ menuItemId: 'cake', quantity: 1 }]);
@@ -112,7 +113,7 @@ describe('addOrderGroup — adding a customer order with one or more items', () 
   it('rejects an order that needs more than is currently in stock, without writing anything', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert)
+      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert, materials)
     );
 
     await expect(
@@ -126,7 +127,7 @@ describe('addOrderGroup — adding a customer order with one or more items', () 
   it('combines quantities when the same item appears in more than one line before checking stock', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert)
+      useOrderActions(menu, [], '2026-04-01', showConfirm, showAlert, materials)
     );
 
     // Two rows of 6 each — neither exceeds the 10 in stock alone, but together they do.
@@ -155,7 +156,7 @@ describe('fulfillOrder — a plain completion status with no inventory effect', 
     const setDocMock = (await import('../../firebase')).setDoc as any;
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert)
+      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert, materials)
     );
 
     await result.current.fulfillOrder(order);
@@ -172,7 +173,7 @@ describe('fulfillOrder — a plain completion status with no inventory effect', 
     const fulfilledOrder: Order = { ...order, fulfilled: true };
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [fulfilledOrder], '2026-01-01', showConfirm, showAlert)
+      useOrderActions(menu, [fulfilledOrder], '2026-01-01', showConfirm, showAlert, materials)
     );
 
     await result.current.fulfillOrder(fulfilledOrder);
@@ -195,7 +196,7 @@ describe('updateOrder — item/quantity edits re-balance claimed stock', () => {
   it('raising the quantity claims the difference from the same item', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert)
+      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert, materials)
     );
 
     await result.current.updateOrder('o1', 'quantity', 5); // 4 available + 3 already claimed = 7 max
@@ -209,7 +210,7 @@ describe('updateOrder — item/quantity edits re-balance claimed stock', () => {
   it('lowering the quantity releases the difference back', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert)
+      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert, materials)
     );
 
     await result.current.updateOrder('o1', 'quantity', 1);
@@ -221,7 +222,7 @@ describe('updateOrder — item/quantity edits re-balance claimed stock', () => {
   it('rejects a quantity increase beyond what is available, leaving the order unchanged', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert)
+      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert, materials)
     );
 
     await result.current.updateOrder('o1', 'quantity', 8); // max is 4 + 3 = 7
@@ -233,7 +234,7 @@ describe('updateOrder — item/quantity edits re-balance claimed stock', () => {
   it('switching items releases the old item and claims the new one', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert)
+      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert, materials)
     );
 
     await result.current.updateOrder('o1', 'menuItemId', 'cookie'); // still quantity 3, but only 2 cookies in stock — should be rejected
@@ -249,7 +250,7 @@ describe('updateOrder — item/quantity edits re-balance claimed stock', () => {
     ];
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(roomyMenu, [order], '2026-01-01', showConfirm, showAlert)
+      useOrderActions(roomyMenu, [order], '2026-01-01', showConfirm, showAlert, materials)
     );
 
     await result.current.updateOrder('o1', 'menuItemId', 'cookie');
@@ -266,7 +267,7 @@ describe('updateOrder — item/quantity edits re-balance claimed stock', () => {
   it('other fields (e.g. customerName) are a plain write with no stock effect', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert)
+      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert, materials)
     );
 
     await result.current.updateOrder('o1', 'customerName', 'Asha');
@@ -290,7 +291,7 @@ describe('deleteOrder — restoring the stock an order had claimed', () => {
   it('deletes the order and restores its claimed quantity in the same batch', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert)
+      useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert, materials)
     );
 
     await result.current.deleteOrder('o1');
@@ -320,7 +321,7 @@ describe('resetOrders — bulk-deleting a date, restoring stock aggregated per i
     showConfirm.mockImplementation((_t, _m, onConfirm) => onConfirm());
     const showAlert = vi.fn();
     const { result } = renderHook(() =>
-      useOrderActions(menu, ordersForDate, '2026-05-01', showConfirm, showAlert)
+      useOrderActions(menu, ordersForDate, '2026-05-01', showConfirm, showAlert, materials)
     );
 
     result.current.resetOrders();
@@ -338,7 +339,7 @@ describe('payment status', () => {
   const menu: MenuItem[] = [{ id: 'cake', name: 'Cake', sellingPrice: 20, recipe: [], finishedGoodsStock: 10 } as MenuItem];
 
   it('stores pay-later orders as unpaid, and writes nothing for paid ones (no value means paid)', async () => {
-    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn()));
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials));
     await result.current.addOrderGroup({ date: '2026-04-01', paymentStatus: 'unpaid' }, [{ menuItemId: 'cake', quantity: 1 }]);
     await result.current.addOrderGroup({ date: '2026-04-01', paymentStatus: 'paid' }, [{ menuItemId: 'cake', quantity: 1 }]);
     const orderCalls = batchSet.mock.calls.filter(([ref]: any[]) => ref.path.includes('/orders/'));
@@ -348,14 +349,14 @@ describe('payment status', () => {
 
   it('puts every item of a multi-item order on the same payment status', async () => {
     const two = [...menu, { id: 'cookie', name: 'Cookie', sellingPrice: 5, recipe: [], finishedGoodsStock: 10 } as MenuItem];
-    const { result } = renderHook(() => useOrderActions(two, [], '2026-04-01', showConfirm, vi.fn()));
+    const { result } = renderHook(() => useOrderActions(two, [], '2026-04-01', showConfirm, vi.fn(), materials));
     await result.current.addOrderGroup({ date: '2026-04-01', paymentStatus: 'unpaid' }, [{ menuItemId: 'cake', quantity: 1 }, { menuItemId: 'cookie', quantity: 1 }]);
     const orderCalls = batchSet.mock.calls.filter(([ref]: any[]) => ref.path.includes('/orders/'));
     expect(orderCalls.map(c => c[1].paymentStatus)).toEqual(['unpaid', 'unpaid']);
   });
 
   it('marks several orders paid in one atomic write, with no stock effect', async () => {
-    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn()));
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials));
     await result.current.markOrdersPaid(['a', 'b', 'c'], true);
     expect(batchCommit).toHaveBeenCalledTimes(1);
     expect(batchSet).toHaveBeenCalledTimes(3);
@@ -367,11 +368,64 @@ describe('payment status', () => {
   });
 
   it('can mark them unpaid again, and does nothing for an empty list', async () => {
-    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn()));
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials));
     await result.current.markOrdersPaid(['a'], false);
     expect(batchSet.mock.calls[0][1]).toEqual({ paymentStatus: 'unpaid' });
     vi.clearAllMocks();
     await result.current.markOrdersPaid([], true);
     expect(batchCommit).not.toHaveBeenCalled();
+  });
+});
+
+describe('stamping — an order keeps what its item sold for and cost when it was created', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  const mats = [
+    { id: 'flour', unit: 'kg', costPerUnit: 40, category: 'Raw Materials', gstRate: 5 },
+    { id: 'box', unit: 'pcs', costPerUnit: 10, category: 'Packaging Materials', gstRate: 18 },
+  ] as unknown as RawMaterial[];
+  const recipe = [{ materialId: 'flour', amount: 500, unit: 'g' }, { materialId: 'box', amount: 1, unit: 'pcs' }];
+  const stockMenu: MenuItem[] = [
+    { id: 'cake', name: 'Cake', sellingPrice: 100, recipe, finishedGoodsStock: 10 } as MenuItem,
+    { id: 'pie', name: 'Pie', sellingPrice: 80, recipe: [{ materialId: 'flour', amount: 1000, unit: 'g' }], finishedGoodsStock: 10 } as MenuItem,
+  ];
+  const orderWrites = () => batchSet.mock.calls.filter(([ref]: any[]) => ref.path.includes('/orders/'));
+
+  it('addOrderGroup stamps the price, ingredient and packaging cost, input GST and name on every member', async () => {
+    const { result } = renderHook(() => useOrderActions(stockMenu, [], '2026-04-01', showConfirm, vi.fn(), mats));
+    await result.current.addOrderGroup({ date: '2026-04-01' }, [{ menuItemId: 'cake', quantity: 2 }, { menuItemId: 'pie', quantity: 1 }]);
+    const [cake, pie] = orderWrites().map(c => c[1]);
+    expect(cake).toMatchObject({ unitPriceAtSale: 100, unitIngredientCostAtSale: 20, unitPackagingCostAtSale: 10, itemNameAtSale: 'Cake' });
+    expect(cake.unitInputGstAtSale).toBeCloseTo(20 * 0.05 + 10 * 0.18, 6);
+    expect(pie).toMatchObject({ unitPriceAtSale: 80, unitIngredientCostAtSale: 40, unitPackagingCostAtSale: 0, itemNameAtSale: 'Pie' });
+  });
+
+  it('a single-item order is stamped too', async () => {
+    const { result } = renderHook(() => useOrderActions(stockMenu, [], '2026-04-01', showConfirm, vi.fn(), mats));
+    await result.current.addOrderGroup({ date: '2026-04-01' }, [{ menuItemId: 'cake', quantity: 1 }]);
+    expect(orderWrites()[0][1].unitPriceAtSale).toBe(100);
+  });
+
+  it('updateOrder keeps the stamp when only the quantity changes', async () => {
+    const order = { id: 'o1', menuItemId: 'cake', quantity: 2, date: '2026-04-01', unitPriceAtSale: 90 } as Order;
+    const { result } = renderHook(() => useOrderActions(stockMenu, [order], '2026-04-01', showConfirm, vi.fn(), mats));
+    await result.current.updateOrder('o1', 'quantity', 3);
+    const write = orderWrites()[0][1];
+    expect(write).toEqual({ menuItemId: 'cake', quantity: 3 }); // no stamp fields: the stored 90 stays
+  });
+
+  it('updateOrder re-stamps from the new item when the item changes', async () => {
+    const order = { id: 'o1', menuItemId: 'cake', quantity: 2, date: '2026-04-01', unitPriceAtSale: 90 } as Order;
+    const { result } = renderHook(() => useOrderActions(stockMenu, [order], '2026-04-01', showConfirm, vi.fn(), mats));
+    await result.current.updateOrder('o1', 'menuItemId', 'pie');
+    expect(orderWrites()[0][1]).toMatchObject({ menuItemId: 'pie', quantity: 2, unitPriceAtSale: 80, unitIngredientCostAtSale: 40, itemNameAtSale: 'Pie' });
+  });
+
+  it('updateOrder does not stamp other edits such as the customer name', async () => {
+    const order = { id: 'o1', menuItemId: 'cake', quantity: 2, date: '2026-04-01', unitPriceAtSale: 90 } as Order;
+    const { result } = renderHook(() => useOrderActions(stockMenu, [order], '2026-04-01', showConfirm, vi.fn(), mats));
+    await result.current.updateOrder('o1', 'customerName', 'Asha');
+    const { setDoc } = await import('../../firebase');
+    expect((setDoc as any).mock.calls.at(-1)[1]).toMatchObject({ customerName: 'Asha', unitPriceAtSale: 90 });
   });
 });

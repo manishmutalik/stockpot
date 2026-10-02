@@ -247,7 +247,9 @@ export function useInventoryActions(
       const userId = auth.currentUser.uid;
       const restockUpdate: Record<string, any> = {
         initialStock: newStock,
-        costPerUnit: Number(newMAC.toFixed(2))
+        // Keep real precision: costs are per gram or ml (e.g. 0.045), so rounding to 2 decimals
+        // would shift them by 10% or more (0.045 -> 0.04) and distort every recipe cost.
+        costPerUnit: parseFloat(newMAC.toFixed(6))
       };
       if (restockExpiryDate) {
         restockUpdate.expiryDate = restockExpiryDate;

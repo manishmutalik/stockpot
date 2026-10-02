@@ -1,5 +1,6 @@
 import { MenuItem, Order } from '../types';
 import { attributeDeliveryFieldByGroup, clusterOrdersByGroup } from './orderClustering';
+import { resolveUnitPrice } from './orderPricing';
 
 export interface OrderStats {
   /** Customer orders: a multi-item order counts once, not once per item. */
@@ -19,10 +20,9 @@ export interface OrderStats {
   pendingItems: number;
 }
 
-/** What one order line sells for at the menu's current price. */
+/** What one order line sold for: its price when the order was created (today's menu price only for orders from before prices were stamped). */
 export function orderLineTotal(order: Order, menu: MenuItem[]): number {
-  const item = menu.find(m => m.id === order.menuItemId);
-  return (item?.sellingPrice || 0) * (order.quantity || 0);
+  return resolveUnitPrice(order, menu).value * (order.quantity || 0);
 }
 
 /**

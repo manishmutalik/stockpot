@@ -221,3 +221,32 @@ describe('consolidated bill (statement)', () => {
     expect(resolveBillToken([order('a', { billToken: 'a'.repeat(32) })], 'statementToken').isNew).toBe(true);
   });
 });
+
+describe('bills use the price and name the order was made at', () => {
+  const stamped = (over: Record<string, any> = {}) => order('s1', { quantity: 2, unitPriceAtSale: 450, itemNameAtSale: 'Chocolate Truffle', ...over });
+
+  it('prices and names the line from the stamp, however the menu has changed since', () => {
+    const bill = buildBill({ orders: [stamped()], menu, settings, currency: INR }); // menu now says 500 / "Chocolate Cake"
+    expect(bill.lines).toEqual([{ name: 'Chocolate Truffle', quantity: 2, unitPrice: 450, lineTotal: 900 }]);
+    expect(bill.total).toBe(900);
+  });
+
+  it('still bills an order whose menu item has been deleted', () => {
+    const bill = buildBill({ orders: [stamped()], menu: [], settings, currency: INR });
+    expect(bill.lines[0]).toMatchObject({ name: 'Chocolate Truffle', unitPrice: 450 });
+    expect(bill.total).toBe(900);
+  });
+
+  it("values an order from before stamping at today's menu, as before", () => {
+    const bill = buildBill({ orders: [order('old', { quantity: 2 })], menu, settings, currency: INR });
+    expect(bill.lines[0]).toMatchObject({ name: 'Chocolate Cake', unitPrice: 500 });
+  });
+
+  it('keeps a consolidated bill and its total due steady when prices change', () => {
+    const orders = [stamped({ id: 'a' }), stamped({ id: 'b', date: '2026-03-12', quantity: 1 })];
+    const first = buildBill({ orders, menu, settings, currency: INR, statement: true, today: '2026-03-20' });
+    const repriced = buildBill({ orders, menu: menu.map(m => ({ ...m, sellingPrice: m.sellingPrice * 3 })), settings, currency: INR, statement: true, today: '2026-03-20' });
+    expect(repriced.total).toBe(first.total);
+    expect(first.total).toBe(450 * 3);
+  });
+});

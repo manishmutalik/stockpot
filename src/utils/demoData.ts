@@ -1,4 +1,5 @@
 import { convertAmount } from './conversions';
+import { stampFor, type OrderStamp } from './orderPricing';
 
 /**
  * Sample data for the demo sandbox.
@@ -29,6 +30,8 @@ export interface DemoOrder {
   id: string; menuItemId: string; quantity: number; date: string;
   customerName: string; customerPhone: string; fulfilled: boolean;
 }
+/** A demo order carries its price and cost stamp, like every order made in the app. */
+export type DemoOrderWithStamp = DemoOrder & OrderStamp;
 export interface DemoRun {
   id: string; recipeId: string; quantityProduced: number; quantityYield?: number; remainingQuantity: number;
   date: string; expiryDate: string; purpose: string; costTotal: number; createdAt: number;
@@ -127,9 +130,12 @@ export function buildDemoData(userId: string, today: string) {
     ['menu_muffin', 15, 6, 'Greenfield School Fete', '+91 80410 70701'],
     ['menu_bread', 5, 6, 'Residents Welfare Association', '+91 80410 70702'],
   ];
-  const orders: DemoOrder[] = orderRows.map(([menuItemId, quantity, daysAgo, customerName, customerPhone], i) => ({
+  // Each order is stamped with what its item sold for and cost to make, as the app does when an
+  // order is created, so the demo's figures are exact rather than "estimated".
+  const orders: DemoOrderWithStamp[] = orderRows.map(([menuItemId, quantity, daysAgo, customerName, customerPhone], i) => ({
     id: `ord_${i + 1}`, menuItemId, quantity, date: at(daysAgo), customerName, customerPhone,
     fulfilled: daysAgo > 0,
+    ...stampFor(menuBase.find(m => m.id === menuItemId)!, purchases),
   }));
 
   // ── Production runs: [id, recipe, produced, sellable (if some was lost), days ago, shelf life in days] ──

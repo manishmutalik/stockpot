@@ -1,5 +1,54 @@
 # Changelog
 
+## True profit, part 1: stable history and one place for the maths
+
+Profit now means what the business actually made, and past figures no longer
+move when prices change. (This is the first of three steps; discounts, payment
+fees and fixed costs, then the ingredient price log and per-product view, come
+next.)
+
+- **Past orders keep the price and cost they had.** Every new order is stamped
+  with the unit price, the ingredient and packaging cost, the input GST inside
+  those costs and the item's name at that moment (`unitPriceAtSale`,
+  `unitIngredientCostAtSale`, `unitPackagingCostAtSale`, `unitInputGstAtSale`,
+  `itemNameAtSale`; helpers in `src/utils/orderPricing.ts`). Revenue, costs,
+  the Orders tab, bills and statements all read the stamp. Before this, raising
+  a cake from 600 to 700 added 100 to last month's revenue for every cake sold,
+  and restocking butter dearer raised last month's ingredient cost. Tested: with
+  prices tripled and costs doubled, the dashboard's profit is unchanged.
+  A bill regenerated later no longer reprices either, and a bill for a deleted
+  menu item still shows its name and price.
+- **Where stamps are written:** Add Order (single and multi-item), changing an
+  order's item (re-stamped from the new item; changing only the quantity keeps
+  the stamp), Shopify and Odoo imports (at the price the customer actually paid
+  when the import has one, otherwise the menu price), and the demo data.
+- **Older orders are not back-filled.** That would freeze today's prices into
+  old orders. They are valued at today's menu and costs as before, and the
+  dashboard says "Includes orders valued at today's prices (est.)" while any
+  are in the period.
+- **GST-inclusive profit was overstated, now fixed.** In inclusive pricing the
+  price already contains GST, which is owed to the government, but income
+  counted all of it. Income is now the pre-GST base in both modes (labelled
+  "Income (excl. GST)" when GST is on), so **in a GST-inclusive business, income
+  and net profit drop by exactly the GST collected**. Checked on the demo with
+  5% inclusive: 16,200.00 gross became 15,428.57 income plus 771.43 GST, and
+  profit fell by the same 771.43. Exclusive mode and businesses with GST off
+  see no change. An inclusive and an exclusive business selling the same base
+  amount now report the same profit (tested). The Orders tab's "Revenue
+  booked" still shows what customers are billed.
+- **One calculation, many readers.** `src/utils/profit.ts` now holds the
+  income, cost and profit maths (`financialsForRange`, `orderContribution`);
+  `getFinancialsForRange` in `App.tsx` is a thin wrapper, so the dashboard,
+  chart and Summary read the same code. It also returns `totalContribution`,
+  `avgOrderContribution`, `orderCount`, `packagingExpenses` and `estimated`
+  for the screens to come. All existing keys keep their meaning. Wastage is
+  subtracted once at business level and R&D stays out of profit, as before; a
+  multi-item order's delivery charge and courier fee still count once.
+- **Restocking no longer rounds the cost to 2 decimals.** The moving-average
+  cost was stored with `toFixed(2)`, so a per-gram cost of 0.045 became 0.04
+  (11% low) and 0.0475 became 0.05, distorting every recipe cost. It now keeps
+  six decimals.
+
 ## Share Menu: a menu PDF sent over WhatsApp
 
 A **Share Menu** button (fork-and-knife icon) now sits next to the bill icon on

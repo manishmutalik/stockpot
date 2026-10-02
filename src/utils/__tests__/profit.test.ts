@@ -1,0 +1,222 @@
+import { describe, it, expect } from 'vitest';
+import { financialsForRange, orderContribution } from '../profit';
+import { stampFor } from '../orderPricing';
+
+const materials: any[] = [
+  { id: 'flour', unit: 'kg', costPerUnit: 40, category: 'Raw Materials', gstRate: 5 },
+  { id: 'box', unit: 'pcs', costPerUnit: 10, category: 'Packaging Materials', gstRate: 18 },
+];
+// Costs 0.5 kg x 40 = 20 of ingredients and 10 of packaging a unit.
+const recipe = [{ materialId: 'flour', amount: 500, unit: 'g' }, { materialId: 'box', amount: 1, unit: 'pcs' }];
+const cake = (price: number): any => ({ id: 'cake', name: 'Cake', sellingPrice: price, recipe });
+const NO_GST = { gstApplicable: false };
+
+/** An order stamped at creation, as the app writes it. */
+const stamped = (id: string, over: Record<string, any> = {}, item = cake(100), mats = materials): any => ({
+  id, menuItemId: 'cake', quantity: 1, date: '2026-03-10', ...stampFor(item, mats), ...over,
+});
+const legacy = (id: string, over: Record<string, any> = {}): any => ({ id, menuItemId: 'cake', quantity: 1, date: '2026-03-10', ...over });
+
+describe('orderContribution', () => {
+  it('works out what a single order made: revenue minus ingredients, packaging and courier fee', () => {
+    const o = stamped('a', { quantity: 3, deliveryMethod: 'third_party', deliveryCharge: 60, deliveryFee: 45 });
+    const c = orderContribution([o], [cake(100)], materials, NO_GST);
+    expect(c.itemsRevenue).toBe(300);
+    expect(c.deliveryCharged).toBe(60);
+    expect(c.ingredients).toBe(60);
+    expect(c.packaging).toBe(30);
+    expect(c.courierFee).toBe(45);
+    expect(c.contribution).toBe(300 + 60 - 60 - 30 - 45); // 225
+    expect(c.gstOnSale).toBe(0);
+    expect(c.estimated).toBe(false);
+  });
+
+  it('counts a multi-item order\'s delivery charge and courier fee once, not once per item', () => {
+    const members = [
+      stamped('g1', { orderGroupId: 'g', deliveryCharge: 50, deliveryFee: 30 }),
+      stamped('g2', { orderGroupId: 'g', quantity: 2 }),
+    ];
+    const c = orderContribution(members, [cake(100)], materials, NO_GST);
+    expect(c.itemsRevenue).toBe(300);
+    expect(c.deliveryCharged).toBe(50);
+    expect(c.courierFee).toBe(30);
+    expect(c.contribution).toBe(300 + 50 - 3 * 30 - 30); // 230
+  });
+
+  describe('GST', () => {
+    it('adds GST on top in exclusive mode: revenue stays the price, GST is separate', () => {
+      const c = orderContribution([stamped('a', { deliveryCharge: 20 })], [cake(100)], materials, { gstApplicable: true, gstRate: 18, gstPricingMode: 'exclusive' });
+      expect(c.itemsRevenue).toBe(100);
+      expect(c.deliveryCharged).toBe(20);
+      expect(c.gstOnSale).toBeCloseTo(21.6, 6); // 18% of 120
+    });
+
+    it('backs GST out of the price in inclusive mode: revenue is the base, never the GST', () => {
+      const o = stamped('a', { deliveryCharge: 11.8 }, cake(118));
+      const c = orderContribution([o], [cake(118)], materials, { gstApplicable: true, gstRate: 18, gstPricingMode: 'inclusive' });
+      expect(c.itemsRevenue).toBeCloseTo(100, 6); // 118 / 1.18
+      expect(c.deliveryCharged).toBeCloseTo(10, 6); // 11.8 / 1.18
+      expect(c.gstOnSale).toBeCloseTo(19.8, 6); // 129.8 - 110
+    });
+
+    it('gives the same contribution for the same base amount whether pricing is inclusive or exclusive', () => {
+      const exclusive = orderContribution([stamped('a', { quantity: 4, deliveryCharge: 50, deliveryFee: 35 })], [cake(100)], materials,
+        { gstApplicable: true, gstRate: 18, gstPricingMode: 'exclusive' });
+      const inclusive = orderContribution([stamped('a', { quantity: 4, deliveryCharge: 59, deliveryFee: 35 }, cake(118))], [cake(118)], materials,
+        { gstApplicable: true, gstRate: 18, gstPricingMode: 'inclusive' });
+      expect(inclusive.contribution).toBeCloseTo(exclusive.contribution, 6);
+      expect(inclusive.itemsRevenue).toBeCloseTo(exclusive.itemsRevenue, 6);
+      expect(inclusive.gstOnSale).toBeCloseTo(exclusive.gstOnSale, 6);
+    });
+
+    it('ignores GST when it is switched off or the rate is 0', () => {
+      for (const s of [{ gstApplicable: false, gstRate: 18 }, { gstApplicable: true, gstRate: 0 }]) {
+        const c = orderContribution([stamped('a')], [cake(100)], materials, s as any);
+        expect(c.gstOnSale).toBe(0);
+        expect(c.itemsRevenue).toBe(100);
+      }
+    });
+  });
+
+  it('marks an order from before stamping as estimated, and values it at today\'s price and costs', () => {
+    const c = orderContribution([legacy('old', { quantity: 2 })], [cake(100)], materials, NO_GST);
+    expect(c.estimated).toBe(true);
+    expect(c.itemsRevenue).toBe(200);
+    expect(c.ingredients).toBe(40);
+    expect(c.contribution).toBe(200 - 40 - 20);
+  });
+
+  it('is estimated if any one item of a multi-item order is', () => {
+    const c = orderContribution([stamped('a', { orderGroupId: 'g' }), legacy('b', { orderGroupId: 'g' })], [cake(100)], materials, NO_GST);
+    expect(c.estimated).toBe(true);
+  });
+
+  describe('history is never rewritten', () => {
+    it("does not change an order's revenue or contribution when the menu price changes later", () => {
+      const o = stamped('a', { quantity: 5 });
+      const before = orderContribution([o], [cake(100)], materials, NO_GST);
+      const after = orderContribution([o], [cake(700)], materials, NO_GST);
+      expect(after).toEqual(before);
+      expect(after.itemsRevenue).toBe(500);
+    });
+    it("does not change an order's costs when a material is restocked at a higher price later", () => {
+      const o = stamped('a', { quantity: 5 });
+      const dearer = materials.map(m => ({ ...m, costPerUnit: m.costPerUnit * 3 }));
+      expect(orderContribution([o], [cake(100)], dearer, NO_GST)).toEqual(orderContribution([o], [cake(100)], materials, NO_GST));
+    });
+    it('still values an order whose menu item was deleted', () => {
+      const c = orderContribution([stamped('a', { quantity: 2 })], [], materials, NO_GST);
+      expect(c.itemsRevenue).toBe(200);
+      expect(c.estimated).toBe(false);
+    });
+  });
+});
+
+describe('financialsForRange', () => {
+  const base = { menu: [cake(100)], materials, experiments: [] as any[], wastageLogs: [] as any[], settings: NO_GST };
+  const range = { start: '2026-03-01', end: '2026-03-31' };
+
+  it('adds up income, order costs, courier fees and profit for orders in the range only', () => {
+    const f = financialsForRange({
+      ...base, ...range,
+      orders: [
+        stamped('a', { quantity: 2, deliveryCharge: 30, deliveryFee: 25 }),
+        stamped('b', { date: '2026-03-20' }),
+        stamped('out', { date: '2026-02-28', quantity: 9 }),
+      ],
+    });
+    expect(f.income).toBe(200 + 30 + 100);
+    expect(f.orderExpenses).toBe(3 * 30); // 20 + 10 a unit, 3 units
+    expect(f.packagingExpenses).toBe(30);
+    expect(f.deliveryExpenses).toBe(25);
+    expect(f.expenses).toBe(90 + 25);
+    expect(f.profit).toBe(330 - 90 - 25);
+    expect(f.totalContribution).toBe(f.profit);
+    expect(f.orderCount).toBe(2);
+    expect(f.avgOrderContribution).toBe(f.profit / 2);
+    expect(f.estimated).toBe(false);
+  });
+
+  it('counts a multi-item order once, with its delivery counted once', () => {
+    const f = financialsForRange({
+      ...base, ...range,
+      orders: [stamped('g1', { orderGroupId: 'g', deliveryCharge: 40, deliveryFee: 25 }), stamped('g2', { orderGroupId: 'g' })],
+    });
+    expect(f.orderCount).toBe(1);
+    expect(f.income).toBe(200 + 40);
+    expect(f.deliveryExpenses).toBe(25);
+  });
+
+  it('subtracts wastage once, and keeps R&D out of profit', () => {
+    const f = financialsForRange({
+      ...base, ...range,
+      orders: [stamped('a')],
+      wastageLogs: [{ id: 'w1', date: '2026-03-05', cost: 12 }, { id: 'w2', date: '2026-03-06', cost: 8 }, { id: 'old', date: '2026-01-01', cost: 99 }] as any[],
+      experiments: [{ id: 'e1', date: '2026-03-08', materials: [{ materialId: 'flour', amount: 250, unit: 'g' }] }] as any[],
+    });
+    expect(f.wastageExpenses).toBe(20);
+    expect(f.experimentExpenses).toBe(10); // 0.25 kg x 40
+    expect(f.profit).toBe(100 - 30 - 20); // wastage out, experiment not
+    expect(f.expenses).toBe(30 + 10 + 20);
+  });
+
+  it('reports the same profit for an inclusive and an exclusive business selling the same base amount', () => {
+    const excl = financialsForRange({
+      ...base, ...range, menu: [cake(100)], settings: { gstApplicable: true, gstRate: 18, gstPricingMode: 'exclusive' },
+      orders: [stamped('a', { quantity: 3, deliveryCharge: 50, deliveryFee: 20 })],
+    });
+    const incl = financialsForRange({
+      ...base, ...range, menu: [cake(118)], settings: { gstApplicable: true, gstRate: 18, gstPricingMode: 'inclusive' },
+      orders: [stamped('a', { quantity: 3, deliveryCharge: 59, deliveryFee: 20 }, cake(118))],
+    });
+    expect(incl.income).toBeCloseTo(excl.income, 6);
+    expect(incl.profit).toBeCloseTo(excl.profit, 6);
+    expect(incl.gstCollected).toBeCloseTo(excl.gstCollected, 6);
+    expect(excl.income).toBe(350);
+  });
+
+  it('puts inclusive-mode income and profit exactly the GST collected below the old gross figure', () => {
+    const f = financialsForRange({
+      ...base, ...range, menu: [cake(118)], settings: { gstApplicable: true, gstRate: 18, gstPricingMode: 'inclusive' },
+      orders: [stamped('a', { quantity: 5 }, cake(118))],
+    });
+    const oldIncome = 5 * 118; // what the dashboard used to show
+    expect(f.income + f.gstCollected).toBeCloseTo(oldIncome, 6);
+    expect(f.gstCollected).toBeCloseTo(90, 6);
+  });
+
+  it('reports GST collected only while GST is on, and input GST from the stamped costs', () => {
+    const orders = [stamped('a', { quantity: 2 })];
+    expect(financialsForRange({ ...base, ...range, orders }).gstCollected).toBe(0);
+    // flour 20 x 5% + box 10 x 18% = 2.8 a unit
+    expect(financialsForRange({ ...base, ...range, orders }).gstPaid).toBeCloseTo(5.6, 6);
+  });
+
+  it('does not change a past period when a menu price or material cost changes afterwards', () => {
+    const orders = [stamped('a', { quantity: 4 })];
+    const before = financialsForRange({ ...base, ...range, orders });
+    const dearer = materials.map(m => ({ ...m, costPerUnit: m.costPerUnit * 2 }));
+    const after = financialsForRange({ ...base, ...range, orders, menu: [cake(900)], materials: dearer });
+    expect(after).toEqual(before);
+  });
+
+  it('is estimated when an old order is included, and exact otherwise', () => {
+    expect(financialsForRange({ ...base, ...range, orders: [stamped('a'), legacy('b')] }).estimated).toBe(true);
+    expect(financialsForRange({ ...base, ...range, orders: [stamped('a')] }).estimated).toBe(false);
+  });
+
+  it('keeps every key the dashboard has always had, with unchanged values for an exclusive business with no extras', () => {
+    const f = financialsForRange({ ...base, ...range, orders: [stamped('a', { quantity: 2, deliveryCharge: 10, deliveryFee: 7 })] });
+    for (const key of ['income', 'expenses', 'orderExpenses', 'experimentExpenses', 'deliveryExpenses', 'wastageExpenses', 'gstCollected', 'gstPaid', 'profit']) {
+      expect(f).toHaveProperty(key);
+    }
+    expect(f.income).toBe(210);
+    expect(f.orderExpenses).toBe(60);
+    expect(f.profit).toBe(210 - 60 - 7);
+  });
+
+  it('is all zeros for an empty range', () => {
+    const f = financialsForRange({ ...base, ...range, orders: [] });
+    expect(f).toMatchObject({ income: 0, profit: 0, orderCount: 0, avgOrderContribution: 0, estimated: false });
+  });
+});
