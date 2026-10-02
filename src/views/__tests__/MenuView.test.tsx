@@ -153,4 +153,57 @@ describe('MenuView', () => {
     expect(within(card('Loss Leader')).getByLabelText('Menu category')).toHaveProperty('value', '');
     expect([...container.querySelectorAll('#menu-categories option')].map(o => o.getAttribute('value')).sort()).toEqual(['Breads', 'Cakes']);
   });
+
+  describe('what each product sold and made', () => {
+    const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().split('T')[0];
+    // A cake sold at 10 that cost 2.50 of ingredients and 2 of packaging to make: 5.50 made a unit.
+    const sold = (id: string, over: Record<string, any> = {}) => ({
+      id, menuItemId: 'cake', quantity: 2, date: daysAgo(1),
+      unitPriceAtSale: 10, unitIngredientCostAtSale: 2.5, unitPackagingCostAtSale: 2, unitInputGstAtSale: 0, itemNameAtSale: 'Cake', ...over,
+    });
+    const withOrders = (orders: any[]) => render(<MenuView {...makeProps({ orders })} />);
+    const salesOf = (name: string) => within(within(card(name)).getByRole('group', { name: `Sales of ${name}` }));
+
+    it('shows units sold, revenue, what it made and the figure per unit over the last 30 days', () => {
+      withOrders([sold('a'), sold('b', { quantity: 3 })]);
+      const g = salesOf('Cake');
+      expect(g.getByText('5 units')).toBeTruthy();
+      expect(g.getByText('$50.00')).toBeTruthy();   // revenue
+      expect(g.getByText('$27.50')).toBeTruthy();   // made: 50 - 5 x 4.50
+      expect(g.getByText(/\$5\.50/)).toBeTruthy();   // a unit
+    });
+
+    it('says when a product has not sold in the period', () => {
+      withOrders([sold('a')]);
+      expect(within(card('Bread')).getByText('No sales in the last 30 days.')).toBeTruthy();
+    });
+
+    it('leaves out orders outside the period, and brings them back for all time', () => {
+      withOrders([sold('recent'), sold('old', { date: daysAgo(60), quantity: 10 })]);
+      expect(salesOf('Cake').getByText('2 units')).toBeTruthy();
+      fireEvent.change(screen.getByLabelText('Sales period'), { target: { value: '90' } });
+      expect(salesOf('Cake').getByText('12 units')).toBeTruthy();
+      fireEvent.change(screen.getByLabelText('Sales period'), { target: { value: '7' } });
+      expect(salesOf('Cake').getByText('2 units')).toBeTruthy();
+      fireEvent.change(screen.getByLabelText('Sales period'), { target: { value: 'all' } });
+      expect(salesOf('Cake').getByText('12 units')).toBeTruthy();
+    });
+
+    it('uses the price each order was made at, not the price on the menu now', () => {
+      withOrders([sold('a', { unitPriceAtSale: 20 })]); // the menu says 10 today
+      expect(salesOf('Cake').getByText('$40.00')).toBeTruthy();
+    });
+
+    it('warns when a high recipe margin is eaten away by a discount', () => {
+      // Bread has a 90% recipe margin. Ten sold for 100 with an 80 discount leaves 20 of sales and 10 made: 50% kept.
+      const bread = sold('b', { menuItemId: 'bread', quantity: 10, unitIngredientCostAtSale: 1, unitPackagingCostAtSale: 0, discount: 80 });
+      withOrders([bread]);
+      expect(screen.getByText(/recipe margin is 90%, but only 50% of sales is kept/)).toBeTruthy();
+    });
+
+    it('shows no figures, rather than failing, when there are no orders', () => {
+      render(<MenuView {...makeProps()} />);
+      expect(within(card('Cake')).getByText('No sales in the last 30 days.')).toBeTruthy();
+    });
+  });
 });

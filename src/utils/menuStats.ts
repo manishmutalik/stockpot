@@ -54,3 +54,21 @@ export function summarizeMenu(menu: MenuItem[], materials: RawMaterial[]): MenuS
     needsReview,
   };
 }
+
+/** The periods the Menu screen can show each product's sales over. */
+export type SalesPeriod = '7' | '30' | '90' | 'all';
+
+export const SALES_PERIODS: { value: SalesPeriod; label: string; phrase: string }[] = [
+  { value: '7', label: 'Last 7 days', phrase: 'in the last 7 days' },
+  { value: '30', label: 'Last 30 days', phrase: 'in the last 30 days' },
+  { value: '90', label: 'Last 90 days', phrase: 'in the last 90 days' },
+  { value: 'all', label: 'All time', phrase: 'yet' },
+];
+
+/** Inclusive YYYY-MM-DD bounds of a period ending today ('all' has no start). */
+export function salesPeriodRange(period: SalesPeriod, today: string): { start: string | null; end: string } {
+  if (period === 'all') return { start: null, end: today };
+  const [y, m, d] = today.split('-').map(Number);
+  const start = new Date(Date.UTC(y, m - 1, d - (Number(period) - 1)));
+  return { start: start.toISOString().split('T')[0], end: today };
+}

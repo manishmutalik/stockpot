@@ -163,4 +163,35 @@ describe('InventoryView', () => {
     const picker = screen.getByLabelText('Category of Mystery') as HTMLSelectElement;
     expect(picker.value).toBe('Old Category');
   });
+
+  describe('price history', () => {
+    const log = [
+      { id: 'a', materialId: 'flour', date: '2026-02-01', unitCost: 9, unit: 'kg', quantity: 20, source: 'initial', createdAt: 1 },
+      { id: 'b', materialId: 'flour', date: '2026-03-01', unitCost: 11, unit: 'kg', quantity: 10, macAfter: 10, source: 'restock', createdAt: 2 },
+      { id: 'c', materialId: 'almonds', date: '2026-03-01', unitCost: 777, unit: 'kg', source: 'restock', createdAt: 3 },
+    ];
+
+    it("opens a material's recorded prices from its row, and only that material's", () => {
+      render(<InventoryView {...makeProps({ priceLog: log })} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Price history of Bread Flour' }));
+      const dialog = screen.getByRole('dialog', { name: /Price history: Bread Flour/ });
+      expect(within(dialog).getAllByRole('row')).toHaveLength(3); // header and two prices
+      expect(within(dialog).getByText('Restock')).toBeTruthy();
+      expect(within(dialog).getByText('Opening cost')).toBeTruthy();
+      expect(within(dialog).queryByText(/777/)).toBeNull();
+    });
+
+    it('closes again', () => {
+      render(<InventoryView {...makeProps({ priceLog: log })} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Price history of Bread Flour' }));
+      fireEvent.click(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' })[1]);
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('explains a material that has no history yet, and copes with no log at all', () => {
+      render(<InventoryView {...makeProps()} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Price history of Yeast' }));
+      expect(screen.getByText(/No prices recorded yet/)).toBeTruthy();
+    });
+  });
 });

@@ -93,6 +93,7 @@ import { ProductionRunModal, ProductionRun } from './components/ProductionRunMod
 import { AuthScreen, LoadingScreen, PaywallScreen } from './components/AuthScreens';
 import { describeAuthError } from './utils/authErrors';
 import { buildDemoData } from './utils/demoData';
+import { newPriceLogEntry } from './utils/priceLog';
 import { AddMaterialModal } from './components/AddMaterialModal';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { DiscardModal } from './components/DiscardModal';
@@ -229,6 +230,7 @@ import {
   InventoryBatch,
   RawMaterial,
   WastageLog,
+  PriceLogEntry,
   IngredientRequirement,
   MenuItem,
   Order,
@@ -508,6 +510,10 @@ function BakeryApp() {
   const [wastageLogs, setWastageLogs] = useFirestoreCollection<WastageLog>(
     'wastageLogs', isAuthReady, user, (id, data) => ({ id, ...data } as WastageLog), undefined, INITIAL_WASTAGE_LOGS
   );
+  // The price log only ever grows, but it is small (a few entries per material a year), so it is read whole.
+  const [priceLog] = useFirestoreCollection<PriceLogEntry>(
+    'priceLog', isAuthReady, user, (id, data) => ({ id, ...data } as PriceLogEntry)
+  );
   const { settings, setSettings, categories, setCategories, currency, setCurrency } = useSettingsListener(isAuthReady, user);
 
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'google'>('google');
@@ -642,6 +648,7 @@ function BakeryApp() {
     demo.orders.forEach(order => batch.set(doc(db, 'users', userId, 'orders', order.id), order));
     demo.productionRuns.forEach(run => batch.set(doc(db, 'users', userId, 'productionRuns', run.id), run));
     demo.experiments.forEach(exp => batch.set(doc(db, 'users', userId, 'experiments', exp.id), exp));
+    demo.priceLog.forEach(entry => batch.set(doc(db, 'users', userId, 'priceLog', entry.id), entry));
 
     await batch.commit();
   };
@@ -1024,7 +1031,17 @@ function BakeryApp() {
       ...(addMatExpiry ? { expiryDate: addMatExpiry } : {}),
     };
     try {
-      await setDoc(doc(db, 'users', userId, 'materials', id), newMat);
+      // A material added with a cost starts its price history with it, written together.
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', userId, 'materials', id), newMat);
+      if (newMat.costPerUnit > 0) {
+        const entry = newPriceLogEntry({
+          materialId: id, unit: newMat.unit, unitCost: newMat.costPerUnit, macAfter: newMat.costPerUnit, source: 'initial',
+          ...(newMat.initialStock > 0 && { quantity: newMat.initialStock }),
+        });
+        batch.set(doc(db, 'users', userId, 'priceLog', entry.id), entry);
+      }
+      await batch.commit();
       setShowAddMaterialModal(false);
       setAddMatName('');
       setAddMatUnit('g');
@@ -1192,7 +1209,7 @@ function BakeryApp() {
     importOdooOrders, isImportingOdoo,
     isRefreshing, lastSynced, handleDownloadTemplate, handleImportCSV, setAddMaterialCategory, setShowAddMaterialModal,
     materials, setMaterials, categories, setCategories, menu, setMenu, orders, setOrders,
-    experiments, setExperiments, productionRuns, setProductionRuns, wastageLogs, setWastageLogs,
+    experiments, setExperiments, productionRuns, setProductionRuns, wastageLogs, setWastageLogs, priceLog,
     isProductionRunModalOpen, setIsProductionRunModalOpen, productionFilterRecipe, setProductionFilterRecipe,
     productionFilterPurpose, setProductionFilterPurpose, activeTab, setActiveTab, activeSettingsTab,
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,

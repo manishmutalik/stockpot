@@ -2,7 +2,7 @@
 
 A running record of what has been built, the decisions behind it, how to
 verify work, and what is next. Written so that nothing is lost when a working
-session is compacted or handed over. Last updated after True Profit part 2.
+session is compacted or handed over. Last updated after True Profit part 3.
 
 ## What Stockpot is
 
@@ -48,7 +48,7 @@ Testing Library; Playwright is used for visual checks.
   Pure bill logic is `src/utils/billing.ts`, shared by browser and server.
 - Pending payments and a consolidated bill (statement) per customer (#32).
 - Share Menu: the menu as a PDF sent over WhatsApp (#33).
-- True Profit part 1 (#34) and part 2 (below).
+- True Profit parts 1 to 3 (#34, #35 and the part 3 PR below).
 
 ## True Profit engine
 
@@ -75,7 +75,7 @@ PRs. The decisions the user approved when we reviewed the handoff:
   collected).
 - Restock cost uses six-decimal moving-average rounding.
 
-### Part 2 (this PR): discounts, fees, fixed costs, "Made"
+### Part 2 (#35): discounts, fees, fixed costs, "Made"
 
 - `Order` gained `discount`, `paymentMethod`, `paymentFeeRate`.
   `BakerySettings` gained `paymentFeeRates` and `fixedCosts`
@@ -105,29 +105,41 @@ PRs. The decisions the user approved when we reviewed the handoff:
 - Verified in a browser: today's True Profit reconciles by hand; layouts at
   390, 820 and 1280px.
 
-### Part 3: not started (waiting for the user to say go)
+### Part 3: ingredient price log and per-product profit
 
-Scope, from the handoff:
+- `PriceLogEntry` (`src/types`) is stored at `users/{uid}/priceLog/{id}`:
+  `{id, materialId, date, unitCost, unit, quantity?, macAfter?, source,
+  createdAt}`. Differences from the handoff: each entry also stores its `unit`
+  (so a later unit change cannot corrupt history; the history converts to the
+  material's current unit) and a `createdAt` (to order entries of the same day).
+- Pure helpers in `src/utils/priceLog.ts` (`newPriceLogEntry`, `priceHistory`).
+- Written by: restock (`handleRestock` now uses one `writeBatch` for the
+  material and the entry), a material added with a cost (App
+  `handleAddMaterialSubmit` and the CSV import, source `initial`), and the
+  inline cost box (`updateMaterial`, debounced one second and flushed on
+  unmount, source `manual_edit`). A unit change (`changeUnit`) writes nothing.
+- App reads the whole `priceLog` collection once and passes `priceLog` to the
+  views (it is small; per-material queries were not worth the extra fake
+  Firebase support).
+- Inventory: a history button per material opens `PriceHistoryModal`
+  (portalled, like `MarkPaidModal`).
+- Menu: a period select (7, 30, 90 days, all time; default 30) and a
+  `ProductPerformance` strip per item, from `productProfits` in `profit.ts`.
+  Shared order charges are split by each item's sales so product contributions
+  sum to the order contributions (tested).
+- Firestore rules cannot enforce append-only (see the changelog); the demo
+  seeds a price history for every material.
+- This completes the True Profit handoff. Not built: a Goods Receipt source
+  (reserved in the type, for Purchase Management) and any price alerts or
+  trends (Phase 2, to read from this log).
 
-- **Price log:** subcollection `users/{uid}/priceLog/{entryId}` with
-  `PriceLogEntry { id, materialId, date, unitCost, quantity?, macAfter?,
-  source: 'initial' | 'restock' | 'manual_edit' | 'goods_receipt' }`.
-  Append-only from app code. Write on restock (switch the `setDoc` in
-  `useInventoryActions.handleRestock` to a `writeBatch`; `unitCost = baseTotal
-  / qty`, `macAfter = newMAC`), on a new material with a cost (`initial`), and
-  on inline cost edits (`manual_edit`).
-- Things to get right: log inline edits on commit or blur, not per keystroke;
-  keep history consistent when the unit changes (`changeUnit`); include the CSV
-  import path; Firestore rules cannot enforce append-only given the existing
-  wildcard rule.
-- **Inventory:** a simple price history list per material (date, unit cost,
-  source). No charts or alerts.
-- **Menu view, per product:** units sold, revenue, contribution and average
-  contribution per unit for the selected range, next to the margin %. The
-  `productProfit` function from the handoff is not yet written.
-- Tests to add: exactly one log entry per restock with the right `unitCost` and
-  `macAfter`; the manual-edit and initial paths; the product profit function;
-  the Menu and Inventory UI.
+## Known issues (not yet fixed)
+
+- On phones, the pinned footer of modals rendered inside the app tree (for
+  example Restock's Confirm button) sits under the fixed bottom navigation, so
+  it cannot be tapped. Both are `fixed` with `z-50` and the nav comes later in
+  the DOM. Modals that are portalled to `document.body` (`MarkPaidModal`,
+  `PriceHistoryModal`) are not affected.
 
 ## Open items for the user (none blocking)
 

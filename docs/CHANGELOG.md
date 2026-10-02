@@ -1,5 +1,52 @@
 # Changelog
 
+## True profit, part 3: ingredient price log and per-product profit
+
+The last of the three True Profit steps.
+
+- **Ingredient price log.** Every price paid for a material is now recorded in
+  a new `users/{uid}/priceLog` collection, from today on (nothing is
+  back-filled, so history only accumulates from this release). An entry holds
+  the material, date, price per unit excluding GST, the unit it is in, how much
+  was bought and the material's moving-average cost afterwards, plus why it was
+  recorded: **Restock** (written in the same batch as the stock and cost update,
+  so a restock is never half recorded), **Opening cost** (a material added with a
+  cost, one at a time or from CSV) and **Edited by hand** (the cost box in
+  Inventory). Entries are only ever added: editing or deleting a material never
+  changes or removes its history.
+- **Hand edits are logged once.** The cost box saves on every keystroke, so
+  typing `0.045` would otherwise log 0, 0.0, 0.04 and 0.045. A hand edit is
+  logged once the box has been quiet for a second, as where the edit ended, and
+  not at all if it ended where it began or was cleared. It lives in the
+  inventory hook, not the screen, so it still lands if you switch tabs straight
+  after typing.
+- **Changing a unit doesn't corrupt history.** Each entry keeps the unit it was
+  recorded in, and the history shows it in the material's current unit when the
+  two convert (45 per kg shows as 0.045 per g after switching to grams).
+- **Price history in Inventory.** A history button on each material opens its
+  recorded prices, newest first: date, price per unit, how much was bought, the
+  average after, and why. Read-only, with no charts or alerts yet; Price &
+  Margin Intelligence will build on the log.
+- **Per-product profit in Menu.** Each menu item shows units sold, revenue, what
+  it made and what that is per unit over a chosen period (last 7, 30 or 90
+  days, or all time; default 30), next to its recipe margin. When a product's
+  recipe margin is healthy but it keeps a lot less of its sales once discounts,
+  payment fees and delivery are taken off, it says so. Figures come from the
+  same sums as the Orders and Summary screens (`productProfits` in
+  `src/utils/profit.ts`): a product's own sales, ingredients and packaging are
+  exact, and what an order shares between its items (delivery charged,
+  discount, courier fee, payment fee) is split by each item's share of the
+  order's sales, so the products always add up to what the orders made.
+- **Demo.** The demo bakery has a price history for every material; butter,
+  eggs, chocolate chips and yeast were topped up at a different price, and the
+  history is worked out so the average ends at each material's current cost.
+- **Known limits.** Firestore rules cannot enforce append-only on the log: the
+  existing per-user wildcard rule already allows every write under
+  `users/{uid}`, and rules are additive, so an extra deny would do nothing
+  (this is the same reason the `integrationCredentials` deny is believed to be
+  ineffective). Append-only is therefore a rule of the app code. Dates use UTC,
+  like the rest of the app.
+
 ## True profit, part 2: discounts, payment fees, fixed costs and "Made"
 
 The second of three steps. Orders now show what they actually made, and the

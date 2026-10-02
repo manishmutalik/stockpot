@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { financialsForRange, fixedCostsForRange, orderContribution } from '../profit';
+import { financialsForRange, fixedCostsForRange, orderContribution, productProfit, productProfits } from '../profit';
 import { stampFor } from '../orderPricing';
 
 const materials: any[] = [
@@ -375,5 +375,76 @@ describe('discounts, payment fees and fixed costs', () => {
     it('is zero when everything is paid', () => {
       expect(financialsForRange({ ...base, ...range, orders: [stamped('a')] }).unpaidIncome).toBe(0);
     });
+  });
+});
+
+describe('product profit', () => {
+  const cookie = (price: number): any => ({ id: 'cookie', name: 'Cookie', sellingPrice: price, recipe: [{ materialId: 'flour', amount: 100, unit: 'g' }] }); // costs 4 a unit
+  const menu = [cake(100), cookie(10)];
+  const cookieOrder = (id: string, over: Record<string, any> = {}): any => ({ id, menuItemId: 'cookie', quantity: 1, date: '2026-03-10', ...stampFor(cookie(10), materials), ...over });
+
+  it('is units sold, revenue and what the product made, for a plain order', () => {
+    const p = productProfit('cake', [stamped('a', { quantity: 3 })], menu, materials, NO_GST);
+    expect(p).toMatchObject({ unitsSold: 3, orderCount: 1, revenue: 300, contribution: 300 - 3 * 30, avgContributionPerUnit: 70, estimated: false });
+  });
+
+  it('adds up several orders of the same product', () => {
+    const p = productProfit('cake', [stamped('a', { quantity: 2 }), stamped('b'), stamped('c', { menuItemId: 'cookie' })], menu, materials, NO_GST);
+    expect(p.unitsSold).toBe(3);
+    expect(p.orderCount).toBe(2);
+    expect(p.revenue).toBe(300);
+  });
+
+  it('is zero for a product with no orders', () => {
+    expect(productProfit('cake', [], menu, materials, NO_GST)).toEqual({ menuItemId: 'cake', unitsSold: 0, orderCount: 0, revenue: 0, contribution: 0, avgContributionPerUnit: 0, estimated: false });
+  });
+
+  it('shows a well-priced product that is made poor by discounts, card fees and courier costs', () => {
+    const o = stamped('a', { quantity: 2, discount: 60, deliveryMethod: 'third_party', deliveryFee: 40, paymentMethod: 'card', paymentFeeRate: 5 });
+    const p = productProfit('cake', [o], menu, materials, NO_GST);
+    // revenue 200 - 60 discount; costs 2 x 30; courier 40; card fee 5% of 140
+    expect(p.revenue).toBe(140);
+    expect(p.contribution).toBeCloseTo(200 - 60 - 60 - 40 - 7, 10);
+  });
+
+  it('splits what a multi-item order shares between its items by their sales, so nothing is counted twice', () => {
+    const members = [
+      stamped('g1', { orderGroupId: 'g', quantity: 1, discount: 20, deliveryCharge: 30, deliveryFee: 25 }), // cake: 100 of 120
+      cookieOrder('g2', { orderGroupId: 'g', quantity: 2 }),                                               // cookie: 20 of 120
+    ];
+    const all = productProfits(members, menu, materials, NO_GST);
+    const cakeP = all.get('cake')!, cookieP = all.get('cookie')!;
+    expect(cakeP.revenue).toBeCloseTo(100 - 20 * (100 / 120), 10);
+    expect(cookieP.revenue).toBeCloseTo(20 - 20 * (20 / 120), 10);
+    // Each keeps its own costs: cake 30, cookie 2 x 4
+    expect(cakeP.contribution).toBeCloseTo(100 + (30 - 20 - 25) * (100 / 120) - 30, 10);
+    expect(cookieP.contribution).toBeCloseTo(20 + (30 - 20 - 25) * (20 / 120) - 8, 10);
+    expect(cakeP.orderCount).toBe(1);
+  });
+
+  it('adds up to what the orders made, however they are shared', () => {
+    const orders = [
+      stamped('a', { quantity: 2, discount: 15, paymentMethod: 'card', paymentFeeRate: 2 }),
+      stamped('g1', { orderGroupId: 'g', discount: 20, deliveryCharge: 30, deliveryFee: 25, paymentMethod: 'upi', paymentFeeRate: 1 }),
+      cookieOrder('g2', { orderGroupId: 'g', quantity: 3, paymentMethod: 'upi', paymentFeeRate: 1 }),
+      cookieOrder('c', { quantity: 5, paymentStatus: 'unpaid' }),
+    ];
+    const products = [...productProfits(orders, menu, materials, NO_GST).values()];
+    const total = financialsForRange({ menu, materials, experiments: [], wastageLogs: [], settings: NO_GST, orders, start: '2026-03-01', end: '2026-03-31' });
+    expect(products.reduce((sum, p) => sum + p.contribution, 0)).toBeCloseTo(total.totalContribution, 8);
+    expect(products.reduce((sum, p) => sum + p.unitsSold, 0)).toBe(2 + 1 + 3 + 5);
+  });
+
+  it('is on the pre-GST base in inclusive pricing, matching the exclusive business', () => {
+    const excl = productProfit('cake', [stamped('a', { discount: 10 })], menu, materials, { gstApplicable: true, gstRate: 18, gstPricingMode: 'exclusive' });
+    const incl = productProfit('cake', [stamped('a', { discount: 11.8 }, cake(118))], [cake(118)], materials, { gstApplicable: true, gstRate: 18, gstPricingMode: 'inclusive' });
+    expect(incl.revenue).toBeCloseTo(excl.revenue, 8);
+    expect(incl.contribution).toBeCloseTo(excl.contribution, 8);
+  });
+
+  it('is not moved by a later menu price change, and is estimated for an order from before stamping', () => {
+    const orders = [stamped('a')];
+    expect(productProfit('cake', orders, [cake(500)], materials, NO_GST)).toEqual(productProfit('cake', orders, [cake(100)], materials, NO_GST));
+    expect(productProfit('cake', [legacy('old')], menu, materials, NO_GST).estimated).toBe(true);
   });
 });
