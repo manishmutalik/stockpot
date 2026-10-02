@@ -136,4 +136,16 @@ describe('demo data adds up', () => {
   it('is reproducible for a given day', () => {
     expect(buildDemoData('uid1', TODAY)).toEqual(demo);
   });
+
+  it('stamps every order with its price and cost, so the demo shows exact rather than estimated figures', () => {
+    for (const o of demo.orders) {
+      const item = byId(demo.menu, o.menuItemId);
+      expect(o.unitPriceAtSale).toBe(item.sellingPrice);
+      expect(o.itemNameAtSale).toBe(item.name);
+      // the stamped cost is exactly what the recipe costs at the demo's material prices
+      expect(o.unitIngredientCostAtSale + o.unitPackagingCostAtSale).toBeCloseTo(recipeCost(o.menuItemId), 4);
+    }
+    // the box is not in any recipe, so there is no packaging cost on any demo order
+    expect(demo.orders.every(o => o.unitPackagingCostAtSale === 0)).toBe(true);
+  });
 });

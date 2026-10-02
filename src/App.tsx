@@ -318,8 +318,7 @@ const INITIAL_MENU: MenuItem[] = [
 // Imported here for this file's own use, and re-exported so existing
 // `from '../App'` imports in view files keep working.
 import { UNIT_CONVERSIONS, convertAmount, CURRENCIES } from './utils/conversions';
-import { splitSaleForGst, calculateMaterialGstPaid } from './utils/gstCalculations';
-import { attributeDeliveryFieldByGroup } from './utils/orderClustering';
+import { financialsForRange } from './utils/profit';
 import { getBatchesNeedingAttention } from './utils/stockAging';
 import { getExperimentMaterialUsage } from './utils/experimentMaterialUsage';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
@@ -551,7 +550,7 @@ function BakeryApp() {
     odooUsernameInput, setOdooUsernameInput, odooPasswordInput, setOdooPasswordInput,
     isConnectingOdoo, connectOdoo, disconnectOdoo,
     isImportingOdoo, importOdooOrders,
-  } = useIntegrations(menu, orderDate, showAlert, isAuthReady && !!user);
+  } = useIntegrations(menu, materials, orderDate, showAlert, isAuthReady && !!user);
 
   const { billing, isLoadingBilling, hasAccess, startCheckout, isStartingCheckout, openBillingPortal, isOpeningPortal } = useBilling(isAuthReady && !!user, showAlert);
 
@@ -740,7 +739,7 @@ function BakeryApp() {
   // Extracted to src/hooks/useOrderActions.ts as part of the Phase 4 breakup.
   const {
     addOrderGroup, fulfillOrder, markOrdersPaid, updateOrder, deleteOrder, resetOrders,
-  } = useOrderActions(menu, orders, orderDate, showConfirm, showAlert);
+  } = useOrderActions(menu, orders, orderDate, showConfirm, showAlert, materials);
 
   // ── Production Run Actions ───────────────────────────────────────────────────
   // Extracted to src/hooks/useProductionActions.ts as part of the Phase 4 breakup.
@@ -864,102 +863,17 @@ function BakeryApp() {
   }, [lowStockItems]);
 
   /**
-   * Computes income, ingredient expenses (orders + experiments), and profit
-   * for orders and experiments that fall within [start, end].
+   * The business's income, costs and profit for orders, experiments and
+   * wastage dated within [start, end] (inclusive ISO dates).
    *
-   * Income    = sum of (sellingPrice × quantity) across matching orders.
-   * Expenses  = sum of (materialCostPerUnit × usedAmount) for both orders and R&D.
-   * Profit    = income − expenses.
-   *
-   * This function is called both inline (for the financials memo) and
-   * per-data-point inside `chartData` to avoid repeated filter logic.
-   *
-   * @param start - ISO date string for the range start (inclusive).
-   * @param end   - ISO date string for the range end (inclusive).
+   * A thin wrapper: the arithmetic lives in utils/profit.ts, the one place
+   * money is computed, so every screen agrees. Income is the pre-GST base;
+   * each order is valued at the price and costs stamped on it when it was
+   * created, so changing a menu price or restocking later never rewrites
+   * past figures. Called for the summary period and once per chart point.
    */
-  const getFinancialsForRange = (start: string, end: string) => {
-    const rangeOrders = orders.filter(o => o.date >= start && o.date <= end);
-    const rangeExperiments = experiments.filter(e => e.date >= start && e.date <= end);
-    const usage: Record<string, number> = {};
-    const expUsage: Record<string, number> = {};
-    
-    rangeOrders.forEach(order => {
-      const item = menu.find(m => m.id === order.menuItemId);
-      if (item) {
-        item.recipe.forEach(req => {
-          const mat = materials.find(m => m.id === req.materialId);
-          if (mat) {
-            const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-            usage[req.materialId] = (usage[req.materialId] || 0) + (convertedAmount * order.quantity);
-          }
-        });
-      }
-    });
-
-    rangeExperiments.forEach(exp => {
-      exp.materials.forEach(req => {
-        const mat = materials.find(m => m.id === req.materialId);
-        if (mat) {
-          const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
-          expUsage[req.materialId] = (expUsage[req.materialId] || 0) + convertedAmount;
-        }
-      });
-    });
-
-    // Delivery charge/fee attributed once per orderGroupId, not once per
-    // document within a group — see attributeDeliveryFieldByGroup. A group's
-    // members share one delivery, so naively summing every document's field
-    // would multiply-count it by the group size.
-    const deliveryChargeByOrder = attributeDeliveryFieldByGroup(rangeOrders, 'deliveryCharge');
-    const deliveryFeeByOrder = attributeDeliveryFieldByGroup(rangeOrders, 'deliveryFee');
-
-    const income = rangeOrders.reduce((acc, order) => {
-      const item = menu.find(m => m.id === order.menuItemId);
-      const itemRevenue = item ? (item.sellingPrice || 0) * order.quantity : 0;
-      return acc + itemRevenue + (deliveryChargeByOrder.get(order.id) || 0);
-    }, 0);
-
-    const orderExpenses = materials.reduce((acc, mat) => {
-      const used = usage[mat.id] || 0;
-      return acc + (used * (mat.costPerUnit || 0));
-    }, 0);
-
-    const experimentExpenses = materials.reduce((acc, mat) => {
-      const used = expUsage[mat.id] || 0;
-      return acc + (used * (mat.costPerUnit || 0));
-    }, 0);
-
-    // Fees paid to third-party couriers (Uber, Porter, etc.) for orders in
-    // this range. Self-delivery/pickup orders have no fee tracked here.
-    const deliveryExpenses = rangeOrders.reduce((acc, order) => acc + (deliveryFeeByOrder.get(order.id) || 0), 0);
-
-    // Cost of discarded/expired stock logged in this range (see handleDiscardBatch
-    // and useWastageActions) — wasted material and finished-goods cost that was
-    // already paid for but never turned into revenue.
-    const rangeWastage = wastageLogs.filter(w => w.date >= start && w.date <= end);
-    const wastageExpenses = rangeWastage.reduce((acc, w) => acc + (w.cost || 0), 0);
-
-    const expenses = orderExpenses + experimentExpenses + deliveryExpenses + wastageExpenses;
-
-    // GST collected on sales (output tax) — only meaningful while GST is
-    // switched on in Settings; otherwise there's no rate to apply.
-    const gstCollected = settings.gstApplicable
-      ? rangeOrders.reduce((acc, order) => {
-          const item = menu.find(m => m.id === order.menuItemId);
-          const itemRevenue = item ? (item.sellingPrice || 0) * order.quantity : 0;
-          const saleAmount = itemRevenue + (deliveryChargeByOrder.get(order.id) || 0);
-          return acc + splitSaleForGst(saleAmount, settings.gstRate || 0, settings.gstPricingMode || 'exclusive').gstAmount;
-        }, 0)
-      : 0;
-
-    // GST paid on materials consumed by these orders (input tax), using each
-    // material's own gstRate — independent of the output-side toggle above.
-    const gstPaid = calculateMaterialGstPaid(
-      materials.map(mat => ({ usedAmount: usage[mat.id] || 0, costPerUnit: mat.costPerUnit, gstRate: mat.gstRate }))
-    );
-
-    return { income, expenses, orderExpenses, experimentExpenses, deliveryExpenses, wastageExpenses, gstCollected, gstPaid, profit: income - orderExpenses - deliveryExpenses - wastageExpenses };
-  };
+  const getFinancialsForRange = (start: string, end: string) =>
+    financialsForRange({ orders, menu, materials, experiments, wastageLogs, settings, start, end });
 
   // Round-to-2-decimal wrapper around `getFinancialsForRange` for the summary period.
   // Re-computed when date bounds, orders, experiments, menu prices, or material costs change.
@@ -974,7 +888,12 @@ function BakeryApp() {
       wastageExpenses: parseFloat(fins.wastageExpenses.toFixed(2)),
       gstCollected: parseFloat(fins.gstCollected.toFixed(2)),
       gstPaid: parseFloat(fins.gstPaid.toFixed(2)),
-      profit: parseFloat(fins.profit.toFixed(2))
+      profit: parseFloat(fins.profit.toFixed(2)),
+      packagingExpenses: parseFloat(fins.packagingExpenses.toFixed(2)),
+      totalContribution: parseFloat(fins.totalContribution.toFixed(2)),
+      avgOrderContribution: parseFloat(fins.avgOrderContribution.toFixed(2)),
+      orderCount: fins.orderCount,
+      estimated: fins.estimated,
     };
   }, [summaryDateStart, summaryDateEnd, orders, experiments, menu, materials, wastageLogs, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]);
 

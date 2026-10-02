@@ -14,6 +14,7 @@
 import type { BakerySettings, MenuItem, Order } from '../types';
 import { splitSaleForGst, type GstPricingMode } from './gstCalculations';
 import { summarizeOrders } from './orderStats';
+import { resolveItemName, resolveUnitPrice } from './orderPricing';
 
 export interface BillLine {
   name: string;
@@ -80,11 +81,11 @@ export function buildBill(input: {
     : orders;
 
   const lines: BillLine[] = ordered.map(o => {
-    const item = menu.find(m => m.id === o.menuItemId);
-    const unitPrice = item?.sellingPrice || 0;
+    // The price and name the order was made at, so a later menu change never alters a bill.
+    const unitPrice = resolveUnitPrice(o, menu).value;
     const quantity = o.quantity || 0;
     return {
-      name: item?.name || 'Item', quantity, unitPrice, lineTotal: round2(unitPrice * quantity),
+      name: resolveItemName(o, menu), quantity, unitPrice, lineTotal: round2(unitPrice * quantity),
       ...(statement && { date: o.date }),
     };
   });

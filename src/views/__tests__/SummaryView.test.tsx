@@ -94,4 +94,24 @@ describe('SummaryView (dashboard)', () => {
     rerender(<SummaryView {...makeProps()} />);
     expect(screen.getByRole('button', { name: /Log Production Run/ })).toBeTruthy();
   });
+
+  describe('estimated figures and GST labelling', () => {
+    it('says so when some orders are valued at today\'s prices', () => {
+      render(<SummaryView {...makeProps({ financials: { ...makeProps().financials, estimated: true } })} />);
+      expect(screen.getByText(/valued at today's prices \(est\.\)/)).toBeTruthy();
+    });
+    it('says nothing when every order carries its own price and cost', () => {
+      render(<SummaryView {...makeProps({ financials: { ...makeProps().financials, estimated: false } })} />);
+      expect(screen.queryByText(/\(est\.\)/)).toBeNull();
+    });
+    it('labels income as excluding GST when GST is on, since GST is never income', () => {
+      render(<SummaryView {...makeProps({ settings: { name: 'T', gstApplicable: true } })} />);
+      expect(screen.getByText('Income (excl. GST)')).toBeTruthy();
+      expect(screen.queryByText('Gross income')).toBeNull();
+    });
+    it('keeps the "Gross income" label when GST is off', () => {
+      render(<SummaryView {...makeProps()} />);
+      expect(screen.getByText('Gross income')).toBeTruthy();
+    });
+  });
 });

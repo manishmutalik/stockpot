@@ -150,3 +150,18 @@ describe('createOrRefreshStatement', () => {
     expect(await createOrRefreshStatement('u1', ['single', 'missing'])).toBeNull();
   });
 });
+
+describe('bills keep the price an order was made at', () => {
+  it('prices from the stamp even after the menu price has changed, and survives a deleted item', async () => {
+    store.set(`${U}/orders/stamped`, { menuItemId: 'cake', quantity: 2, date: '2026-03-10', unitPriceAtSale: 450, itemNameAtSale: 'Chocolate Truffle' });
+    const first = await createOrRefreshBill('u1', 'stamped');
+    expect(first!.bill.lines[0]).toMatchObject({ name: 'Chocolate Truffle', unitPrice: 450 });
+    expect(first!.bill.total).toBe(900);
+
+    store.set(`${U}/menu/cake`, { name: 'Cake', sellingPrice: 900 }); // the owner raises the price
+    expect((await createOrRefreshBill('u1', 'stamped'))!.bill.total).toBe(900); // regenerating does not reprice it
+
+    store.delete(`${U}/menu/cake`); // the owner deletes the item
+    expect((await createOrRefreshBill('u1', 'stamped'))!.bill.total).toBe(900);
+  });
+});

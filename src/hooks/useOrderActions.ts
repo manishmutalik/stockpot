@@ -20,14 +20,17 @@
  */
 import { auth, db, doc, setDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { MenuItem, Order } from '../types';
+import { MenuItem, Order, RawMaterial } from '../types';
+import { stampFor } from '../utils/orderPricing';
 
 export function useOrderActions(
   menu: MenuItem[],
   orders: Order[],
   orderDate: string,
   showConfirm: (title: string, message: string, onConfirm: () => void) => void,
-  showAlert: (title: string, message: string) => void
+  showAlert: (title: string, message: string) => void,
+  /** Needed to stamp each new order with what its item costs to make right now. */
+  materials: RawMaterial[]
 ) {
   /**
    * Creates one or more Order documents from a single "Add Order"
@@ -102,6 +105,8 @@ export function useOrderActions(
           menuItemId: item.menuItemId,
           quantity: item.quantity,
           date: common.date,
+          // What the item sells for and costs now, kept on the order for good (see utils/orderPricing).
+          ...stampFor(menu.find(m => m.id === item.menuItemId)!, materials),
           ...(common.customerName && { customerName: common.customerName }),
           ...(common.customerPhone && { customerPhone: common.customerPhone }),
           ...(orderGroupId && { orderGroupId }),
@@ -204,7 +209,13 @@ export function useOrderActions(
 
       try {
         const batch = writeBatch(db);
-        batch.set(doc(db, 'users', userId, 'orders', id), { menuItemId: newMenuItemId, quantity: newQuantity }, { merge: true });
+        // Changing the item re-stamps the order from the new item; changing only the quantity
+        // keeps the stamp, since the unit price and cost didn't change.
+        batch.set(doc(db, 'users', userId, 'orders', id), {
+          menuItemId: newMenuItemId,
+          quantity: newQuantity,
+          ...(sameItem ? {} : stampFor(targetItem, materials)),
+        }, { merge: true });
 
         if (sameItem) {
           const delta = order.quantity - newQuantity; // positive = release back, negative = claim more

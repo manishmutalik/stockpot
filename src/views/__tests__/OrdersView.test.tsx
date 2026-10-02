@@ -252,4 +252,12 @@ describe('OrdersView', () => {
       expect(bill.nextElementSibling?.getAttribute('aria-label')).toBe('Share menu');
     });
   });
+
+  it("values orders at the price they were made at, not today's menu price", () => {
+    const stampedOrders = [o('s1', { customerName: 'Stamped', quantity: 2, unitPriceAtSale: 60 })]; // menu now says Cake = 100
+    render(<OrdersView {...makeProps({ orders: stampedOrders })} />);
+    expect(screen.getAllByText('$120.00').length).toBeGreaterThan(1); // the row total (2 x 60) and the day header
+    expect(screen.queryByText('$200.00')).toBeNull(); // not 2 x today's 100
+    expect(screen.getByText('Revenue Booked').nextElementSibling?.textContent).toBe('$120.00');
+  });
 });

@@ -175,6 +175,20 @@ export interface Order {
    * covers a customer's pending orders. Created once, reused, written by the
    * server only. */
   statementToken?: string;
+  /** What this order was worth when it was created, written once and never
+   * rewritten, so a later price or cost change can't alter history (see
+   * utils/orderPricing). Absent on orders made before stamping existed: those
+   * fall back to today's values and are reported as estimated. */
+  /** Price of one unit when the order was created. */
+  unitPriceAtSale?: number;
+  /** Ingredient cost of one unit when the order was created, excluding input GST. */
+  unitIngredientCostAtSale?: number;
+  /** Packaging cost of one unit when the order was created, excluding input GST. */
+  unitPackagingCostAtSale?: number;
+  /** Input GST contained in those costs, for the "GST paid" figure. */
+  unitInputGstAtSale?: number;
+  /** The item's name when the order was created. */
+  itemNameAtSale?: string;
 }
 
 /**

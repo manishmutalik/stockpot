@@ -16,7 +16,8 @@ import { useState, useEffect } from 'react';
 import { auth, db, doc, setDoc } from '../firebase';
 import { apiFetch } from '../utils/apiClient';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { MenuItem, Order } from '../types';
+import { MenuItem, Order, RawMaterial } from '../types';
+import { stampFor } from '../utils/orderPricing';
 
 export interface ShopifyStatus {
   connected: boolean;
@@ -34,6 +35,7 @@ export interface ShopifyConfig {
 
 /**
  * @param menu      Current menu items, used to match imported order line items by name.
+ * @param materials Current materials, used to stamp each imported order with its cost.
  * @param orderDate The date (YYYY-MM-DD) to import orders for — matches the
  *                  Orders view's date picker.
  * @param showAlert Shared alert-modal function from App.tsx, used for user-facing
@@ -46,6 +48,7 @@ export interface ShopifyConfig {
  */
 export function useIntegrations(
   menu: MenuItem[],
+  materials: RawMaterial[],
   orderDate: string,
   showAlert: (title: string, message: string) => void,
   authReady: boolean
@@ -301,6 +304,8 @@ export function useIntegrations(
               menuItemId: menuItem.id,
               quantity: li.quantity,
               date: orderDate,
+              // Stamped at the price the customer actually paid on Shopify, when it sent one.
+              ...stampFor(menuItem, materials, parseFloat(li.price)),
               customerName: so.customer ? `${so.customer.first_name || ''} ${so.customer.last_name || ''}`.trim() : '',
               customerPhone: so.customer?.phone || so.phone || ''
             });
@@ -371,6 +376,8 @@ export function useIntegrations(
               menuItemId: menuItem.id,
               quantity: li.product_uom_qty,
               date: orderDate,
+              // Stamped at the unit price Odoo sold it for, when it sent one.
+              ...stampFor(menuItem, materials, Number(li.price_unit)),
               customerName: oo.partner_id ? oo.partner_id[1] : '',
               customerPhone: ''
             });

@@ -403,7 +403,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
 
               <div className="mt-4 rounded-xl bg-stone-50 p-4 space-y-2.5 text-sm">
                 {[
-                  { dot: 'bg-primary', label: 'Gross income', value: fmt(income), cls: 'text-ink' },
+                  { dot: 'bg-primary', label: settings.gstApplicable ? 'Income (excl. GST)' : 'Gross income', value: fmt(income), cls: 'text-ink' },
                   { dot: 'bg-coral', label: 'Materials (COGS)', value: `-${fmt(financials.orderExpenses)}`, cls: 'text-ink' },
                   { dot: 'bg-muted', label: 'Third-party couriers', value: `-${fmt(financials.deliveryExpenses)}`, cls: 'text-ink' },
                   { dot: 'bg-coral', label: 'Logged wastage', value: `-${fmt(financials.wastageExpenses)}`, cls: 'text-coral' },
@@ -428,6 +428,14 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                 <div>{filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''} · {itemsSold} item{itemsSold !== 1 ? 's' : ''} sold</div>
                 {income === 0 && <div>No sales yet</div>}
                 {financials.experimentExpenses > 0 && <div>Operating Exp: {fmt(financials.experimentExpenses)} R&amp;D</div>}
+                {financials.estimated && (
+                  <div
+                    className="normal-case tracking-normal"
+                    title="Some orders were made before prices and costs were recorded on each order, so they are shown at today's menu prices and material costs. Orders made from now on are exact."
+                  >
+                    Includes orders valued at today&apos;s prices (est.)
+                  </div>
+                )}
               </div>
             </div>
           </div>
