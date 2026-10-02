@@ -619,7 +619,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     )}
 
     {cardError && (
-      <div className="fixed bottom-6 right-6 z-[60] bg-rose-600 text-white px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-3">
+      <div className="fixed bottom-6 right-6 z-[80] bg-rose-600 text-white px-5 py-3 rounded-xl shadow-lg text-sm font-bold flex items-center gap-3">
         {cardError}
         <button onClick={() => setCardError(null)} className="text-white/80 hover:text-white">
           <X size={16} />

@@ -133,13 +133,12 @@ PRs. The decisions the user approved when we reviewed the handoff:
   (reserved in the type, for Purchase Management) and any price alerts or
   trends (Phase 2, to read from this log).
 
-## Known issues (not yet fixed)
+## Overlay stacking
 
-- On phones, the pinned footer of modals rendered inside the app tree (for
-  example Restock's Confirm button) sits under the fixed bottom navigation, so
-  it cannot be tapped. Both are `fixed` with `z-50` and the nav comes later in
-  the DOM. Modals that are portalled to `document.body` (`MarkPaidModal`,
-  `PriceHistoryModal`) are not affected.
+- The fixed bottom nav and the mobile FAB are `z-50`. `ModalShell` overlays are
+  `z-[60]`, `ConfirmDialog` is `z-[70]` (so it can open over a modal) and the
+  Menu undo toast is `z-[80]`. `overlayStacking.test.tsx` keeps modal > nav and
+  confirm > modal.
 
 ## Open items for the user (none blocking)
 
