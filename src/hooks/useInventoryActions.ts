@@ -206,7 +206,7 @@ export function useInventoryActions(
   // This lives here rather than in the Inventory screen so a pending entry still
   // lands if the owner switches tabs straight after typing.
   const materialsRef = useRef(materials);
-  materialsRef.current = materials;
+  useEffect(() => { materialsRef.current = materials; });
   const pendingCostEdits = useRef(new Map<string, { startCost: number; latest: number; timer: ReturnType<typeof setTimeout> }>());
 
   const writeCostEditLog = (id: string, startCost: number, latest: number) => {
