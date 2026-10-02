@@ -429,3 +429,74 @@ describe('stamping — an order keeps what its item sold for and cost when it wa
     expect((setDoc as any).mock.calls.at(-1)[1]).toMatchObject({ customerName: 'Asha', unitPriceAtSale: 90 });
   });
 });
+
+describe('discount and payment method', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  const menu: MenuItem[] = [
+    { id: 'cake', name: 'Cake', sellingPrice: 20, recipe: [], finishedGoodsStock: 10 } as MenuItem,
+    { id: 'cookie', name: 'Cookie', sellingPrice: 5, recipe: [], finishedGoodsStock: 10 } as MenuItem,
+  ];
+  const orderWrites = () => batchSet.mock.calls.filter(([ref]: any[]) => ref.path.includes('/orders/')).map(c => c[1]);
+
+  it('stores the discount on the first item only, so a multi-item order is discounted once', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials));
+    await result.current.addOrderGroup({ date: '2026-04-01', discount: 12 }, [{ menuItemId: 'cake', quantity: 1 }, { menuItemId: 'cookie', quantity: 2 }]);
+    const writes = orderWrites();
+    expect(writes[0].discount).toBe(12);
+    expect('discount' in writes[1]).toBe(false);
+  });
+
+  it('writes no discount when there is none', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials));
+    await result.current.addOrderGroup({ date: '2026-04-01', discount: 0 }, [{ menuItemId: 'cake', quantity: 1 }]);
+    expect('discount' in orderWrites()[0]).toBe(false);
+  });
+
+  it('stamps the method and the fee rate in force on every item of a paid order', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials, { card: 2.5 }));
+    await result.current.addOrderGroup({ date: '2026-04-01', paymentMethod: 'card' }, [{ menuItemId: 'cake', quantity: 1 }, { menuItemId: 'cookie', quantity: 1 }]);
+    for (const w of orderWrites()) expect(w).toMatchObject({ paymentMethod: 'card', paymentFeeRate: 2.5 });
+  });
+
+  it('stamps a rate of 0 for a method with no fee set', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials, { card: 2.5 }));
+    await result.current.addOrderGroup({ date: '2026-04-01', paymentMethod: 'cash' }, [{ menuItemId: 'cake', quantity: 1 }]);
+    expect(orderWrites()[0]).toMatchObject({ paymentMethod: 'cash', paymentFeeRate: 0 });
+  });
+
+  it('records no method on a pay-later order, and none when none was chosen', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials, { card: 2.5 }));
+    await result.current.addOrderGroup({ date: '2026-04-01', paymentStatus: 'unpaid', paymentMethod: 'card' }, [{ menuItemId: 'cake', quantity: 1 }]);
+    await result.current.addOrderGroup({ date: '2026-04-01' }, [{ menuItemId: 'cake', quantity: 1 }]);
+    const [later, plain] = orderWrites();
+    expect('paymentMethod' in later).toBe(false);
+    expect('paymentMethod' in plain).toBe(false);
+    expect('paymentFeeRate' in plain).toBe(false);
+  });
+
+  it('marking paid with a method stamps it and the rate in one write', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials, { upi: 1 }));
+    await result.current.markOrdersPaid(['a', 'b'], true, 'upi');
+    expect(batchCommit).toHaveBeenCalledTimes(1);
+    for (const call of batchSet.mock.calls) expect(call[1]).toEqual({ paymentStatus: 'paid', paymentMethod: 'upi', paymentFeeRate: 1 });
+  });
+
+  it('marking unpaid never records a method', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials, { upi: 1 }));
+    await result.current.markOrdersPaid(['a'], false, 'upi');
+    expect(batchSet.mock.calls[0][1]).toEqual({ paymentStatus: 'unpaid' });
+  });
+
+  it('records how paid orders were paid, for every item together', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials, { card: 2 }));
+    await result.current.setOrdersPaymentMethod(['a', 'b'], 'card');
+    expect(batchCommit).toHaveBeenCalledTimes(1);
+    for (const call of batchSet.mock.calls) {
+      expect(call[1]).toEqual({ paymentMethod: 'card', paymentFeeRate: 2 });
+      expect(call[2]).toEqual({ merge: true });
+    }
+    vi.clearAllMocks();
+    await result.current.setOrdersPaymentMethod([], 'card');
+    expect(batchCommit).not.toHaveBeenCalled();
+  });
+});

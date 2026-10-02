@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import {
   AlertCircle, Building2, Check, CheckCircle2, Copy, Database, Globe, Image, Layers, LogOut, Palette,
-  Percent, Plus, Puzzle, Save, Store, Trash2, User as UserIcon, UserCog
+  CreditCard, Percent, Plus, Puzzle, Receipt, Save, Store, Trash2, User as UserIcon, UserCog
 } from 'lucide-react';
-import { AppViewProps } from '../types';
+import { AppViewProps, FixedCost, PAYMENT_METHODS, PaymentMethod } from '../types';
 
 type SettingsTab = 'bakery' | 'integrations' | 'customisation' | 'account' | 'categories';
 
@@ -71,7 +71,7 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
     odooStatus, odooUrlInput, setOdooUrlInput, odooDbInput, setOdooDbInput, odooUsernameInput,
     setOdooUsernameInput, odooPasswordInput, setOdooPasswordInput, isConnectingOdoo, connectOdoo, disconnectOdoo,
     updateSettingsField, categories, addCategory, deleteCategory, activeSettingsTab, setActiveSettingsTab,
-    settings, user, saveSettings, showSaveFeedback, handleLogout, billing, openBillingPortal, isOpeningPortal
+    settings, user, saveSettings, showSaveFeedback, handleLogout, billing, openBillingPortal, isOpeningPortal, currency
   } = props;
 
   const [newCategory, setNewCategory] = useState('');
@@ -83,6 +83,7 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
   const connectedCount = (shopifyStatus.connected ? 1 : 0) + (odooStatus.connected ? 1 : 0);
   const callbackUrl = `${window.location.origin}/api/auth/shopify/callback`;
 
+  const fixedCosts: FixedCost[] = settings.fixedCosts ?? [];
   const tabs: { id: SettingsTab; label: string; hint?: string; icon: React.ElementType }[] = [
     { id: 'bakery', label: 'Business & GST', icon: Building2, hint: settings.gstApplicable ? 'GST on' : undefined },
     { id: 'integrations', label: 'Integrations', icon: Puzzle, hint: connectedCount > 0 ? `${connectedCount} connected` : undefined },
@@ -262,6 +263,91 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
                     </div>
                   </div>
                 )}
+              </Section>
+
+              {/* Payment fees: what each way of being paid costs the business */}
+              <Section
+                icon={CreditCard}
+                title="Payment fees"
+                subtitle="What you pay when a customer pays this way"
+              >
+                <p className="text-sm text-muted -mt-2">
+                  A percentage of the amount collected, taken off what an order made once it is marked paid. Leave a method blank for no fee. The rate is saved with each order when you record how it was paid, so changing it here only affects orders from now on.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {PAYMENT_METHODS.map(m => (
+                    <div key={m.value}>
+                      <label htmlFor={`fee-${m.value}`} className={LABEL}>{m.label} fee (%)</label>
+                      <input
+                        id={`fee-${m.value}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={settings.paymentFeeRates?.[m.value] ?? ''}
+                        onChange={(e) => {
+                          const next: Partial<Record<PaymentMethod, number>> = { ...settings.paymentFeeRates };
+                          if (e.target.value === '') delete next[m.value]; else next[m.value] = Math.max(parseFloat(e.target.value) || 0, 0);
+                          updateSettingsField('paymentFeeRates', next);
+                        }}
+                        className={`${FIELD} font-mono`}
+                        placeholder="0"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </Section>
+
+              {/* Fixed monthly costs, prorated over whatever period the dashboard is showing */}
+              <Section
+                icon={Receipt}
+                title="Fixed monthly costs"
+                subtitle="Rent, gas, salaries: costs that aren't tied to any order"
+                badge={fixedCosts.length > 0 ? <Pill tone="slate">{fixedCosts.length} cost{fixedCosts.length === 1 ? '' : 's'}</Pill> : undefined}
+              >
+                <p className="text-sm text-muted -mt-2">
+                  Spread evenly over the days of each month and taken off your True Profit for whatever period you view. When a cost stops or changes, set <b>Until</b> on it and add the new amount as a new line starting the next day, so past months keep what they really cost.
+                </p>
+                <div className="space-y-3">
+                  {fixedCosts.map(cost => {
+                    const update = (patch: Partial<FixedCost>) =>
+                      updateSettingsField('fixedCosts', fixedCosts.map(c => (c.id === cost.id ? { ...c, ...patch } : c)));
+                    return (
+                      <div key={cost.id} className="grid grid-cols-2 gap-3 items-end p-3 bg-stone-50 rounded-xl">
+                        <div className="col-span-2 sm:col-span-1">
+                          <label htmlFor={`cost-name-${cost.id}`} className={LABEL}>Name</label>
+                          <input id={`cost-name-${cost.id}`} type="text" value={cost.name} onChange={e => update({ name: e.target.value })} className={`${FIELD} bg-white`} placeholder="e.g. Shop rent" />
+                        </div>
+                        <div>
+                          <label htmlFor={`cost-amount-${cost.id}`} className={LABEL}>Per month ({currency.symbol})</label>
+                          <input id={`cost-amount-${cost.id}`} type="number" min="0" step="0.01" value={cost.monthlyAmount || ''} onChange={e => update({ monthlyAmount: Math.max(parseFloat(e.target.value) || 0, 0) })} className={`${FIELD} bg-white font-mono`} placeholder="0" />
+                        </div>
+                        <div>
+                          <label htmlFor={`cost-from-${cost.id}`} className={LABEL}>From (optional)</label>
+                          <input id={`cost-from-${cost.id}`} type="date" value={cost.startDate ?? ''} onChange={e => update({ startDate: e.target.value || undefined })} className={`${FIELD} bg-white font-mono`} />
+                        </div>
+                        <div>
+                          <label htmlFor={`cost-until-${cost.id}`} className={LABEL}>Until (optional)</label>
+                          <input id={`cost-until-${cost.id}`} type="date" value={cost.endDate ?? ''} onChange={e => update({ endDate: e.target.value || undefined })} className={`${FIELD} bg-white font-mono`} />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => updateSettingsField('fixedCosts', fixedCosts.filter(c => c.id !== cost.id))}
+                          aria-label={`Remove ${cost.name || 'fixed cost'}`}
+                          className="h-9 w-9 flex items-center justify-center rounded-lg text-coral/70 hover:text-coral hover:bg-coral/10 transition-colors justify-self-end col-span-2 -mt-1"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={() => updateSettingsField('fixedCosts', [...fixedCosts, { id: Math.random().toString(36).slice(2, 11), name: '', monthlyAmount: 0 }])}
+                    className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-primary/10 text-primary text-sm font-semibold hover:bg-primary/15 transition-colors"
+                  >
+                    <Plus size={16} /> Add a fixed cost
+                  </button>
+                </div>
               </Section>
             </>
           )}

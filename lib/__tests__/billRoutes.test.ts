@@ -85,6 +85,12 @@ describe('bill page HTML', () => {
   it('has no UPI link when the bill has no UPI ID', () => {
     expect(renderBillHtml({ ...bill, upiId: undefined })).not.toContain('upi://');
   });
+  it('shows a Discount line only when there is a discount', () => {
+    expect(renderBillHtml({ ...bill, discount: 0 })).not.toContain('Discount');
+    const html = renderBillHtml({ ...bill, discount: 25 });
+    expect(html).toContain('Discount');
+    expect(html).toContain('-₹25.00');
+  });
 });
 
 describe('create bill route', () => {

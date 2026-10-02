@@ -165,3 +165,20 @@ describe('bills keep the price an order was made at', () => {
     expect((await createOrRefreshBill('u1', 'stamped'))!.bill.total).toBe(900);
   });
 });
+
+describe('bills with a discount', () => {
+  it('takes the discount off once for a multi-item order, and keeps it in the stored snapshot', async () => {
+    store.set(`${U}/orders/g1`, { menuItemId: 'cake', quantity: 1, date: '2026-03-10', orderGroupId: 'grp', deliveryCharge: 40, discount: 60 });
+    const result = await createOrRefreshBill('u1', 'g1');
+    expect(result!.bill.discount).toBe(60);
+    expect(result!.bill.total).toBe(500 + 100 + 40 - 60);
+    expect(store.get(`bills/${result!.token}`).bill.discount).toBe(60);
+  });
+
+  it('takes each order\'s discount off a consolidated bill', async () => {
+    store.set(`${U}/orders/single`, { menuItemId: 'cake', quantity: 1, date: '2026-03-10', customerName: 'Priya', discount: 50 });
+    store.set(`${U}/orders/g1`, { menuItemId: 'cake', quantity: 1, date: '2026-03-10', orderGroupId: 'grp', discount: 10 });
+    const result = await createOrRefreshStatement('u1', ['single', 'g1', 'g2']);
+    expect(result!.bill.discount).toBe(60);
+  });
+});

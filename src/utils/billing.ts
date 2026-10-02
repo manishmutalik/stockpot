@@ -7,13 +7,14 @@
  * page), so the two can never disagree about a bill, and it has no Firebase
  * or React dependency so it can be unit tested on its own.
  *
- * GST is not re-derived here: it goes through `splitSaleForGst`, the same
- * function the dashboard uses, applied to the same amount (items plus the
- * delivery charge, which is counted once per multi-item order).
+ * The sums are not re-derived here: they come from `saleAmounts` in profit.ts,
+ * the same code the dashboard and the Orders tab use, so a bill and the profit
+ * figures always agree on what the customer paid (items plus delivery minus
+ * the discount, plus GST on top in exclusive pricing).
  */
 import type { BakerySettings, MenuItem, Order } from '../types';
-import { splitSaleForGst, type GstPricingMode } from './gstCalculations';
-import { summarizeOrders } from './orderStats';
+import type { GstPricingMode } from './gstCalculations';
+import { saleAmounts } from './profit';
 import { resolveItemName, resolveUnitPrice } from './orderPricing';
 
 export interface BillLine {
@@ -35,6 +36,8 @@ export interface Bill {
   /** Sum of the item lines, before delivery and GST. */
   itemsTotal: number;
   deliveryCharge: number;
+  /** Amount taken off the whole order, counted once per multi-item order. 0 when none. */
+  discount: number;
   gst: { rate: number; mode: GstPricingMode; amount: number } | null;
   /** What the customer pays. */
   total: number;
@@ -89,17 +92,16 @@ export function buildBill(input: {
       ...(statement && { date: o.date }),
     };
   });
-  const itemsTotal = round2(lines.reduce((sum, l) => sum + l.lineTotal, 0));
-  // Same rule as the dashboard: a shared delivery charge counts once per order.
-  const deliveryCharge = round2(summarizeOrders(orders, menu).deliveryCharged);
-  const sale = itemsTotal + deliveryCharge;
-
-  const rate = settings.gstRate || 0;
+  // The same sums the profit figures use (shared delivery charge and discount count once per order, GST
+  // is worked out on the sale after the discount), so the bill and the Orders and Summary screens agree.
+  const sale = saleAmounts(orders, menu, settings);
+  const rate = settings.gstApplicable ? settings.gstRate || 0 : 0;
   const mode: GstPricingMode = settings.gstPricingMode || 'exclusive';
-  const gst = settings.gstApplicable && rate > 0
-    ? { rate, mode, amount: round2(splitSaleForGst(sale, rate, mode).gstAmount) }
-    : null;
-  const total = round2(gst && mode === 'exclusive' ? sale + gst.amount : sale);
+  const gst = rate > 0 ? { rate, mode, amount: round2(sale.gstAmount) } : null;
+  const itemsTotal = round2(sale.itemsGross);
+  const deliveryCharge = round2(sale.deliveryGross);
+  const discount = round2(sale.discount);
+  const total = round2(sale.customerPays);
 
   return {
     reference: statement ? `ST-${byId.id.slice(0, 6).toUpperCase()}` : byId.id.slice(0, 8).toUpperCase(),
@@ -109,6 +111,7 @@ export function buildBill(input: {
     lines,
     itemsTotal,
     deliveryCharge,
+    discount,
     gst,
     total,
     currency,

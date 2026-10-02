@@ -738,8 +738,8 @@ function BakeryApp() {
   // ── Order Actions ────────────────────────────────────────────────────────────
   // Extracted to src/hooks/useOrderActions.ts as part of the Phase 4 breakup.
   const {
-    addOrderGroup, fulfillOrder, markOrdersPaid, updateOrder, deleteOrder, resetOrders,
-  } = useOrderActions(menu, orders, orderDate, showConfirm, showAlert, materials);
+    addOrderGroup, fulfillOrder, markOrdersPaid, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders,
+  } = useOrderActions(menu, orders, orderDate, showConfirm, showAlert, materials, settings.paymentFeeRates);
 
   // ── Production Run Actions ───────────────────────────────────────────────────
   // Extracted to src/hooks/useProductionActions.ts as part of the Phase 4 breakup.
@@ -890,12 +890,17 @@ function BakeryApp() {
       gstPaid: parseFloat(fins.gstPaid.toFixed(2)),
       profit: parseFloat(fins.profit.toFixed(2)),
       packagingExpenses: parseFloat(fins.packagingExpenses.toFixed(2)),
+      discounts: parseFloat(fins.discounts.toFixed(2)),
+      paymentFees: parseFloat(fins.paymentFees.toFixed(2)),
+      fixedCosts: parseFloat(fins.fixedCosts.toFixed(2)),
       totalContribution: parseFloat(fins.totalContribution.toFixed(2)),
+      trueProfit: parseFloat(fins.trueProfit.toFixed(2)),
       avgOrderContribution: parseFloat(fins.avgOrderContribution.toFixed(2)),
+      unpaidIncome: parseFloat(fins.unpaidIncome.toFixed(2)),
       orderCount: fins.orderCount,
       estimated: fins.estimated,
     };
-  }, [summaryDateStart, summaryDateEnd, orders, experiments, menu, materials, wastageLogs, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]);
+  }, [summaryDateStart, summaryDateEnd, orders, experiments, menu, materials, wastageLogs, settings.gstApplicable, settings.gstRate, settings.gstPricingMode, settings.fixedCosts]);
 
   // Data points for the Recharts AreaChart.
   // Shape adapts based on summaryRange: daily→7 days, weekly→5 weeks, monthly→6 months.
@@ -1206,7 +1211,7 @@ function BakeryApp() {
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
     deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
-    addOrderGroup, fulfillOrder, markOrdersPaid, updateOrder, deleteOrder, resetOrders, saveSettings,
+    addOrderGroup, fulfillOrder, markOrdersPaid, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,
     billing, openBillingPortal, isOpeningPortal, startCheckout, isStartingCheckout,
