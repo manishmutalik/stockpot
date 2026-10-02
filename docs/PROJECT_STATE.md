@@ -127,11 +127,30 @@ PRs. The decisions the user approved when we reviewed the handoff:
   `ProductPerformance` strip per item, from `productProfits` in `profit.ts`.
   Shared order charges are split by each item's sales so product contributions
   sum to the order contributions (tested).
-- Firestore rules cannot enforce append-only (see the changelog); the demo
-  seeds a price history for every material.
+- The price log is append-only in code and, since the rules rewrite, in
+  `firestore.rules` too (create and read only). The demo seeds a price history
+  for every material.
 - This completes the True Profit handoff. Not built: a Goods Receipt source
   (reserved in the type, for Purchase Management) and any price alerts or
   trends (Phase 2, to read from this log).
+
+## Firestore security rules
+
+`firestore.rules` is an allow-list. Firestore rules are additive (any matching
+`allow` grants access; a specific deny never overrides a broader allow), so the
+file uses no recursive wildcard: each client collection under `users/{uid}` is
+named in `isBusinessCollection`, `priceLog` is create and read only, the user
+document is read-only for everyone (billing status and `role` are server-only),
+and `integrationCredentials` and `bills` are not reachable from a client. The
+earlier version let any user make themselves admin; see the changelog.
+
+- Tests: `npm run test:rules` (Firestore emulator, needs Java 21; also a CI job).
+  Not part of `npm test`. Run them whenever the rules or the set of collections
+  the apps use changes. `firebase.json` configures the emulator and deploys.
+- A new client collection under `users/{uid}` must be added to
+  `isBusinessCollection` and to the test, or the app is denied.
+- The rules in the repo are not live until deployed:
+  `npx firebase-tools deploy --only firestore:rules --project stockpot-adffe`.
 
 ## Overlay stacking
 
@@ -147,8 +166,8 @@ PRs. The decisions the user approved when we reviewed the handoff:
   existing Stripe subscribers, and whether to keep Stripe.
 - The Stripe price must be set to ₹1,200/month in INR.
 - The banner logo image still shows `$` and `%`; it needs a rupee version.
-- Firestore rules are believed to be additive, so a deny on
-  `integrationCredentials` is probably ineffective. Offered to verify and fix.
+- **Deploy the new Firestore rules** (below). Until they are published, the old
+  open rules are live in production.
 
 ## Running the app for browser checks
 

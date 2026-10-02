@@ -3,6 +3,36 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ===============================================================
+    // How these rules work, and the trap they avoid
+    //
+    // Firestore rules are ADDITIVE: when several `match` blocks cover the
+    // same document, access is granted if ANY of them allows it. A more
+    // specific `allow ... if false` never overrides a broader `allow`; it is
+    // simply one more rule that does not grant. An earlier version of this
+    // file had `match /{document=**} { allow read, write: if isOwner(...) }`
+    // under `/users/{userId}`, and `{document=**}` also matches zero path
+    // segments, so it covered the user document itself and every
+    // `integrationCredentials` document. The "deny" blocks beside it did
+    // nothing, and any signed-in user could write their own user document
+    // (setting `role: 'admin'`, which unlocked every other user's data, or
+    // their own billing status) and read or overwrite their stored
+    // integration tokens.
+    //
+    // So nothing here uses a recursive wildcard. Each collection the apps
+    // use is listed, and anything not listed (including every other
+    // subcollection, deeper nesting and the server-only data) is denied by
+    // omission, which cannot be undone by another rule.
+    //
+    // When a feature needs a new client collection under users/{userId},
+    // add its name to BUSINESS_COLLECTIONS below, and add a case to
+    // test/rules/firestore.rules.test.ts. The tests run the rules against
+    // the Firestore emulator: `npm run test:rules`.
+    //
+    // The Express server uses the Firebase Admin SDK, which bypasses these
+    // rules entirely, so it never needs a rule here.
+    // ===============================================================
+
+    // ===============================================================
     // Helper Functions
     // ===============================================================
 
@@ -14,10 +44,32 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Support access. The address check comes first so the common case costs
+    // no document read; the role lookup only runs for other signed-in users.
+    // `role` lives on the user document, which no client can write (below),
+    // so it cannot be self-assigned.
     function isAdmin() {
       return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-          (request.auth.token.email == "manishmutalik@gmail.com" && request.auth.token.email_verified == true));
+        ((request.auth.token.email == "manishmutalik@gmail.com" && request.auth.token.email_verified == true) ||
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin');
+    }
+
+    function isOwnerOrAdmin(userId) {
+      return isOwner(userId) || isAdmin();
+    }
+
+    // Collections under users/{userId} that the web and mobile apps read and
+    // write directly. Anything not in this list is not reachable from a client.
+    function isBusinessCollection(collectionName) {
+      return collectionName in [
+        'materials',
+        'menu',
+        'orders',
+        'experiments',
+        'productionRuns',
+        'wastageLogs',
+        'settings'
+      ];
     }
 
     // ===============================================================
@@ -25,33 +77,33 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      // Read-only for the owner/admin. Write is denied even for the owner:
-      // this document holds server-controlled fields (billing subscription
-      // status) that only the trusted server should ever be able to change —
-      // otherwise a client could just set their own status to "active" and
-      // get free access. Nothing in this app currently needs the client to
-      // write to this top-level document; all user data lives in the
-      // subcollections below, which keep their own write access.
-      allow read: if isOwner(userId) || isAdmin();
+      // The user document holds server-controlled fields (the billing
+      // subscription status, and the `role` that grants support access).
+      // Readable by the owner or an admin; writable by nobody, because the
+      // server's Admin SDK is the only thing that should ever change it.
+      // Nothing in the apps writes to it.
+      allow read: if isOwnerOrAdmin(userId);
       allow write: if false;
 
-      // Integration credentials (Shopify/Odoo tokens) are written only by
-      // the server via the Firebase Admin SDK, which bypasses these rules
-      // entirely. Client-side access is denied outright — even for the
-      // owning user or an admin — since there's no legitimate reason a
-      // browser needs to read or write this data, and it stays unreachable
-      // even if a route were ever mistakenly exposed. This match must come
-      // before the general subcollection wildcard below, since Firestore
-      // rules use the most specific matching path.
-      match /integrationCredentials/{provider} {
-        allow read, write: if false;
+      // The business's own data: materials, menu, orders and so on. The
+      // owner (or an admin) may read, create, change and delete these.
+      match /{collectionName}/{docId} {
+        allow read, write: if isBusinessCollection(collectionName) && isOwnerOrAdmin(userId);
       }
 
-      // Allow users to read and write all other documents in their
-      // subcollections (materials, menu, orders, experiments, settings, etc.)
-      match /{document=**} {
-        allow read, write: if isOwner(userId) || isAdmin();
+      // The ingredient price log is append-only: entries can be read and
+      // created but never changed or deleted, by the owner or anyone else.
+      // (Deleting a material leaves its history behind on purpose.)
+      match /priceLog/{entryId} {
+        allow read: if isOwnerOrAdmin(userId);
+        allow create: if isOwnerOrAdmin(userId);
+        allow update, delete: if false;
       }
+
+      // `integrationCredentials` (Shopify and Odoo tokens) is deliberately
+      // not matched at all: it is written and read only by the server through
+      // the Admin SDK, so no client, not even the owning user or an admin,
+      // can reach it.
     }
 
     // Public bill snapshots (see lib/billStore.ts). Only the server's Admin SDK
