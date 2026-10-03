@@ -1,5 +1,14 @@
 # Changelog
 
+## Fix: AI calls with an API key that is not tied to a workspace
+
+Anthropic rejected every AI call from a key that was not created inside a
+workspace ("This API key is not scoped to a workspace"), so the briefing fell
+back to its built-in summary and the chat said the AI service could not answer.
+The server now sends the `anthropic-workspace-id` header when the optional
+`ANTHROPIC_WORKSPACE_ID` environment variable is set. A key created inside a
+workspace needs nothing.
+
 ## Ask Your Business
 
 A chat for questions about your own business (`docs/AI_CFO_DESIGN.md`), opened
