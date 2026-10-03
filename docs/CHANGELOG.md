@@ -1,5 +1,33 @@
 # Changelog
 
+## AI plumbing (switched off; no AI feature yet)
+
+Shared groundwork for the AI CFO (`docs/AI_CFO_DESIGN.md`). Nothing user-facing
+and no model call yet, and it does nothing unless `AI_FEATURES_ENABLED=true`.
+
+- **The server decides who may use AI.** Until now billing was enforced only by
+  the browser, and the demo is an open sign-up, so any account could have called
+  a paid API. Now every AI route passes `requireAiAccess`: AI must be switched on
+  with a key; demo accounts are always refused; an optional allow-list
+  (`AI_ALLOWED_EMAILS` / `AI_ALLOWED_UIDS`) limits it to named accounts during the
+  trial whatever their billing; otherwise an account needs an active or trialing
+  subscription (or the server must be in trial mode). It fails closed.
+- **Daily caps, configurable on the server.** Per user per feature (chat 30,
+  briefing 4, order parsing 30) and a global daily ceiling (1500 calls), counted
+  atomically in Firestore before any model call. A user's day follows their time
+  zone. `GET /api/ai/status` reports what is available and what is left.
+- **No model-generated figures** (`src/utils/aiFigures.ts`, `aiSnapshot.ts`). The
+  model will only be able to write words and tokens like `{{fig:profit_change}}`;
+  the app computes every number (including changes and percentages) and renders
+  tokens itself. A guard rejects any answer with a digit, a spelled-out number or
+  an unknown token outside a token, so an invented figure cannot reach the screen.
+  The snapshot sent to the model holds customers as short labels only: no names
+  and no phone numbers (tested).
+- **Rules.** `users/{uid}/briefings` is owner-read, server-write; the usage
+  counters cannot be read or changed by any client. 5 new rules tests (37 in all).
+- Adds `@anthropic-ai/sdk`. Server settings: `AI_FEATURES_ENABLED`,
+  `ANTHROPIC_API_KEY`, the allow-lists and `AI_*_DAILY_LIMIT` (all in the design doc).
+
 ## Customer insights and a business time zone
 
 First part of the AI CFO work (design in `docs/AI_CFO_DESIGN.md`). This part

@@ -67,7 +67,10 @@ first server-side entitlement check.
    must be set. Otherwise: "AI features are not configured on this server". The
    rest of the app is unaffected.
 2. Optional trial allow-list: if `AI_ALLOWED_EMAILS` or `AI_ALLOWED_UIDS` is set,
-   only those accounts may use AI, whatever their billing status. This is how it
+   only those accounts may use AI, whatever their billing status. An email
+   matches only when Firebase has verified it (the token carries an email even
+   for an account that signed up with someone else's address); a uid needs no
+   email. This is how it
    is tried during the trial without opening it to every signup.
 3. Billing: the user's status must be active or trialing
    (`subscriptionStore.hasActiveAccess`). When `BILLING_DISABLED=true` (trial
@@ -77,8 +80,11 @@ first server-side entitlement check.
    canned sample in the client and never reach the model.
 5. Daily caps, counted in Firestore by the server (Admin SDK, not reachable by
    clients): per feature per user (`AI_CHAT_DAILY_LIMIT` default 30,
-   `AI_BRIEFING_REFRESH_DAILY_LIMIT` default 3, `AI_PARSE_DAILY_LIMIT` default
-   30) and a global daily ceiling (`AI_GLOBAL_DAILY_LIMIT`, default 1500 calls).
+   `AI_BRIEFING_DAILY_LIMIT` default 4, which is the first briefing of the day
+   plus three refreshes, and `AI_PARSE_DAILY_LIMIT` default 30) and a global daily
+   ceiling (`AI_GLOBAL_DAILY_LIMIT`, default 1500 calls). A user's day is their
+   business date (their time zone); the global day is UTC. A request is counted
+   before the model is called, atomically, and a failed call still counts.
    At roughly ₹0.4 per chat call, 1500 calls is about ₹600 a day at the very
    most; set a monthly spend limit in the Anthropic Console as well.
 6. Request bodies are validated with size limits before anything else.
@@ -185,12 +191,40 @@ counted as use; a restock not counted; R&D excluded; stock already at the
 threshold labelled `at_threshold`; zero or negative stock; zero usage; the quantity
 rounding.
 
+## Shared plumbing (built)
+
+- `lib/aiConfig.ts`: reads the environment (all AI settings above); default off.
+- `lib/aiGuard.ts`: `checkAiEntitlement` and `checkAiAccess` (the order above) and
+  the `requireAiAccess(feature, deps)` middleware for routes that call the model.
+  It fails closed: if a check throws, the answer is 500, never "allowed".
+- `lib/aiUsage.ts`: the daily counters, reserved in one Firestore transaction.
+- `lib/anthropic.ts`: a lazily created client (the server boots without a key),
+  `AI_MODEL = claude-haiku-4-5`, and `aiErrorResponse`, which turns provider
+  failures into messages for the owner and never forwards the provider's text.
+- `lib/aiRoutes.ts`, `GET /api/ai/status`: whether AI is available to this
+  account and what is left of today's allowance, so the app can show or hide AI.
+  The reasons the app can act on are `demo_account`, `subscription_required`,
+  `not_allowed` and `unavailable` (not configured; no detail is given).
+- `lib/auth.ts` now also puts the verified email on the request.
+- `src/utils/aiFigures.ts`: the figure registry, token grammar, `validateAiText`
+  and `renderAiText` (the financial-truth guard above).
+- `src/utils/aiSnapshot.ts`: `buildBusinessSnapshot`. Every number is a figure;
+  changes and percentages are precomputed; the "drivers" (sales, discounts,
+  ingredients, packaging, courier, payment fees, wastage, fixed costs) are each
+  component's effect on true profit, largest first, and add up to the change in
+  true profit to within rounding (tested). Customers are labels only. The
+  comparison is the same weekday a week earlier for a single day, otherwise the
+  same number of days just before.
+- Firestore rules: `users/{uid}/briefings/{day}` is owner-read, server-write; the
+  usage counters are unreachable from any client (tested in the emulator).
+- Not yet: the routes that call the model, the prompts and the UI.
+
 ## Delivery plan
 
-1. Customer insights, time zone setting, design doc (this change).
+1. Customer insights, time zone setting, design doc (built).
 2. Shared plumbing: Anthropic client, the gate and usage caps, rules for the
    server-written `briefings` collection, the business snapshot with the figure
-   registry, and the text guard. No user-facing AI yet.
+   registry, and the text guard (built). No user-facing AI yet.
 3. Daily briefing (with the canned demo sample).
 4. Ask Your Business (without the what-if tool until Phase 2 exists).
 5. Order parsing in Quick Log (the Add Order form also needs a delivery address).

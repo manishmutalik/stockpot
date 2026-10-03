@@ -25,6 +25,9 @@ const seed = () =>
     await setDoc(doc(db, `users/${OWNER}/priceLog/p1`), { materialId: 'm1', unitCost: 1 });
     await setDoc(doc(db, `users/${OWNER}/integrationCredentials/shopify`), { token: 'secret' });
     await setDoc(doc(db, `users/${OTHER}/materials/m1`), { name: "Bob's flour" });
+    await setDoc(doc(db, `users/${OWNER}/briefings/2026-06-30`), { headline: 'x' });
+    await setDoc(doc(db, `users/${OWNER}/aiUsage/2026-06-30`), { chat: 3 });
+    await setDoc(doc(db, 'aiUsageGlobal/2026-06-30'), { total: 10 });
     await setDoc(doc(db, 'bills/tok'), { uid: OWNER });
     await setDoc(doc(db, 'users/support'), { role: 'admin' });
     await setDoc(doc(db, 'users/plainuser'), { displayName: 'No role here' });
@@ -135,6 +138,40 @@ describe('the ingredient price log is append-only', () => {
   it("cannot be read or added to by another user", async () => {
     await assertFails(getDoc(doc(as(OTHER), `users/${OWNER}/priceLog/p1`)));
     await assertFails(setDoc(doc(as(OTHER), `users/${OWNER}/priceLog/p3`), { unitCost: 1 }));
+  });
+});
+
+describe('AI briefings and usage counters are server-only', () => {
+  it('lets the owner read a briefing but never write, change or delete one', async () => {
+    const db = as(OWNER);
+    await assertSucceeds(getDoc(doc(db, `users/${OWNER}/briefings/2026-06-30`)));
+    await assertSucceeds(getDocs(collection(db, `users/${OWNER}/briefings`)));
+    await assertFails(setDoc(doc(db, `users/${OWNER}/briefings/2026-07-01`), { headline: 'invented' }));
+    await assertFails(updateDoc(doc(db, `users/${OWNER}/briefings/2026-06-30`), { headline: 'changed' }));
+    await assertFails(deleteDoc(doc(db, `users/${OWNER}/briefings/2026-06-30`)));
+  });
+
+  it('keeps one user out of another\'s briefings', async () => {
+    await assertFails(getDoc(doc(as(OTHER), `users/${OWNER}/briefings/2026-06-30`)));
+    await assertFails(setDoc(doc(as(OTHER), `users/${OWNER}/briefings/2026-07-01`), { headline: 'x' }));
+  });
+
+  it('cannot be got round by writing a briefing as an admin either', async () => {
+    await assertFails(setDoc(doc(as('support'), `users/${OWNER}/briefings/2026-07-01`), { headline: 'x' }));
+  });
+
+  it('hides the usage counters, so a user cannot reset their own daily allowance', async () => {
+    const db = as(OWNER);
+    await assertFails(getDoc(doc(db, `users/${OWNER}/aiUsage/2026-06-30`)));
+    await assertFails(setDoc(doc(db, `users/${OWNER}/aiUsage/2026-06-30`), { chat: 0 }));
+    await assertFails(deleteDoc(doc(db, `users/${OWNER}/aiUsage/2026-06-30`)));
+    await assertFails(setDoc(doc(db, `users/${OWNER}/aiUsage/2026-07-01`), { chat: 0 }));
+  });
+
+  it('hides the global counter from everyone', async () => {
+    await assertFails(getDoc(doc(as(OWNER), 'aiUsageGlobal/2026-06-30')));
+    await assertFails(setDoc(doc(as(OWNER), 'aiUsageGlobal/2026-06-30'), { total: 0 }));
+    await assertFails(getDoc(doc(as('support'), 'aiUsageGlobal/2026-06-30')));
   });
 });
 

@@ -138,9 +138,10 @@ PRs. The decisions the user approved when we reviewed the handoff:
 
 Design and plan: `docs/AI_CFO_DESIGN.md`; original handoff:
 `docs/handoffs/ai-cfo.md`. Everything AI ships switched off (trial mode, no
-paying users). Built so far: customer insights and the business time zone
-(no AI call). Next: the shared plumbing, then the briefing, chat, order parsing
-and reorder suggestions. Rule for every AI feature: no model-generated figures
+paying users). Built so far: customer insights, the business time zone, and the
+shared plumbing (server-side gate and daily caps, figure registry and text
+guard, business snapshot, rules). Next: the briefing, chat, order parsing and
+reorder suggestions. Rule for every AI feature: no model-generated figures
 (see the design doc).
 
 ## Firestore security rules
