@@ -322,6 +322,7 @@ const INITIAL_MENU: MenuItem[] = [
 import { UNIT_CONVERSIONS, convertAmount, CURRENCIES } from './utils/conversions';
 import { financialsForRange } from './utils/profit';
 import { getBatchesNeedingAttention } from './utils/stockAging';
+import { withShelfStock } from './utils/batchStock';
 import { getExperimentMaterialUsage } from './utils/experimentMaterialUsage';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
@@ -504,9 +505,11 @@ function BakeryApp() {
   const [experiments, setExperiments, experimentsLoaded] = useFirestoreCollection<RecipeExperiment>(
     'experiments', isAuthReady, user, (id, data) => ({ id, ...data, materials: data.materials || [] } as RecipeExperiment), touchLastSynced
   );
-  const [productionRuns, setProductionRuns] = useFirestoreCollection<ProductionRun>(
+  const [storedProductionRuns, setProductionRuns] = useFirestoreCollection<ProductionRun>(
     'productionRuns', isAuthReady, user, (id, data) => ({ id, ...data } as ProductionRun), touchLastSynced
   );
+  // Each batch shows what is really left of it once orders and discards have taken from the shelf stock.
+  const productionRuns = useMemo(() => withShelfStock(storedProductionRuns, menu), [storedProductionRuns, menu]);
   const [wastageLogs, setWastageLogs, wastageLoaded] = useFirestoreCollection<WastageLog>(
     'wastageLogs', isAuthReady, user, (id, data) => ({ id, ...data } as WastageLog), undefined, INITIAL_WASTAGE_LOGS
   );

@@ -1,5 +1,16 @@
 # Changelog
 
+## Fix: sold stock no longer shows as "in stock" on production batches
+
+Adding an order took the units off the item's stock count, but each production
+batch kept its own "N left", so the Production tab ("In stock · N left"), the
+Freshness alerts and the oldest-batch and aging badges still showed units that
+were already on an order. Batches now show what is really left: the shelf count
+is spread over the batches, newest first, so the oldest units are the ones sold
+(`utils/batchStock.ts`, applied once in `App.tsx`). Editing or deleting an order,
+discarding stock and wastage are all reflected too. Nothing is written back, so
+existing data is corrected as soon as the app loads.
+
 ## Daily briefing
 
 "Yesterday's briefing" at the top of the Dashboard (`docs/AI_CFO_DESIGN.md`).
