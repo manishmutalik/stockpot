@@ -217,7 +217,37 @@ rounding.
   same number of days just before.
 - Firestore rules: `users/{uid}/briefings/{day}` is owner-read, server-write; the
   usage counters are unreachable from any client (tested in the emulator).
-- Not yet: the routes that call the model, the prompts and the UI.
+- Not yet: chat and order parsing (the briefing's route and screen are below).
+
+## Daily briefing (built)
+
+"Yesterday's briefing" is a card at the top of the Dashboard.
+
+- **What is code and what is the model.** The headline, the four tiles and the
+  7-day bars are built in the browser from the app's own figures
+  (`buildBriefingHeadline`, `DailyBriefing`). The model writes only `why` (one or
+  two sentences) and up to 4 `attention` items, as words and `{{fig:..}}`,
+  `{{name:..}}`, `{{cust:..}}` tokens. The headline says "up/down ₹X" instead of
+  a percentage when the comparison day was a loss or zero, because a percentage
+  from a non-positive base misleads (the snapshot omits those percentages).
+- **Flow.** Once all Firestore collections have delivered their first snapshot
+  (`dataReady`: without it a half-loaded app would send an empty day), the card
+  asks `GET /api/ai/status`. Available: `POST /api/ai/briefing` with the
+  snapshot (`lib/briefingRoutes.ts`). Demo (`demo_account`): a "Sample" card
+  built by `buildDeterministicBriefing` from the demo data. Any other reason: no
+  card. AI offered but failing: the same code-built summary with a note.
+- **Server.** `requireAiAccess` + CSRF; the snapshot is shape-checked; one
+  briefing per day is cached in `users/{uid}/briefings/{day}` (`lib/briefingStore.ts`)
+  with a generation lock (a second tab gets 409 and retries). The model call
+  (`lib/briefingModel.ts`, `lib/briefingPrompt.ts`) uses structured output; the
+  answer is validated by `validateBriefingContent`, retried once with the problems
+  listed, and otherwise stored as `source: 'fallback'` so the screen builds the
+  text itself. Refresh regenerates and counts against the daily briefing cap (4).
+- **Stale cache.** A cached answer refers to figures by id; if the data changed
+  so an id no longer exists, `contentResolves` fails and the screen shows the
+  code-built version with "Your data has changed since this was written".
+- **Privacy.** The prompt holds no customer names or phone numbers, only hash
+  labels (checked on the real prompt, about 6k characters).
 
 ## Delivery plan
 
@@ -225,7 +255,7 @@ rounding.
 2. Shared plumbing: Anthropic client, the gate and usage caps, rules for the
    server-written `briefings` collection, the business snapshot with the figure
    registry, and the text guard (built). No user-facing AI yet.
-3. Daily briefing (with the canned demo sample).
+3. Daily briefing (with the canned demo sample) (built).
 4. Ask Your Business (without the what-if tool until Phase 2 exists).
 5. Order parsing in Quick Log (the Add Order form also needs a delivery address).
 6. Reorder-point suggestions, then the briefing's stock items.

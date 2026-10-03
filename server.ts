@@ -11,6 +11,9 @@ import { getStripe } from "./lib/stripe";
 import { setBillingInfo, getBillingInfo, findUidByStripeCustomerId, SubscriptionStatus, hasActiveAccess } from "./lib/subscriptionStore";
 import { readAiConfig } from "./lib/aiConfig";
 import { createAiStatusHandler } from "./lib/aiRoutes";
+import { createBriefingHandler } from "./lib/briefingRoutes";
+import { createBriefingModel } from "./lib/briefingModel";
+import { beginGeneration, clearGeneration, getBriefing, saveBriefing } from "./lib/briefingStore";
 import { globalDay, peekAiUsage, reserveAiUse, usageDayFor } from "./lib/aiUsage";
 import { searchUsda, searchOpenFoodFacts } from "./lib/nutritionSearch";
 import { createOrRefreshBill, createOrRefreshStatement, getPublicBill } from "./lib/billStore";
@@ -169,6 +172,12 @@ async function startServer() {
     reserve: reserveAiUse,
   };
   api.get("/ai/status", createAiStatusHandler({ ...aiGuardDeps, peek: peekAiUsage }));
+  api.post("/ai/briefing", requireCsrf, createBriefingHandler({
+    ...aiGuardDeps,
+    store: { get: getBriefing, begin: beginGeneration, save: saveBriefing, clear: clearGeneration },
+    model: createBriefingModel(),
+    now: () => Date.now(),
+  }));
 
   api.get("/billing/status", async (req: AuthedRequest, res) => {
     if (isBillingDisabled()) {
