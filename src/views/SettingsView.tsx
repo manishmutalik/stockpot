@@ -5,6 +5,7 @@ import {
   CreditCard, Percent, Plus, Puzzle, Receipt, Save, Store, Trash2, User as UserIcon, UserCog
 } from 'lucide-react';
 import { AppViewProps, FixedCost, PAYMENT_METHODS, PaymentMethod } from '../types';
+import { COMMON_TIME_ZONES, resolveTimeZone } from '../utils/localDate';
 
 type SettingsTab = 'bakery' | 'integrations' | 'customisation' | 'account' | 'categories';
 
@@ -84,6 +85,9 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
   const callbackUrl = `${window.location.origin}/api/auth/shopify/callback`;
 
   const fixedCosts: FixedCost[] = settings.fixedCosts ?? [];
+  // The common zones, plus the saved one if it is a valid zone that is not in that list.
+  const savedTimeZone = resolveTimeZone(settings.timezone);
+  const timeZoneOptions = COMMON_TIME_ZONES.some(z => z.value === savedTimeZone) ? COMMON_TIME_ZONES : [...COMMON_TIME_ZONES, { value: savedTimeZone, label: savedTimeZone }];
   const tabs: { id: SettingsTab; label: string; hint?: string; icon: React.ElementType }[] = [
     { id: 'bakery', label: 'Business & GST', icon: Building2, hint: settings.gstApplicable ? 'GST on' : undefined },
     { id: 'integrations', label: 'Integrations', icon: Puzzle, hint: connectedCount > 0 ? `${connectedCount} connected` : undefined },
@@ -200,6 +204,20 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
                     />
                     <p className="text-xs text-muted mt-1.5">
                       Adds a "scan to pay" UPI QR code to the bills you send customers. Leave it empty and bills simply have no payment QR. Shown only when your currency is INR.
+                    </p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label htmlFor="business-timezone" className={LABEL}>Time zone</label>
+                    <select
+                      id="business-timezone"
+                      value={resolveTimeZone(settings.timezone)}
+                      onChange={(e) => updateSettingsField('timezone', e.target.value)}
+                      className={FIELD}
+                    >
+                      {timeZoneOptions.map(z => <option key={z.value} value={z.value}>{z.label}</option>)}
+                    </select>
+                    <p className="text-xs text-muted mt-1.5">
+                      Decides what "today" means for you, such as how many days since a customer last ordered. Defaults to India.
                     </p>
                   </div>
                   <div className="md:col-span-2">

@@ -1,5 +1,32 @@
 # Changelog
 
+## Customer insights and a business time zone
+
+First part of the AI CFO work (design in `docs/AI_CFO_DESIGN.md`). This part
+makes no AI call and works with AI features off.
+
+- **Customers panel in Orders.** Shows who has ordered, across all dates:
+  customers who are **due** for a reorder, **lapsed**, or all, each with last
+  order and how long ago, their usual gap between orders, favourite items, what
+  the business made on them (from `profit.ts`, so it matches the Orders tab) and
+  a **WhatsApp** button that opens their chat with a short message ready
+  ("Hi Priya, shall I keep Chocolate Cake for you this week?"). Nothing is sent
+  until you press send in WhatsApp. A customer is the same person whether the
+  phone is typed `+91 98450 10101` or `9845010101`; customers with no phone are
+  known by name and marked "No phone".
+- **How due and lapsed are decided** (`src/utils/customers.ts`): the usual gap is
+  the median days between order dates once there are three of them. Active until
+  that gap has passed since the last order, due up to twice the gap, lapsed
+  after. Floors stop a near-daily customer being flagged on a quiet day, and the
+  plain 30-day rule applies only to customers with fewer than three orders, so
+  someone who orders every 40 days is not called lapsed at day 31.
+- **Business time zone** (Settings, Business): "today" for the Customers panel is
+  the date in your time zone, default India. Until now dates came from UTC, so an
+  Indian shop was a day behind from midnight to 5:30am. Only the new features use
+  it so far; the rest of the app is unchanged.
+- **Demo.** Hotel Sai Residency orders every other day, so the panel shows a
+  customer who is due.
+
 ## Fix: restocking in grams, and GST shown when GST is off
 
 - **Quantity in another unit.** The restock form only took the item's own unit,

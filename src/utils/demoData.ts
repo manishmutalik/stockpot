@@ -117,6 +117,7 @@ export function buildDemoData(userId: string, today: string) {
   // ── Orders (one per customer) ──────────────────────────────────────────────
   const orderRows: [string, number, number, string, string][] = [
     // [menu item, quantity, days ago, customer, phone]
+    // Hotel Sai Residency orders every other day (6, 4 and 2 days ago), so the Customers panel shows one that is due.
     ['menu_croissant', 8, 0, 'Priya Sharma', '+91 98450 10101'],
     ['menu_muffin', 12, 0, 'Rohan Mehta', '+91 98450 10102'],
     ['menu_bread', 4, 0, 'Sunita Iyer', '+91 98450 10103'],
@@ -128,11 +129,11 @@ export function buildDemoData(userId: string, today: string) {
     ['menu_bread', 8, 3, 'Imran Qureshi', '+91 99720 40401'],
     ['menu_croissant', 12, 3, 'Neha Gupta', '+91 99720 40402'],
     ['menu_muffin', 14, 4, 'Vikram Singh', '+91 97420 50501'],
-    ['menu_croissant', 5, 4, 'Infosys Road Office Party', '+91 97420 50502'],
+    ['menu_croissant', 5, 4, 'Hotel Sai Residency', '+91 99001 30301'],
     ['menu_bread', 10, 5, 'Daily Fresh Grocers', '+91 90350 60601'],
     ['menu_croissant', 10, 5, 'Hotel Udupi Grand', '+91 90350 60602'],
     ['menu_muffin', 15, 6, 'Greenfield School Fete', '+91 80410 70701'],
-    ['menu_bread', 5, 6, 'Residents Welfare Association', '+91 80410 70702'],
+    ['menu_bread', 5, 6, 'Hotel Sai Residency', '+91 99001 30301'],
   ];
   // Each order is stamped with what its item sold for and cost to make, as the app does when an
   // order is created, so the demo's figures are exact rather than "estimated".
