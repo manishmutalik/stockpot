@@ -38,6 +38,8 @@ export function useSettingsListener(authReady: boolean, user: AppUser | null) {
   const [settings, setSettings] = useState<BakerySettings>(DEFAULT_SETTINGS);
   const [categories, setCategories] = useState<string[]>(['Raw Materials', 'Packaging Materials']);
   const [currency, setCurrency] = useState(CURRENCIES[0]);
+  // True once the settings document has been read (whether or not it exists yet).
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   useEffect(() => {
     if (!authReady || !auth.currentUser) return;
@@ -48,6 +50,7 @@ export function useSettingsListener(authReady: boolean, user: AppUser | null) {
       (docSnap) => {
         // Skip if the change is local and still pending, to avoid jumpy inputs.
         if (docSnap.metadata.hasPendingWrites) return;
+        setSettingsLoaded(true);
 
         if (docSnap.exists()) {
           const data = docSnap.data();
@@ -76,5 +79,5 @@ export function useSettingsListener(authReady: boolean, user: AppUser | null) {
     return () => unsubscribe();
   }, [authReady, user]);
 
-  return { settings, setSettings, categories, setCategories, currency, setCurrency };
+  return { settings, setSettings, categories, setCategories, currency, setCurrency, settingsLoaded };
 }

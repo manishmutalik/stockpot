@@ -1,5 +1,24 @@
 # Changelog
 
+## Daily briefing
+
+"Yesterday's briefing" at the top of the Dashboard (`docs/AI_CFO_DESIGN.md`).
+
+- The headline, tiles and 7-day bars are the app's own numbers. The AI writes
+  only the explanation and a short attention list, as words and tokens that are
+  validated on the server (retried once, then replaced by a summary built by code)
+  and resolved in the browser against the app's figures. No number comes from
+  the model.
+- One briefing per day is cached per account; a refresh button regenerates it
+  within the daily allowance. Demo accounts see a clearly labelled sample built
+  from the demo data. Accounts without AI see no card.
+- The card waits until every collection has loaded (new `dataReady` flag), so a
+  half-loaded app never produces an empty briefing.
+- When yesterday's comparison day was a loss or zero, profit is described as
+  "up/down ₹X" rather than a percentage.
+- Still switched off unless `AI_FEATURES_ENABLED=true` with a key (use
+  `AI_ALLOWED_EMAILS` during the trial).
+
 ## AI plumbing (switched off; no AI feature yet)
 
 Shared groundwork for the AI CFO (`docs/AI_CFO_DESIGN.md`). Nothing user-facing

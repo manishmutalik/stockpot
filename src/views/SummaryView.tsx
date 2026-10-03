@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { AppViewProps } from '../types';
 import { MetricCard } from '../components/MetricCard';
+import { DailyBriefing } from '../components/DailyBriefing';
 import { getRunStatus } from '../utils/productionStats';
 import { getBatchesNeedingAttention } from '../utils/stockAging';
 import type { ProductionRun } from '../components/ProductionRunModal';
@@ -18,7 +19,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     materials, menu, orders, productionRuns, wastageLogs,
     summaryRange, summaryDateStart, summaryDateEnd, setSummaryDateStart, setSummaryDateEnd, summaryRefDate,
     handleRangeChange, financials, chartData, currency, settings, lowStockItems, lastSynced,
-    setActiveTab, setIsProductionRunModalOpen, setRestockMaterial,
+    setActiveTab, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady,
   } = props;
 
   const fmt = (n: number) =>
@@ -197,6 +198,12 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
           </div>
         </div>
       )}
+
+      {/* Yesterday in a few lines: figures from the app, an explanation from AI where it is offered */}
+      <DailyBriefing
+        orders={orders} menu={menu} materials={remainingInventory ?? []} experiments={experiments ?? []}
+        wastageLogs={wastageLogs} settings={settings} currency={currency} dataReady={!!dataReady}
+      />
 
       {/* Headline figures */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">

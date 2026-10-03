@@ -132,8 +132,9 @@ export function buildBusinessSnapshot(input: {
   count('orders_now', 'Orders in the period', now.orderCount);
   count('orders_before', `Orders in ${comparison.label}`, before.orderCount);
   money('wastage_now', 'Wastage in the period', now.wastageExpenses);
-  if (before.income !== 0) percent('revenue_change_pct', 'Change in revenue', ((now.income - before.income) / Math.abs(before.income)) * 100);
-  if (before.trueProfit !== 0) percent('true_profit_change_pct', 'Change in true profit', ((now.trueProfit - before.trueProfit) / Math.abs(before.trueProfit)) * 100);
+  // A percentage is only meaningful against a positive starting point: 'up 205%' from a loss is not a thing to say.
+  if (before.income > 0) percent('revenue_change_pct', 'Change in revenue', ((now.income - before.income) / before.income) * 100);
+  if (before.trueProfit > 0) percent('true_profit_change_pct', 'Change in true profit', ((now.trueProfit - before.trueProfit) / before.trueProfit) * 100);
   if (now.income !== 0) percent('true_profit_margin', 'True profit as a share of revenue', (now.trueProfit / now.income) * 100, false);
   if (now.unpaidIncome > 0) money('unpaid_now', 'Part of revenue not yet paid', now.unpaidIncome);
 

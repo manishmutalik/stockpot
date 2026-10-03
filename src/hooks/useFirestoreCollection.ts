@@ -39,6 +39,10 @@ export function useFirestoreCollection<T>(
   initialValue: T[] = []
 ) {
   const [items, setItems] = useState<T[]>(initialValue);
+  // True once the first snapshot has arrived. Until then `items` is only the initial value, which for
+  // some collections is demo-style placeholder data, so anything built from it (an AI briefing, say)
+  // must wait for this.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     if (!authReady || !auth.currentUser) return;
@@ -48,6 +52,7 @@ export function useFirestoreCollection<T>(
       collection(db, 'users', userId, collectionPath),
       (snapshot) => {
         setItems(snapshot.docs.map(d => mapDoc(d.id, d.data())));
+        setLoaded(true);
         onUpdate?.();
       },
       (err) => handleFirestoreError(err, OperationType.LIST, `users/${userId}/${collectionPath}`)
@@ -56,5 +61,5 @@ export function useFirestoreCollection<T>(
     return () => unsubscribe();
   }, [authReady, user]);
 
-  return [items, setItems] as const;
+  return [items, setItems, loaded] as const;
 }

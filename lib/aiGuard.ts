@@ -66,16 +66,13 @@ export async function checkAiEntitlement(
   return { ok: true };
 }
 
-/** Entitlement, then the daily caps; counts one use of `feature` when it allows. */
-export async function checkAiAccess(
-  who: { uid: string; email?: string | null; emailVerified?: boolean },
+/** The daily caps only: counts one use of `feature` when it allows. Call after `checkAiEntitlement`. */
+export async function reserveAiFeature(
+  who: { uid: string },
   feature: AiFeature,
-  deps: AiGuardDeps
+  deps: Pick<AiGuardDeps, 'config' | 'usageDay' | 'globalDay' | 'reserve'>
 ): Promise<AiAccess> {
   if (!AI_FEATURES.includes(feature)) return deny(500, 'not_configured', 'Unknown AI feature.');
-  const entitled = await checkAiEntitlement(who, deps);
-  if (entitled.ok === false) return entitled;
-
   const config = deps.config();
   const result = await deps.reserve({
     uid: who.uid, feature,
@@ -86,6 +83,18 @@ export async function checkAiAccess(
   return result.reason === 'user_limit'
     ? deny(429, 'daily_limit', 'You have used all of today\'s AI requests for this feature. It resets tomorrow.')
     : deny(503, 'busy', 'AI features are very busy today. Please try again tomorrow.');
+}
+
+/** Entitlement, then the daily caps; counts one use of `feature` when it allows. */
+export async function checkAiAccess(
+  who: { uid: string; email?: string | null; emailVerified?: boolean },
+  feature: AiFeature,
+  deps: AiGuardDeps
+): Promise<AiAccess> {
+  if (!AI_FEATURES.includes(feature)) return deny(500, 'not_configured', 'Unknown AI feature.');
+  const entitled = await checkAiEntitlement(who, deps);
+  if (entitled.ok === false) return entitled;
+  return reserveAiFeature(who, feature, deps);
 }
 
 /** Express middleware for a route that calls the model: refuses, or counts one use and carries on. */

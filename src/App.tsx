@@ -492,29 +492,31 @@ function BakeryApp() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const touchLastSynced = () => setLastSynced(new Date());
 
-  const [materials, setMaterials] = useFirestoreCollection<RawMaterial>(
+  const [materials, setMaterials, materialsLoaded] = useFirestoreCollection<RawMaterial>(
     'materials', isAuthReady, user, (id, data) => ({ id, ...data } as RawMaterial), touchLastSynced, INITIAL_MATERIALS
   );
-  const [menu, setMenu] = useFirestoreCollection<MenuItem>(
+  const [menu, setMenu, menuLoaded] = useFirestoreCollection<MenuItem>(
     'menu', isAuthReady, user, (id, data) => ({ id, ...data, recipe: data.recipe || [] } as MenuItem), touchLastSynced, INITIAL_MENU
   );
-  const [orders, setOrders] = useFirestoreCollection<Order>(
+  const [orders, setOrders, ordersLoaded] = useFirestoreCollection<Order>(
     'orders', isAuthReady, user, (id, data) => ({ id, ...data } as Order), touchLastSynced
   );
-  const [experiments, setExperiments] = useFirestoreCollection<RecipeExperiment>(
+  const [experiments, setExperiments, experimentsLoaded] = useFirestoreCollection<RecipeExperiment>(
     'experiments', isAuthReady, user, (id, data) => ({ id, ...data, materials: data.materials || [] } as RecipeExperiment), touchLastSynced
   );
   const [productionRuns, setProductionRuns] = useFirestoreCollection<ProductionRun>(
     'productionRuns', isAuthReady, user, (id, data) => ({ id, ...data } as ProductionRun), touchLastSynced
   );
-  const [wastageLogs, setWastageLogs] = useFirestoreCollection<WastageLog>(
+  const [wastageLogs, setWastageLogs, wastageLoaded] = useFirestoreCollection<WastageLog>(
     'wastageLogs', isAuthReady, user, (id, data) => ({ id, ...data } as WastageLog), undefined, INITIAL_WASTAGE_LOGS
   );
   // The price log only ever grows, but it is small (a few entries per material a year), so it is read whole.
   const [priceLog] = useFirestoreCollection<PriceLogEntry>(
     'priceLog', isAuthReady, user, (id, data) => ({ id, ...data } as PriceLogEntry)
   );
-  const { settings, setSettings, categories, setCategories, currency, setCurrency } = useSettingsListener(isAuthReady, user);
+  const { settings, setSettings, categories, setCategories, currency, setCurrency, settingsLoaded } = useSettingsListener(isAuthReady, user);
+  // Everything an AI briefing is built from has arrived from Firestore (not just the placeholder starting values).
+  const dataReady = materialsLoaded && menuLoaded && ordersLoaded && experimentsLoaded && wastageLoaded && settingsLoaded;
 
   const [authMode, setAuthMode] = useState<'login' | 'signup' | 'google'>('google');
   const [email, setEmail] = useState('');
@@ -1210,7 +1212,7 @@ function BakeryApp() {
     importOdooOrders, isImportingOdoo,
     isRefreshing, lastSynced, handleDownloadTemplate, handleImportCSV, setAddMaterialCategory, setShowAddMaterialModal,
     materials, setMaterials, categories, setCategories, menu, setMenu, orders, setOrders,
-    experiments, setExperiments, productionRuns, setProductionRuns, wastageLogs, setWastageLogs, priceLog,
+    experiments, setExperiments, productionRuns, setProductionRuns, wastageLogs, setWastageLogs, priceLog, dataReady,
     isProductionRunModalOpen, setIsProductionRunModalOpen, productionFilterRecipe, setProductionFilterRecipe,
     productionFilterPurpose, setProductionFilterPurpose, activeTab, setActiveTab, activeSettingsTab,
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,

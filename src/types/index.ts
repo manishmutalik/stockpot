@@ -345,6 +345,8 @@ export interface AppViewProps {
   wastageLogs: WastageLog[];
   /** Every price recorded for any material (append-only), newest or oldest in no particular order; see utils/priceLog. */
   priceLog: PriceLogEntry[];
+  /** True once the business's data (orders, menu, materials, settings and so on) has arrived from Firestore. */
+  dataReady: boolean;
   setWastageLogs: (w: WastageLog[]) => void;
   
   isProductionRunModalOpen: boolean;

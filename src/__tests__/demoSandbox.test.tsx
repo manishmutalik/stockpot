@@ -244,4 +244,35 @@ describe('Demo sandbox', () => {
     const revenue = orders.filter(o => o.menuItemId === 'menu_croissant').reduce((n, o) => n + o.unitPriceAtSale * o.quantity - (o.discount || 0), 0);
     expect(sales.textContent).toContain(revenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   }, 30000);
+
+  describe('the daily briefing', () => {
+    const stubServer = (statusBody: any) => vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      if (url === '/api/session/csrf') return { ok: true, status: 200, json: async () => ({ csrfToken: 't' }) };
+      if (url === '/api/ai/status') return { ok: true, status: 200, json: async () => statusBody };
+      return { ok: false, status: 404, json: async () => ({}) };
+    }));
+
+    it('shows the demo a labelled sample built from its own data, and never asks for an AI briefing', async () => {
+      stubServer({ available: false, reason: 'demo_account' });
+      await startDemo();
+      await screen.findAllByText('Stockpot Demo Kitchen', {}, { timeout: 10000 });
+      fireEvent.click(screen.getAllByRole('button', { name: /Dashboard/ })[0]);
+      const card = await screen.findByRole('region', { name: "Yesterday's briefing" }, { timeout: 10000 });
+      expect(within(card).getByText('Sample')).toBeTruthy();
+      expect(card.textContent).toMatch(/Yesterday \([A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}\): \d+ orders?, ₹[\d,]+ revenue and /);
+      expect(card.textContent).not.toMatch(/\{\{|\}\}|undefined|NaN/);
+      const calls = (fetch as any).mock.calls.map((c: any[]) => c[0]);
+      expect(calls).not.toContain('/api/ai/briefing');
+    }, 30000);
+
+    it('shows no briefing at all when AI is not offered to the account', async () => {
+      stubServer({ available: false, reason: 'unavailable' });
+      await startDemo();
+      await screen.findAllByText('Stockpot Demo Kitchen', {}, { timeout: 10000 });
+      fireEvent.click(screen.getAllByRole('button', { name: /Dashboard/ })[0]);
+      await waitFor(() => expect((fetch as any).mock.calls.some((c: any[]) => c[0] === '/api/ai/status')).toBe(true), { timeout: 10000 });
+      await new Promise(r => setTimeout(r, 100));
+      expect(screen.queryByRole('region', { name: "Yesterday's briefing" })).toBeNull();
+    }, 30000);
+  });
 });
