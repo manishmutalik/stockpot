@@ -65,6 +65,10 @@ export function validateSnapshotShape(s: unknown): s is AiSnapshot {
   for (const list of [s.customers.dueList, s.customers.lapsedList]) {
     if (!Array.isArray(list) || list.length > 10 || !list.every((c: any) => isObject(c) && typeof c.label === 'string' && c.label.length <= 20)) return false;
   }
+  // Added for the chat: absent from an older client's snapshot, which is still accepted.
+  const mentioned = s.customers.mentioned;
+  if (mentioned !== undefined && (!Array.isArray(mentioned) || mentioned.length > 5 || !mentioned.every((c: any) => isObject(c) && typeof c.label === 'string' && c.label.length <= 20))) return false;
+  if (s.unsoldItems !== undefined && !isStringArray(s.unsoldItems, 15)) return false;
   return isStringArray(s.notes, 10);
 }
 

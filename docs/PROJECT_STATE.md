@@ -142,7 +142,8 @@ paying users). Built so far: customer insights, the business time zone, the
 shared plumbing (server-side gate and daily caps, figure registry and text
 guard, business snapshot, rules) and the daily briefing on the Dashboard
 (`POST /api/ai/briefing`, cached per day, validated with a code-built fallback;
-the demo shows a sample). Next: chat, order parsing and reorder suggestions. Rule for every AI feature: no model-generated figures
+the demo shows a sample) and Ask Your Business (`POST /api/ai/chat`, a slide-over
+chat; no what-if tool until Phase 2). Next: order parsing and reorder suggestions. Rule for every AI feature: no model-generated figures
 (see the design doc).
 
 ## Firestore security rules

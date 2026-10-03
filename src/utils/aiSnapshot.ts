@@ -25,7 +25,7 @@ import { EXPIRING_SOON_DAYS, getStockStatus } from './inventoryStatus';
 import { addDays, daysBetween } from './localDate';
 import { financialsForRange, productProfits, type Financials } from './profit';
 
-export const SNAPSHOT_LIMITS = { products: 30, customersPerList: 10, stockItems: 10, trendDays: 7 } as const;
+export const SNAPSHOT_LIMITS = { products: 30, customersPerList: 10, stockItems: 10, trendDays: 7, unsoldItems: 15, mentionedCustomers: 5 } as const;
 
 export type ComparisonMode = 'same_weekday_last_week' | 'previous_period';
 
@@ -69,6 +69,8 @@ export interface AiSnapshot {
   /** The largest movers in true profit first. Their effects add up to the change in true profit. */
   drivers: SnapshotDriver[];
   products: { name: string; units: string; revenue: string; contribution: string; perUnit: string }[];
+  /** Menu items with no sales in the period (name ids): candidates when asked what to stop selling. */
+  unsoldItems: string[];
   /** The last few days up to the period end, oldest first. */
   trend: { day: string; revenue: string; trueProfit: string }[];
   inventory: { cashTiedUp: string; lowStock: string[]; expiringSoon: string[] };
@@ -76,6 +78,8 @@ export interface AiSnapshot {
     total: string; due: string; lapsed: string; newCustomers: string;
     dueList: { label: string; daysSinceLastOrder: string; favourite?: string; contribution: string }[];
     lapsedList: { label: string; daysSinceLastOrder: string; favourite?: string; contribution: string }[];
+    /** Customers the owner named in a question (matched to a label on the client): a few facts about each. */
+    mentioned: { label: string; status: string; daysSinceLastOrder: string; orders: string; spent: string; contribution: string; favourite?: string }[];
   };
   notes: string[];
 }
@@ -104,6 +108,8 @@ export function buildBusinessSnapshot(input: {
   customers: CustomerProfile[];
   /** Today in the business's time zone, for the expiry check. */
   today: string;
+  /** Labels of customers the owner asked about by name (the chat). Their details are added to the snapshot. */
+  mentionedCustomers?: string[];
 }): BuiltSnapshot {
   const { period, orders, menu, materials, settings, currency } = input;
   const comparison = input.comparison ?? comparisonPeriod(period);
@@ -167,6 +173,10 @@ export function buildBusinessSnapshot(input: {
       };
     });
 
+  // Items on the menu with no sales in the period.
+  const soldIds = new Set(perProduct.keys());
+  const unsoldItems = menu.filter(m => !soldIds.has(m.id)).slice(0, SNAPSHOT_LIMITS.unsoldItems).map(m => nameId('item', m.id, m.name));
+
   // Trend: the last days up to the period end.
   const trend = Array.from({ length: SNAPSHOT_LIMITS.trendDays }, (_, i) => {
     const date = addDays(period.end, i - (SNAPSHOT_LIMITS.trendDays - 1));
@@ -202,6 +212,18 @@ export function buildBusinessSnapshot(input: {
       contribution: money(`c_${c.label}_made`, `What the business made on ${c.label}`, c.totalContribution),
     };
   };
+  const mentionedRow = (c: CustomerProfile) => {
+    customerNames[c.label] = c.name;
+    return {
+      label: c.label,
+      status: c.status,
+      daysSinceLastOrder: days(`c_${c.label}_days`, `Days since ${c.label} last ordered`, c.daysSinceLastOrder),
+      orders: count(`c_${c.label}_orders`, `Orders placed by ${c.label}`, c.orderCount),
+      spent: money(`c_${c.label}_spent`, `What ${c.label} has spent in all`, c.totalSpent),
+      contribution: money(`c_${c.label}_made`, `What the business made on ${c.label}`, c.totalContribution),
+      ...(c.favouriteItems[0] && { favourite: nameId('fav', c.label, c.favouriteItems[0]) }),
+    };
+  };
   const customers = {
     total: count('customers_total', 'Customers who have ordered', input.customers.length),
     due: count('customers_due', 'Customers due for a reorder', counts.due),
@@ -209,6 +231,10 @@ export function buildBusinessSnapshot(input: {
     newCustomers: count('customers_new', 'New customers', counts.new),
     dueList: customersForTab(input.customers, 'due').slice(0, SNAPSHOT_LIMITS.customersPerList).map(row),
     lapsedList: customersForTab(input.customers, 'lapsed').slice(0, SNAPSHOT_LIMITS.customersPerList).map(row),
+    mentioned: (input.mentionedCustomers ?? []).slice(0, SNAPSHOT_LIMITS.mentionedCustomers).flatMap(label => {
+      const c = input.customers.find(x => x.label === label);
+      return c ? [mentionedRow(c)] : [];
+    }),
   };
 
   const notes: string[] = [];
@@ -222,7 +248,7 @@ export function buildBusinessSnapshot(input: {
     promptSnapshot: {
       business: { name: settings.name, currency: currency.code, gstApplicable: !!settings.gstApplicable, timezone: settings.timezone ?? 'Asia/Kolkata' },
       period, comparison,
-      figures: promptFigures, names, drivers, products, trend,
+      figures: promptFigures, names, drivers, products, unsoldItems, trend,
       inventory: { cashTiedUp, lowStock, expiringSoon },
       customers, notes,
     },

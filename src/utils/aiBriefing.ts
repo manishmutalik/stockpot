@@ -70,7 +70,7 @@ export const BRIEFING_SCHEMA = {
 
 /** The ids a snapshot offers the model: the only tokens its text may use. */
 export function knownIdsFromSnapshot(snapshot: AiSnapshot) {
-  const labels = [...snapshot.customers.dueList, ...snapshot.customers.lapsedList].map(c => c.label);
+  const labels = [...snapshot.customers.dueList, ...snapshot.customers.lapsedList, ...(snapshot.customers.mentioned ?? [])].map(c => c.label);
   return { figures: Object.keys(snapshot.figures), names: Object.keys(snapshot.names), customers: labels };
 }
 

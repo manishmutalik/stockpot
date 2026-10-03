@@ -323,6 +323,7 @@ import { UNIT_CONVERSIONS, convertAmount, CURRENCIES } from './utils/conversions
 import { financialsForRange } from './utils/profit';
 import { getBatchesNeedingAttention } from './utils/stockAging';
 import { withShelfStock } from './utils/batchStock';
+import { AskBusiness } from './components/AskBusiness';
 import { getExperimentMaterialUsage } from './utils/experimentMaterialUsage';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
@@ -1661,6 +1662,12 @@ function BakeryApp() {
         )}
       </AnimatePresence>
       </div> {/* End flex-1 min-w-0 main content area */}
+
+      {/* "Ask your business": only for accounts AI is offered to; floats over every tab */}
+      <AskBusiness
+        orders={orders} menu={menu} materials={remainingInventory} experiments={experiments}
+        wastageLogs={wastageLogs} settings={settings} currency={currency} dataReady={dataReady} signedIn={!!user}
+      />
 
       {/* Mobile Bottom Navigation & Floating Action */}
       <div className="md:hidden">
