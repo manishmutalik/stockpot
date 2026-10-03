@@ -12,6 +12,8 @@ import { setBillingInfo, getBillingInfo, findUidByStripeCustomerId, Subscription
 import { readAiConfig } from "./lib/aiConfig";
 import { createAiStatusHandler } from "./lib/aiRoutes";
 import { createBriefingHandler } from "./lib/briefingRoutes";
+import { createChatHandler } from "./lib/chatRoutes";
+import { createChatModel } from "./lib/chatModel";
 import { createBriefingModel } from "./lib/briefingModel";
 import { beginGeneration, clearGeneration, getBriefing, saveBriefing } from "./lib/briefingStore";
 import { globalDay, peekAiUsage, reserveAiUse, usageDayFor } from "./lib/aiUsage";
@@ -178,6 +180,7 @@ async function startServer() {
     model: createBriefingModel(),
     now: () => Date.now(),
   }));
+  api.post("/ai/chat", requireCsrf, createChatHandler({ ...aiGuardDeps, model: createChatModel() }));
 
   api.get("/billing/status", async (req: AuthedRequest, res) => {
     if (isBillingDisabled()) {

@@ -68,11 +68,12 @@ export interface TextValidation {
  */
 export function validateAiText(
   text: unknown,
-  known: { figures: Iterable<string>; names: Iterable<string>; customers?: Iterable<string> }
+  known: { figures: Iterable<string>; names: Iterable<string>; customers?: Iterable<string> },
+  maxChars: number = AI_TEXT_MAX_CHARS
 ): TextValidation {
   const problems: string[] = [];
   if (typeof text !== 'string' || text.trim() === '') return { ok: false, problems: ['empty'] };
-  if (text.length > AI_TEXT_MAX_CHARS) problems.push('too long');
+  if (text.length > maxChars) problems.push('too long');
 
   const figures = new Set(known.figures);
   const names = new Set(known.names);

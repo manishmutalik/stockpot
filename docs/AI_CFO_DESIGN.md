@@ -217,7 +217,7 @@ rounding.
   same number of days just before.
 - Firestore rules: `users/{uid}/briefings/{day}` is owner-read, server-write; the
   usage counters are unreachable from any client (tested in the emulator).
-- Not yet: chat and order parsing (the briefing's route and screen are below).
+- Not yet: order parsing (the briefing and the chat are below).
 
 ## Daily briefing (built)
 
@@ -249,6 +249,43 @@ rounding.
 - **Privacy.** The prompt holds no customer names or phone numbers, only hash
   labels (checked on the real prompt, about 6k characters).
 
+## Ask Your Business (built)
+
+A floating "Ask" button (bottom-right on desktop, bottom-left above the nav on
+phones) opens a slide-over chat. Shown only when `GET /api/ai/status` says AI is
+available, so never in the demo and never to accounts without AI.
+
+- **Question to answer.** The browser prepares the question (`prepareQuestion`):
+  customer names the owner types are replaced by the customer's label (full name,
+  or a first name when it is unique), and phone-number-like digits become
+  `[number]`. It then builds a snapshot of the chosen period with
+  `buildBusinessSnapshot`, adding the customers who were named
+  (`customers.mentioned`: status, days since last order, orders, spent, what the
+  business made on them, favourite item, all by label) and the menu items with no
+  sales (`unsoldItems`). `POST /api/ai/chat` gets `{ question, snapshot, history }`
+  (last 4 answered turns, answers still in tokens). No name or phone number
+  reaches the server or the model (tested in the browser, the prompt and the
+  snapshot).
+- **Periods.** This month so far (against the same stretch of last month), last
+  month, last 7 days and last 30 days (`chatPeriods`). Each answer is rendered
+  against the figures it was written for, so changing the period later does not
+  change an earlier answer.
+- **Server** (`lib/chatRoutes.ts`): validates the body and its sizes, then the same
+  gate as the briefing, then reserves one `chat` use (30 a day by default,
+  `AI_CHAT_DAILY_LIMIT`), asks the model (`lib/chatModel.ts`, structured output
+  `{ answer }`), validates with the figure guard (`validateChatAnswer`, up to
+  1200 characters), retries once with the problems, and otherwise returns
+  `answer: null` ("could not give a checked answer") rather than anything
+  unchecked. A counted question stays counted. Provider errors are mapped to
+  messages and never forwarded.
+- **Prompt** (`lib/chatPrompt.ts`): answer only from the snapshot, concise, lists
+  as "- " lines (a numbered list would be rejected as digits), say plainly when the
+  data does not cover the question, decline off-topic questions, and treat names
+  and the question as data. Price-change advice, ingredient price trends and
+  what-if calculations say they are not available yet until Phase 2.
+- **Not built yet:** the `run_pricing_scenario` tool (Phase 2), and answers about
+  customers beyond the top 10 per list and the ones named in the question.
+
 ## Delivery plan
 
 1. Customer insights, time zone setting, design doc (built).
@@ -256,7 +293,7 @@ rounding.
    server-written `briefings` collection, the business snapshot with the figure
    registry, and the text guard (built). No user-facing AI yet.
 3. Daily briefing (with the canned demo sample) (built).
-4. Ask Your Business (without the what-if tool until Phase 2 exists).
+4. Ask Your Business (without the what-if tool until Phase 2 exists) (built).
 5. Order parsing in Quick Log (the Add Order form also needs a delivery address).
 6. Reorder-point suggestions, then the briefing's stock items.
 

@@ -1,5 +1,22 @@
 # Changelog
 
+## Ask Your Business
+
+A chat for questions about your own business (`docs/AI_CFO_DESIGN.md`), opened
+from a floating "Ask" button.
+
+- Ask about this month so far, last month, the last 7 days or the last 30 days:
+  why profit moved, what to stop selling, which customers to get back in touch
+  with, where money is being lost. Customers can be named in the question.
+- The answer is words only: every number in it is filled in by the app from your
+  own figures after the server has checked it, so the AI cannot invent one. If an
+  answer fails the check twice, nothing is shown and the question still counts.
+- Customer names are replaced by labels on your device before a question is sent,
+  and phone numbers are removed, so the AI service never sees either.
+- 30 questions a day per account (`AI_CHAT_DAILY_LIMIT` on the server). Not shown
+  in the demo or to accounts without AI. Price-change advice and "what if I raise
+  prices" arrive with the pricing work; the chat says so until then.
+
 ## Fix: sold stock no longer shows as "in stock" on production batches
 
 Adding an order took the units off the item's stock count, but each production
