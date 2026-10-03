@@ -1,5 +1,60 @@
 # Changelog
 
+## AI plumbing (switched off; no AI feature yet)
+
+Shared groundwork for the AI CFO (`docs/AI_CFO_DESIGN.md`). Nothing user-facing
+and no model call yet, and it does nothing unless `AI_FEATURES_ENABLED=true`.
+
+- **The server decides who may use AI.** Until now billing was enforced only by
+  the browser, and the demo is an open sign-up, so any account could have called
+  a paid API. Now every AI route passes `requireAiAccess`: AI must be switched on
+  with a key; demo accounts are always refused; an optional allow-list
+  (`AI_ALLOWED_EMAILS` / `AI_ALLOWED_UIDS`) limits it to named accounts during the
+  trial whatever their billing; otherwise an account needs an active or trialing
+  subscription (or the server must be in trial mode). It fails closed.
+- **Daily caps, configurable on the server.** Per user per feature (chat 30,
+  briefing 4, order parsing 30) and a global daily ceiling (1500 calls), counted
+  atomically in Firestore before any model call. A user's day follows their time
+  zone. `GET /api/ai/status` reports what is available and what is left.
+- **No model-generated figures** (`src/utils/aiFigures.ts`, `aiSnapshot.ts`). The
+  model will only be able to write words and tokens like `{{fig:profit_change}}`;
+  the app computes every number (including changes and percentages) and renders
+  tokens itself. A guard rejects any answer with a digit, a spelled-out number or
+  an unknown token outside a token, so an invented figure cannot reach the screen.
+  The snapshot sent to the model holds customers as short labels only: no names
+  and no phone numbers (tested).
+- **Rules.** `users/{uid}/briefings` is owner-read, server-write; the usage
+  counters cannot be read or changed by any client. 5 new rules tests (37 in all).
+- Adds `@anthropic-ai/sdk`. Server settings: `AI_FEATURES_ENABLED`,
+  `ANTHROPIC_API_KEY`, the allow-lists and `AI_*_DAILY_LIMIT` (all in the design doc).
+
+## Customer insights and a business time zone
+
+First part of the AI CFO work (design in `docs/AI_CFO_DESIGN.md`). This part
+makes no AI call and works with AI features off.
+
+- **Customers panel in Orders.** Shows who has ordered, across all dates:
+  customers who are **due** for a reorder, **lapsed**, or all, each with last
+  order and how long ago, their usual gap between orders, favourite items, what
+  the business made on them (from `profit.ts`, so it matches the Orders tab) and
+  a **WhatsApp** button that opens their chat with a short message ready
+  ("Hi Priya, shall I keep Chocolate Cake for you this week?"). Nothing is sent
+  until you press send in WhatsApp. A customer is the same person whether the
+  phone is typed `+91 98450 10101` or `9845010101`; customers with no phone are
+  known by name and marked "No phone".
+- **How due and lapsed are decided** (`src/utils/customers.ts`): the usual gap is
+  the median days between order dates once there are three of them. Active until
+  that gap has passed since the last order, due up to twice the gap, lapsed
+  after. Floors stop a near-daily customer being flagged on a quiet day, and the
+  plain 30-day rule applies only to customers with fewer than three orders, so
+  someone who orders every 40 days is not called lapsed at day 31.
+- **Business time zone** (Settings, Business): "today" for the Customers panel is
+  the date in your time zone, default India. Until now dates came from UTC, so an
+  Indian shop was a day behind from midnight to 5:30am. Only the new features use
+  it so far; the rest of the app is unchanged.
+- **Demo.** Hotel Sai Residency orders every other day, so the panel shows a
+  customer who is due.
+
 ## Fix: restocking in grams, and GST shown when GST is off
 
 - **Quantity in another unit.** The restock form only took the item's own unit,

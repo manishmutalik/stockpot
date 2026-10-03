@@ -27,6 +27,10 @@ if (!getApps().length) {
 
 export interface AuthedRequest extends Request {
   uid?: string;
+  /** The account email on the token, if there is one. Firebase includes it even when it has not been verified. */
+  email?: string;
+  /** True only when Firebase has verified that the account owns `email`. */
+  emailVerified?: boolean;
 }
 
 export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
@@ -40,6 +44,8 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
   try {
     const decoded = await getAuth().verifyIdToken(token);
     req.uid = decoded.uid;
+    req.email = decoded.email;
+    req.emailVerified = decoded.email_verified === true;
     next();
   } catch (err) {
     console.error('Auth verification failed:', err instanceof Error ? err.message : err);

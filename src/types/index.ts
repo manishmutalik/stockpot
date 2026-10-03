@@ -309,6 +309,8 @@ export interface BakerySettings {
    * upi://pay link in a bill's payment QR. Absent means bills simply have no
    * payment QR; it is optional and never required to use the app. */
   upiId?: string;
+  /** IANA time zone the business is in (default Asia/Kolkata). "Today" for customer insights and briefings is the date there. */
+  timezone?: string;
   /** Fee the business pays per payment method, as a % of the amount collected
    * (e.g. { card: 2, upi: 0 }). A missing method means 0%. */
   paymentFeeRates?: Partial<Record<PaymentMethod, number>>;

@@ -11,6 +11,7 @@
  * local optimistic write doesn't cause input fields to jump while the write
  * is still in flight — this exactly preserves the original inline behavior.
  */
+import { DEFAULT_TIME_ZONE, resolveTimeZone } from '../utils/localDate';
 import { useState, useEffect } from 'react';
 import { auth, db, doc, onSnapshot } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
@@ -28,6 +29,7 @@ const DEFAULT_SETTINGS: BakerySettings = {
   gstRate: 0,
   gstPricingMode: 'exclusive',
   upiId: '',
+  timezone: DEFAULT_TIME_ZONE,
   paymentFeeRates: {},
   fixedCosts: [],
 };
@@ -60,6 +62,7 @@ export function useSettingsListener(authReady: boolean, user: AppUser | null) {
             gstRate: data.gstRate ?? DEFAULT_SETTINGS.gstRate,
             gstPricingMode: data.gstPricingMode ?? DEFAULT_SETTINGS.gstPricingMode,
             upiId: data.upiId ?? DEFAULT_SETTINGS.upiId,
+            timezone: resolveTimeZone(data.timezone),
             paymentFeeRates: data.paymentFeeRates ?? DEFAULT_SETTINGS.paymentFeeRates,
             fixedCosts: data.fixedCosts ?? DEFAULT_SETTINGS.fixedCosts,
           });

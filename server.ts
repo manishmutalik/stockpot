@@ -8,7 +8,10 @@ import { requireAuth, AuthedRequest } from "./lib/auth";
 import { requireCsrf, issueCsrfToken } from "./lib/csrf";
 import { saveCredentials, getCredentials, deleteCredentials } from "./lib/integrationStore";
 import { getStripe } from "./lib/stripe";
-import { setBillingInfo, getBillingInfo, findUidByStripeCustomerId, SubscriptionStatus } from "./lib/subscriptionStore";
+import { setBillingInfo, getBillingInfo, findUidByStripeCustomerId, SubscriptionStatus, hasActiveAccess } from "./lib/subscriptionStore";
+import { readAiConfig } from "./lib/aiConfig";
+import { createAiStatusHandler } from "./lib/aiRoutes";
+import { globalDay, peekAiUsage, reserveAiUse, usageDayFor } from "./lib/aiUsage";
 import { searchUsda, searchOpenFoodFacts } from "./lib/nutritionSearch";
 import { createOrRefreshBill, createOrRefreshStatement, getPublicBill } from "./lib/billStore";
 import { createBillHandler, createPublicBillHandler } from "./lib/billRoutes";
@@ -153,6 +156,19 @@ async function startServer() {
    * No other code changes needed either way.
    */
   const isBillingDisabled = () => process.env.BILLING_DISABLED === "true";
+
+  // --- AI features (switched off unless AI_FEATURES_ENABLED=true; see lib/aiGuard.ts) ---
+  // Every route that calls the model goes through requireAiAccess(feature, aiGuardDeps)
+  // before anything else. The status route needs no model call and uses nothing up.
+  const aiGuardDeps = {
+    config: () => readAiConfig(),
+    billingDisabled: isBillingDisabled,
+    hasActiveAccess: async (uid: string) => hasActiveAccess((await getBillingInfo(uid)).status),
+    usageDay: (uid: string) => usageDayFor(uid),
+    globalDay: () => globalDay(),
+    reserve: reserveAiUse,
+  };
+  api.get("/ai/status", createAiStatusHandler({ ...aiGuardDeps, peek: peekAiUsage }));
 
   api.get("/billing/status", async (req: AuthedRequest, res) => {
     if (isBillingDisabled()) {

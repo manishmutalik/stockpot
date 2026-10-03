@@ -11,6 +11,9 @@ import { orderLineTotal, summarizeOrders } from '../utils/orderStats';
 import { MetricCard } from '../components/MetricCard';
 import { BillModal } from '../components/BillModal';
 import { PendingPayments } from '../components/PendingPayments';
+import { CustomersPanel } from '../components/CustomersPanel';
+import { buildCustomerProfiles } from '../utils/customers';
+import { todayInZone } from '../utils/localDate';
 import { MenuShareModal } from '../components/MenuShareModal';
 import { groupPendingPayments, isUnpaid } from '../utils/payments';
 import { MarkPaidModal } from '../components/MarkPaidModal';
@@ -443,6 +446,12 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
     [orders, menu, settings, currency]
   );
 
+  // Customers come from every order, not just the range shown, and "today" is the business's own date.
+  const customerProfiles = useMemo(
+    () => buildCustomerProfiles({ orders, menu, materials: materials ?? [], settings, today: todayInZone(settings.timezone) }),
+    [orders, menu, materials, settings]
+  );
+
   const gstOn = !!settings.gstApplicable && (settings.gstRate || 0) > 0;
   const contributionOf = (members: Order[]) => orderContribution(members, menu, materials, settings);
   /** The item whose details hold a multi-item order's discount: the one that already has it, else the first. */
@@ -624,6 +633,9 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
           amount: c.dueTotal,
         })}
       />
+
+      {/* Who orders, who is due or lapsed, and a WhatsApp nudge for each (no AI involved) */}
+      <CustomersPanel customers={customerProfiles} money={money} businessName={settings.name} />
 
       {/* Orders by day */}
       {days.length === 0 ? (

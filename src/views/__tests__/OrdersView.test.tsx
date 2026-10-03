@@ -354,4 +354,27 @@ describe('OrdersView', () => {
       expect(props.updateOrder).toHaveBeenCalledWith('g1', 'discount', 12);
     });
   });
+
+  describe('customers', () => {
+    const today = new Date().toISOString().split('T')[0];
+    const back = (n: number) => new Date(Date.parse(today) - n * 86_400_000).toISOString().split('T')[0];
+    const weekly = [38, 31, 24, 17, 10].map((d, i) => o(`w${i}`, { date: back(d), customerName: 'Weekly Wendy', customerPhone: '+91 98450 10101', fulfilled: true }));
+
+    it('shows a panel counting customers who are due, from every date and not just the range on screen', () => {
+      render(<OrdersView {...makeProps({ orders: weekly, materials: [], settings: { name: 'Asha Bakes', timezone: 'UTC' } })} />);
+      const panel = screen.getByRole('region', { name: 'Customers' });
+      expect(panel.textContent).toMatch(/1 customer · 1 due/);
+    });
+
+    it('opens to list them with a WhatsApp link', () => {
+      render(<OrdersView {...makeProps({ orders: weekly, materials: [], settings: { name: 'Asha Bakes', timezone: 'UTC' } })} />);
+      fireEvent.click(within(screen.getByRole('region', { name: 'Customers' })).getByRole('button', { name: /Customers/ }));
+      expect(screen.getByRole('link', { name: 'Send a WhatsApp message to Weekly Wendy' })).toBeTruthy();
+    });
+
+    it('is absent when no order has a name or phone', () => {
+      render(<OrdersView {...makeProps({ orders: [o('x', { date: back(1) })], materials: [] })} />);
+      expect(screen.queryByRole('region', { name: 'Customers' })).toBeNull();
+    });
+  });
 });

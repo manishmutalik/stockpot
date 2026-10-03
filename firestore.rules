@@ -100,6 +100,15 @@ service cloud.firestore {
         allow update, delete: if false;
       }
 
+      // AI briefings (one per day). Written only by the server, which generates
+      // and caches them; the owner can read them. Nothing else about the AI
+      // features is reachable from a client: the usage counters (`aiUsage`
+      // here, and the top-level `aiUsageGlobal`) are not matched at all.
+      match /briefings/{day} {
+        allow read: if isOwnerOrAdmin(userId);
+        allow write: if false;
+      }
+
       // `integrationCredentials` (Shopify and Odoo tokens) is deliberately
       // not matched at all: it is written and read only by the server through
       // the Admin SDK, so no client, not even the owning user or an admin,

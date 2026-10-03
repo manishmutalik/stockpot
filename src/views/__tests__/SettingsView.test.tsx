@@ -217,4 +217,27 @@ describe('SettingsView', () => {
       expect(props.updateSettingsField).toHaveBeenLastCalledWith('fixedCosts', []);
     });
   });
+
+  describe('time zone', () => {
+    it('defaults to India when none is saved, and saves a change', () => {
+      const props = makeProps();
+      render(<SettingsView {...props} />);
+      const zone = screen.getByLabelText('Time zone') as HTMLSelectElement;
+      expect(zone.value).toBe('Asia/Kolkata');
+      fireEvent.change(zone, { target: { value: 'Asia/Dubai' } });
+      expect(props.updateSettingsField).toHaveBeenCalledWith('timezone', 'Asia/Dubai');
+    });
+
+    it('shows the saved zone, including one that is not in the common list', () => {
+      render(<SettingsView {...makeProps({ settings: { ...makeProps().settings, timezone: 'Africa/Nairobi' } })} />);
+      const zone = screen.getByLabelText('Time zone') as HTMLSelectElement;
+      expect(zone.value).toBe('Africa/Nairobi');
+      expect([...zone.options].map(o => o.value)).toContain('Asia/Kolkata');
+    });
+
+    it('falls back to India for a saved value that is not a real zone', () => {
+      render(<SettingsView {...makeProps({ settings: { ...makeProps().settings, timezone: 'IST' } })} />);
+      expect((screen.getByLabelText('Time zone') as HTMLSelectElement).value).toBe('Asia/Kolkata');
+    });
+  });
 });

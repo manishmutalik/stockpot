@@ -196,4 +196,12 @@ describe('demo data adds up', () => {
     const blended = butter.reduce((sum, e) => sum + e.quantity! * e.unitCost, 0) / bought;
     expect(blended).toBeCloseTo(byId(demo.materials, 'm_butter').costPerUnit, 5);
   });
+
+  it('has a regular customer who is due for a reorder, so the Customers panel has something to show', async () => {
+    const { buildCustomerProfiles } = await import('../customers');
+    const profiles = buildCustomerProfiles({ orders: demo.orders as any, menu: demo.menu as any, materials: demo.materials as any, settings: demo.settings as any, today: TODAY });
+    const hotel = profiles.find(p => p.name === 'Hotel Sai Residency')!;
+    expect(hotel).toMatchObject({ orderCount: 3, medianDaysBetweenOrders: 2, status: 'due', hasPhone: true });
+    expect(profiles.filter(p => p.status === 'due')).toHaveLength(1);
+  });
 });

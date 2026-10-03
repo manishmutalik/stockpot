@@ -134,6 +134,16 @@ PRs. The decisions the user approved when we reviewed the handoff:
   (reserved in the type, for Purchase Management) and any price alerts or
   trends (Phase 2, to read from this log).
 
+## AI CFO
+
+Design and plan: `docs/AI_CFO_DESIGN.md`; original handoff:
+`docs/handoffs/ai-cfo.md`. Everything AI ships switched off (trial mode, no
+paying users). Built so far: customer insights, the business time zone, and the
+shared plumbing (server-side gate and daily caps, figure registry and text
+guard, business snapshot, rules). Next: the briefing, chat, order parsing and
+reorder suggestions. Rule for every AI feature: no model-generated figures
+(see the design doc).
+
 ## Firestore security rules
 
 `firestore.rules` is an allow-list. Firestore rules are additive (any matching
