@@ -1,6 +1,6 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { aiErrorResponse, getAnthropic, resetAnthropicForTests } from '../anthropic';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { aiErrorResponse, getAnthropic, resetAnthropicForTests, workspaceHeaders } from '../anthropic';
 
 describe('getAnthropic', () => {
   const saved = process.env.ANTHROPIC_API_KEY;
@@ -15,6 +15,43 @@ describe('getAnthropic', () => {
   it('makes one client and reuses it', () => {
     process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
     expect(getAnthropic()).toBe(getAnthropic());
+  });
+});
+
+describe('workspaceHeaders', () => {
+  it('names the workspace when one is configured, for a key that is not tied to a workspace', () => {
+    expect(workspaceHeaders({ ANTHROPIC_WORKSPACE_ID: 'wrkspc_123' })).toEqual({ 'anthropic-workspace-id': 'wrkspc_123' });
+    expect(workspaceHeaders({ ANTHROPIC_WORKSPACE_ID: '  wrkspc_123 \n' })).toEqual({ 'anthropic-workspace-id': 'wrkspc_123' });
+  });
+
+  it('adds nothing when it is not set or is blank', () => {
+    expect(workspaceHeaders({})).toBeUndefined();
+    expect(workspaceHeaders({ ANTHROPIC_WORKSPACE_ID: '   ' })).toBeUndefined();
+  });
+
+  it('is sent on the requests the server makes, and not sent when unset', async () => {
+    const seen: Headers[] = [];
+    const fakeFetch = vi.fn(async (_url: any, init: any) => {
+      seen.push(new Headers(init.headers));
+      return new Response(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', model: 'x', content: [], stop_reason: 'end_turn', usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fakeFetch);
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+    const ask = () => getAnthropic().messages.create({ model: 'claude-haiku-4-5', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] });
+    try {
+      process.env.ANTHROPIC_WORKSPACE_ID = 'wrkspc_abc';
+      resetAnthropicForTests();
+      await ask();
+      expect(seen[0].get('anthropic-workspace-id')).toBe('wrkspc_abc');
+      delete process.env.ANTHROPIC_WORKSPACE_ID;
+      resetAnthropicForTests();
+      await ask();
+      expect(seen[1].get('anthropic-workspace-id')).toBeNull();
+    } finally {
+      delete process.env.ANTHROPIC_WORKSPACE_ID;
+      vi.unstubAllGlobals();
+      resetAnthropicForTests();
+    }
   });
 });
 

@@ -8,6 +8,7 @@
  *
  *   AI_FEATURES_ENABLED          "true" to switch AI on (default off)
  *   ANTHROPIC_API_KEY            the Anthropic API key
+ *   ANTHROPIC_WORKSPACE_ID       only for a key not tied to a workspace (see lib/anthropic.ts)
  *   AI_ALLOWED_EMAILS            comma-separated; if set, only these accounts may use AI
  *   AI_ALLOWED_UIDS              comma-separated Firebase uids, the same
  *   AI_CHAT_DAILY_LIMIT          questions per user per day (default 30)
