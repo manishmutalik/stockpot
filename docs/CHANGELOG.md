@@ -1,5 +1,22 @@
 # Changelog
 
+## Customer suggestions in Add Order
+
+Type the first letters of a returning customer's name, or three or more digits of their
+phone number, and Add Order lists matching past customers. Picking one fills both the
+name and the phone, so a repeat order takes two taps.
+
+- Each suggestion shows the name, the phone ("no phone" if there is none), when they last
+  ordered and what they usually order, so two people called Priya can be told apart.
+- A name matches the start of the full name or the start of any word ("pri" and "sha"
+  both find "Priya Sharma"); case and accents are ignored. A phone number matches
+  anywhere in the last ten digits, ignoring spaces, +91 and a leading 0.
+- Nothing is chosen for you: the list opens only when you type, Enter picks only a row
+  you moved to with the arrow keys (and never submits the form), Esc closes it, and a
+  new name stays a new customer. Fully usable with the keyboard, a mouse or a finger.
+- The same customer grouping as the Customers panel and Pending Payments, so one Priya
+  there is one Priya here.
+
 ## Reorder suggestions
 
 A **Reorder suggestions** card on the Inventory tab shows which materials will run out

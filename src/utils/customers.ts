@@ -140,6 +140,22 @@ export function customerLabels(keys: string[]): Map<string, string> {
 }
 
 /**
+ * Orders grouped by who they belong to (payments.customerKey). Orders with no
+ * name and no phone cannot be attributed to anyone and are left out. The one
+ * place that decides who a customer is, so the Customers panel and the Add
+ * Order suggestions can never disagree.
+ */
+export function groupOrdersByCustomer(orders: Order[]): Map<string, Order[]> {
+  const byCustomer = new Map<string, Order[]>();
+  for (const order of orders) {
+    const key = customerKey(order);
+    if (key.startsWith('anon:')) continue;
+    byCustomer.set(key, [...(byCustomer.get(key) ?? []), order]);
+  }
+  return byCustomer;
+}
+
+/**
  * Everyone who has ordered, with how they order. Orders with no name and no
  * phone cannot be attributed to anyone and are left out. `today` is the
  * business's own calendar date (see localDate.todayInZone).
@@ -153,12 +169,7 @@ export function buildCustomerProfiles(input: {
 }): CustomerProfile[] {
   const { orders, menu, materials, settings, today } = input;
 
-  const byCustomer = new Map<string, Order[]>();
-  for (const order of orders) {
-    const key = customerKey(order);
-    if (key.startsWith('anon:')) continue;
-    byCustomer.set(key, [...(byCustomer.get(key) ?? []), order]);
-  }
+  const byCustomer = groupOrdersByCustomer(orders);
   const labels = customerLabels([...byCustomer.keys()]);
 
   const profiles: CustomerProfile[] = [];
@@ -248,4 +259,109 @@ export function buildNudgeMessage(customer: Pick<CustomerProfile, 'name' | 'favo
 /** A wa.me link with the nudge filled in, or null when the customer has no usable phone number. */
 export function buildNudgeUrl(customer: Pick<CustomerProfile, 'name' | 'phone' | 'favouriteItems' | 'status'>, businessName?: string): string | null {
   return buildWhatsAppUrl(customer.phone, buildNudgeMessage(customer, businessName));
+}
+
+
+// ── Suggestions while typing a customer in Add Order ────────────────────────
+
+/** One past customer, for the Add Order suggestions. No money involved. */
+export interface CustomerSuggestion {
+  /** payments.customerKey: the same identity as everywhere else. */
+  key: string;
+  /** The most recent name used. Empty for a customer known only by phone number. */
+  name: string;
+  /** The most recent phone number used. */
+  phone?: string;
+  /** YYYY-MM-DD. */
+  lastOrder: string;
+  /** A multi-item order counts once. */
+  orderCount: number;
+  /** The item they order most, by quantity, for recognition only. */
+  favouriteItem?: string;
+}
+
+/** One entry per customer, most recent last order first. Grouped exactly as the Customers panel groups them. */
+export function buildCustomerDirectory(orders: Order[], menu: Pick<MenuItem, 'id' | 'name'>[]): CustomerSuggestion[] {
+  const directory: CustomerSuggestion[] = [];
+  for (const [key, list] of groupOrdersByCustomer(orders)) {
+    const newestFirst = [...list].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    const clusters = clusterOrdersByGroup(list);
+    const dates = clusters.map(c => (c.type === 'single' ? [c.order] : c.orders).map(m => m.date).sort()[0]).sort();
+    const quantityByItem = new Map<string, number>();
+    for (const o of list) {
+      const name = resolveItemName(o, menu);
+      quantityByItem.set(name, (quantityByItem.get(name) ?? 0) + (o.quantity || 0));
+    }
+    const favourite = [...quantityByItem].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0];
+    const name = newestFirst.find(o => o.customerName?.trim())?.customerName?.trim() ?? '';
+    const phone = newestFirst.find(o => o.customerPhone?.trim())?.customerPhone?.trim();
+    directory.push({
+      key, name, ...(phone && { phone }),
+      lastOrder: newestFirst[0].date,
+      orderCount: dates.length,
+      ...(favourite && favourite[1] > 0 && { favouriteItem: favourite[0] }),
+    });
+  }
+  return directory.sort((a, b) => b.lastOrder.localeCompare(a.lastOrder) || a.name.localeCompare(b.name) || a.key.localeCompare(b.key));
+}
+
+/** Names are matched after dropping case and accents ("José" is found by "jose"). */
+const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/** Digits of a typed phone number, without a +91 country code or a leading 0 (the national prefix). */
+function typedDigits(raw: string): string {
+  let digits = raw.replace(/\D/g, '');
+  const plus = raw.trim().startsWith('+');
+  if ((plus || digits.length > 10) && digits.startsWith('91')) digits = digits.slice(2);
+  else if (raw.trim().startsWith('0')) digits = digits.replace(/^0+/, '');
+  return digits;
+}
+
+export const SUGGEST_MIN_PHONE_DIGITS = 3;
+export const SUGGEST_LIMIT = 6;
+
+/**
+ * Past customers that match what is typed, best first. Text with a letter in it
+ * is a name: it must start the full name (best) or start a word of it ("pri" and
+ * "sha" both find "Priya Sharma", "iya" does not). Text of only digits, spaces
+ * and + - ( ) is a phone number, needing three digits, matched anywhere in the
+ * last ten digits of the customer's number, ignoring +91 and a leading 0. Within
+ * each rank the most recent order comes first. Customers with the same name and
+ * different phones all appear, each with its own phone.
+ */
+export function matchCustomers(query: string, directory: CustomerSuggestion[], limit = SUGGEST_LIMIT): CustomerSuggestion[] {
+  const q = query.trim();
+  if (!q) return [];
+
+  if (/[^\d\s+()-]/.test(q)) {
+    const typed = fold(q);
+    const tokens = typed.split(' ');
+    const ranked: { entry: CustomerSuggestion; rank: number }[] = [];
+    for (const entry of directory) {
+      const name = fold(entry.name);
+      if (!name) continue;
+      if (name.startsWith(typed)) { ranked.push({ entry, rank: 0 }); continue; }
+      const words = name.split(' ');
+      const used = new Set<number>();
+      const everyTokenStartsAWord = tokens.every(t => {
+        const at = words.findIndex((w, i) => !used.has(i) && w.startsWith(t));
+        if (at === -1) return false;
+        used.add(at);
+        return true;
+      });
+      if (everyTokenStartsAWord) ranked.push({ entry, rank: 1 });
+    }
+    return ranked.sort((a, b) => a.rank - b.rank || b.entry.lastOrder.localeCompare(a.entry.lastOrder)).slice(0, limit).map(r => r.entry);
+  }
+
+  const typed = typedDigits(q);
+  if (typed.length < SUGGEST_MIN_PHONE_DIGITS) return [];
+  const ranked: { entry: CustomerSuggestion; rank: number }[] = [];
+  for (const entry of directory) {
+    const last10 = (entry.phone ?? '').replace(/\D/g, '').slice(-10);
+    if (!last10) continue;
+    const at = last10.indexOf(typed);
+    if (at !== -1) ranked.push({ entry, rank: at === 0 ? 0 : 1 });
+  }
+  return ranked.sort((a, b) => a.rank - b.rank || b.entry.lastOrder.localeCompare(a.entry.lastOrder)).slice(0, limit).map(r => r.entry);
 }

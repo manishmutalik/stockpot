@@ -325,6 +325,8 @@ import { getBatchesNeedingAttention } from './utils/stockAging';
 import { withShelfStock } from './utils/batchStock';
 import { AskBusiness } from './components/AskBusiness';
 import { useOrderParser } from './hooks/useOrderParser';
+import { buildCustomerDirectory } from './utils/customers';
+import { todayInZone } from './utils/localDate';
 import { getExperimentMaterialUsage } from './utils/experimentMaterialUsage';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
@@ -822,6 +824,9 @@ function BakeryApp() {
       };
     });
   }, [materials, inventoryUsage]);
+
+  // Past customers, suggested while typing in the Add Order form (the same grouping as the Customers panel).
+  const customerDirectory = useMemo(() => buildCustomerDirectory(orders, menu), [orders, menu]);
 
   // Reading a pasted order message into the Add Order form (offered only where AI is available).
   const orderParser = useOrderParser({ orders, menu, materials: remainingInventory, settings, signedIn: !!user, dataReady });
@@ -1565,6 +1570,8 @@ function BakeryApp() {
           currency={currency}
           presetMenuItemId={addOrderPresetItemId}
           orderParser={orderParser}
+          customers={customerDirectory}
+          today={todayInZone(settings.timezone)}
         />
         <IngredientSelectorModal
           isOpen={isIngredientSelectorOpen}

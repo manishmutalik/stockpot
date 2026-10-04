@@ -168,6 +168,15 @@ earlier version let any user make themselves admin; see the changelog.
 - The rules in the repo are not live until deployed:
   `npx firebase-tools deploy --only firestore:rules --project stockpot-adffe`.
 
+## Customer suggestions (Add Order)
+
+`utils/customers.ts`: `groupOrdersByCustomer` is the one place that decides who a
+customer is (`payments.customerKey`); `buildCustomerProfiles` and `buildCustomerDirectory`
+both use it. `matchCustomers` ranks name matches (full-name prefix, then word prefix) and
+phone matches, most recent first, at most six. `components/CustomerCombobox.tsx` is the
+ARIA combobox used for the name and phone inputs. The directory is built once in `App.tsx`
+and passed to `AddOrderModal` as `customers`.
+
 ## Overlay stacking
 
 - The fixed bottom nav and the mobile FAB are `z-50`. `ModalShell` overlays are
