@@ -61,6 +61,13 @@ export function validateSnapshotShape(s: unknown): s is AiSnapshot {
   if (!s.drivers.every((d: any) => isObject(d) && typeof d.figure === 'string' && typeof d.label === 'string' && d.label.length <= 80 && (d.effect === 'raised' || d.effect === 'lowered'))) return false;
   if (!Array.isArray(s.products) || s.products.length > 30 || !Array.isArray(s.trend) || s.trend.length > 7) return false;
   if (!isObject(s.inventory) || !isStringArray(s.inventory.lowStock, 10) || !isStringArray(s.inventory.expiringSoon, 10)) return false;
+  // Added with the reorder suggestions: absent from an older client's snapshot, which is still accepted.
+  const reorder = s.inventory.reorderSoon;
+  if (reorder !== undefined) {
+    if (!Array.isArray(reorder) || reorder.length > 5) return false;
+    const fields = ['name', 'daysOfCover', 'runOutDate', 'suggestedQty'];
+    if (!reorder.every((r: any) => isObject(r) && fields.every(f => typeof r[f] === 'string' && r[f].length <= 90) && (r.flag === 'before_threshold' || r.flag === 'at_threshold') && (r.confidence === 'normal' || r.confidence === 'low'))) return false;
+  }
   if (!isObject(s.customers)) return false;
   for (const list of [s.customers.dueList, s.customers.lapsedList]) {
     if (!Array.isArray(list) || list.length > 10 || !list.every((c: any) => isObject(c) && typeof c.label === 'string' && c.label.length <= 20)) return false;

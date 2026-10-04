@@ -17,6 +17,8 @@ type Data = {
   materials: (RawMaterial & { remaining: number })[];
   experiments: RecipeExperiment[];
   wastageLogs: WastageLog[];
+  /** To work out which materials will run out soon. */
+  productionRuns?: { recipeId: string; quantityProduced: number; date: string }[];
   settings: BakerySettings;
   currency: { code: string; symbol: string };
 };
@@ -51,7 +53,7 @@ const Tile: React.FC<{ label: string; value: string; change?: string }> = ({ lab
  * that same code-built summary with a note.
  */
 export const DailyBriefing: React.FC<Data & { dataReady: boolean; now?: Date }> = ({
-  orders, menu, materials, experiments, wastageLogs, settings, currency, dataReady, now,
+  orders, menu, materials, experiments, wastageLogs, productionRuns, settings, currency, dataReady, now,
 }) => {
   const [view, setView] = useState<View>({ kind: 'idle' });
   const [refreshing, setRefreshing] = useState(false);
@@ -65,9 +67,9 @@ export const DailyBriefing: React.FC<Data & { dataReady: boolean; now?: Date }> 
     if (!dataReady || orders.length === 0) return null;
     const customers = buildCustomerProfiles({ orders, menu, materials, settings, today });
     return buildBusinessSnapshot({
-      period: { start: yesterday, end: yesterday }, orders, menu, materials, experiments, wastageLogs, settings, currency, customers, today,
+      period: { start: yesterday, end: yesterday }, orders, menu, materials, experiments, wastageLogs, productionRuns, settings, currency, customers, today,
     });
-  }, [dataReady, orders, menu, materials, experiments, wastageLogs, settings, currency, today, yesterday]);
+  }, [dataReady, orders, menu, materials, experiments, wastageLogs, productionRuns, settings, currency, today, yesterday]);
 
   // The latest snapshot, for the request below (which can outlive a render while it waits on another tab).
   const builtRef = useRef(built);

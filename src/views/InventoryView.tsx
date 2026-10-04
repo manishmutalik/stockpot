@@ -8,6 +8,9 @@ import {
 import { AppViewProps } from '../types';
 import { UNIT_CONVERSIONS } from '../utils/conversions';
 import { PriceHistoryModal } from '../components/PriceHistoryModal';
+import { ReorderSuggestions } from '../components/ReorderSuggestions';
+import { reorderSuggestions } from '../utils/reorder';
+import { todayInZone } from '../utils/localDate';
 import { getExpiryInfo, getParDeficitPercent, getStockStatus, StockStatus } from '../utils/inventoryStatus';
 
 const PAGE_SIZE = 15;
@@ -32,7 +35,8 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
     handleImportCSV, setAddMaterialCategory, setShowAddMaterialModal, categories, settings,
     currency, inventorySortBy, setInventorySortBy, inventorySortOrder, setInventorySortOrder,
     sortedRemainingInventory, remainingInventory, lowStockItems, refreshData, updateMaterial,
-    deleteMaterial, setRestockMaterial, setDiscardTarget, openNutritionEditor, priceLog
+    deleteMaterial, setRestockMaterial, setDiscardTarget, openNutritionEditor, priceLog,
+    menu, productionRuns, wastageLogs
   } = props;
 
   // The material whose price history is open (kept by id, so it follows the material if it is renamed).
@@ -105,6 +109,11 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
     }
     return pick ? { item: pick, deficit: pickDeficit } : null;
   }, [lowStockItems]);
+
+  // Which materials will run out soon, from recent production and discards (a calculation, no AI).
+  const reorder = useMemo(() => reorderSuggestions({
+    materials: remainingInventory, menu: menu ?? [], productionRuns: productionRuns ?? [], wastageLogs: wastageLogs ?? [], today: todayInZone(settings.timezone),
+  }), [remainingInventory, menu, productionRuns, wastageLogs, settings.timezone]);
 
   const openRestock = (mat: (typeof remainingInventory)[number]) => {
     setRestockMaterial(mat);
@@ -271,6 +280,12 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
           </div>
         </div>
       </div>
+
+      <ReorderSuggestions
+        result={reorder}
+        names={Object.fromEntries(remainingInventory.map(m => [m.id, m.name]))}
+        onRestock={(id) => { const mat = remainingInventory.find(m => m.id === id); if (mat) openRestock(mat); }}
+      />
 
       {/* Search / filter / actions */}
       <div className="surface-card p-4 flex flex-col gap-3">

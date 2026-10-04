@@ -55,6 +55,8 @@ export interface RawMaterial {
   costPerUnit: number;
   category: string;
   threshold?: number;
+  /** Days from ordering to having it; overrides the default in the reorder suggestions. No screen sets it yet. */
+  leadTimeDays?: number;
   dateAdded: string;
   expiryDate?: string; // YYYY-MM-DD — expiry of the current/latest stock batch
   gstRate?: number; // Input GST %, applied to this material's own cost/unit — drives the "GST Paid" figure in getFinancialsForRange, not the restock modal's display-only fallback.

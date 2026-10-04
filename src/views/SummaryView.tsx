@@ -202,7 +202,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
       {/* Yesterday in a few lines: figures from the app, an explanation from AI where it is offered */}
       <DailyBriefing
         orders={orders} menu={menu} materials={remainingInventory ?? []} experiments={experiments ?? []}
-        wastageLogs={wastageLogs} settings={settings} currency={currency} dataReady={!!dataReady}
+        wastageLogs={wastageLogs} productionRuns={productionRuns} settings={settings} currency={currency} dataReady={!!dataReady}
       />
 
       {/* Headline figures */}

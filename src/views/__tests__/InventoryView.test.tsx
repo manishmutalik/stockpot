@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { InventoryView } from '../InventoryView';
+import { addDays, todayInZone } from '../../utils/localDate';
 
 const daysFromNow = (n: number) => { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0]; };
 
@@ -44,6 +45,35 @@ function makeProps(overrides: Record<string, any> = {}) {
     ...overrides,
   } as any;
 }
+
+describe('InventoryView reorder suggestions', () => {
+  const today = todayInZone(undefined);
+  // 6 loaves a day x 0.5 kg = 3 kg of flour a day; 10 kg lasts a little over 3 days.
+  const menu = [{ id: 'loaf', name: 'Loaf', recipe: [{ materialId: 'flour', amount: 500, unit: 'g' }] }];
+  const runs = Array.from({ length: 28 }, (_, i) => ({ id: `r${i}`, recipeId: 'loaf', quantityProduced: 6, date: addDays(today, -i) }));
+  const props = (over: Record<string, any> = {}) => makeProps({ items: [mk('flour', 'Bread Flour', { dateAdded: addDays(today, -60), threshold: 0 })], menu, productionRuns: runs, wastageLogs: [], ...over });
+
+  it('shows what will run out, and restocks it from the card', () => {
+    const p = props();
+    render(<InventoryView {...p} />);
+    const card = screen.getByRole('region', { name: 'Reorder suggestions' });
+    expect(within(card).getByText('Bread Flour')).toBeTruthy();
+    expect(card.textContent).toContain('About 3 days left');
+    expect(card.textContent).toContain('Order about 23 kg');
+    fireEvent.click(within(card).getByRole('button', { name: 'Restock Bread Flour' }));
+    expect(p.setRestockMaterial).toHaveBeenCalledWith(expect.objectContaining({ id: 'flour' }));
+  });
+
+  it('shows nothing when there is no production history to go on', () => {
+    render(<InventoryView {...props({ productionRuns: [] })} />);
+    expect(screen.queryByRole('region', { name: 'Reorder suggestions' })).toBeNull();
+  });
+
+  it('shows nothing when stock is comfortable', () => {
+    render(<InventoryView {...props({ items: [mk('flour', 'Bread Flour', { dateAdded: addDays(today, -60), threshold: 0, remaining: 100 })] })} />);
+    expect(screen.queryByRole('region', { name: 'Reorder suggestions' })).toBeNull();
+  });
+});
 
 describe('InventoryView', () => {
   it('spotlights the material furthest below its threshold and restocks it', () => {

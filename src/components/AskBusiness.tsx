@@ -16,6 +16,8 @@ type Data = {
   materials: (RawMaterial & { remaining: number })[];
   experiments: RecipeExperiment[];
   wastageLogs: WastageLog[];
+  /** To work out which materials will run out soon. */
+  productionRuns?: { recipeId: string; quantityProduced: number; date: string }[];
   settings: BakerySettings;
   currency: { code: string; symbol: string };
 };
@@ -45,7 +47,7 @@ interface Message {
  * offered to; never in the demo.
  */
 export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolean; now?: Date }> = ({
-  orders, menu, materials, experiments, wastageLogs, settings, currency, dataReady, signedIn, now,
+  orders, menu, materials, experiments, wastageLogs, productionRuns, settings, currency, dataReady, signedIn, now,
 }) => {
   const [available, setAvailable] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
@@ -122,7 +124,7 @@ export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolea
     setInput('');
 
     const built = buildBusinessSnapshot({
-      period: choice.period, comparison: choice.comparison, orders, menu, materials, experiments, wastageLogs,
+      period: choice.period, comparison: choice.comparison, orders, menu, materials, experiments, wastageLogs, productionRuns,
       settings, currency, customers, today, mentionedCustomers: mentioned,
     });
     const finish = (patch: Partial<Message>) => {

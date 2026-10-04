@@ -20,7 +20,7 @@
  * is no invented number in it, not that it names the right driver.
  */
 
-export type FigureKind = 'money' | 'percent' | 'count' | 'days' | 'date';
+export type FigureKind = 'money' | 'percent' | 'count' | 'days' | 'date' | 'quantity';
 
 export interface Figure {
   kind: FigureKind;
@@ -30,6 +30,8 @@ export interface Figure {
   label: string;
   /** Show a leading + or - (for changes). */
   signed?: boolean;
+  /** The unit of a `quantity` ("kg", "pcs"). */
+  unit?: string;
 }
 
 export interface AiRegistry {
@@ -121,6 +123,9 @@ export function formatFigure(figure: Figure, ctx: FormatContext): string {
       return `${sign}${group(abs, locale, abs >= 10 ? 0 : 1)}%`;
     case 'days':
       return `${sign}${group(abs, locale, 0)} ${Math.round(abs) === 1 ? 'day' : 'days'}`;
+    case 'quantity':
+      // Two decimals below 100, whole numbers from there, like money.
+      return `${sign}${group(abs, locale, abs >= 100 ? 0 : 2)}${figure.unit ? ` ${figure.unit}` : ''}`;
     case 'count':
     default:
       return `${sign}${group(abs, locale, 0)}`;
