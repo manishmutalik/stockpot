@@ -3,6 +3,8 @@ import { Calendar, Check, CirclePlus, Loader2, MapPin, Phone, ShoppingBag, Spark
 import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
 import { PAYMENT_METHODS, type PaymentMethod } from '../types';
 import type { OrderParser } from '../hooks/useOrderParser';
+import { CustomerCombobox } from './CustomerCombobox';
+import type { CustomerSuggestion } from '../utils/customers';
 import type { NotFoundItem } from '../utils/orderParse';
 
 interface MenuItem {
@@ -38,6 +40,10 @@ interface AddOrderModalProps {
   presetMenuItemId?: string | null;
   /** When set, the form offers to fill itself from a pasted message (only for accounts AI is available to). */
   orderParser?: OrderParser | null;
+  /** Past customers, suggested while the name or phone number is typed. Empty or absent: the fields are plain inputs. */
+  customers?: CustomerSuggestion[];
+  /** Today in the business's time zone ("last order 12 days ago"). Defaults to the UTC date. */
+  today?: string;
 }
 
 const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderLineItem => ({ menuItemId: menu[0]?.id || '', quantity: 1 });
@@ -54,8 +60,8 @@ const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderLineItem => ({ menuItemId: menu
  * @param currency - Locale currency config; only `symbol` is used for display.
  * @param presetMenuItemId - See AddOrderModalProps.
  */
-export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser }: AddOrderModalProps) {
-  const today = new Date().toISOString().split('T')[0];
+export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser, customers = [], today: todayProp }: AddOrderModalProps) {
+  const today = todayProp ?? new Date().toISOString().split('T')[0];
   const [date,          setDate]          = useState(today);
   const [customerName,  setCustomerName]  = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -178,6 +184,12 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
       return [...prev, { menuItemId: id, quantity: missing.quantity }];
     });
     setNotFound(prev => prev.filter(n => n !== missing));
+  };
+  // Picking a past customer fills both fields (replacing whatever was in them: the owner just chose them), then moves on to the items.
+  const pickCustomer = (customer: CustomerSuggestion) => {
+    setCustomerName(customer.name);
+    setCustomerPhone(customer.phone ?? '');
+    document.getElementById('order-item-0')?.focus();
   };
   const handleClose = () => {
     resetForm();
@@ -338,6 +350,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
               <div key={i}>
                 <div className="flex gap-2 items-stretch">
                   <select
+                    id={`order-item-${i}`}
                     aria-label={lineItems.length > 1 ? `Item ${i + 1}` : 'Item'}
                     value={li.menuItemId}
                     onChange={e => updateLineItem(i, { menuItemId: e.target.value })}
@@ -405,11 +418,13 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
           <label htmlFor="order-customer" className={`${MODAL_LABEL} flex items-center gap-1.5`}>
             <User size={12} /> Customer (optional)
           </label>
-          <input
+          <CustomerCombobox
             id="order-customer"
-            type="text"
             value={customerName}
-            onChange={e => setCustomerName(e.target.value)}
+            onChange={setCustomerName}
+            onPick={pickCustomer}
+            directory={customers}
+            today={today}
             placeholder="Name"
             className={modalField()}
           />
@@ -418,13 +433,16 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
           <label htmlFor="order-phone" className={`${MODAL_LABEL} flex items-center gap-1.5`}>
             <Phone size={12} /> Phone (optional)
           </label>
-          <input
+          <CustomerCombobox
             id="order-phone"
-            type="text"
             value={customerPhone}
-            onChange={e => setCustomerPhone(e.target.value)}
+            onChange={setCustomerPhone}
+            onPick={pickCustomer}
+            directory={customers}
+            today={today}
             placeholder="Phone"
             className={modalField()}
+            align="right"
           />
         </div>
       </div>
