@@ -324,6 +324,7 @@ import { financialsForRange } from './utils/profit';
 import { getBatchesNeedingAttention } from './utils/stockAging';
 import { withShelfStock } from './utils/batchStock';
 import { AskBusiness } from './components/AskBusiness';
+import { useOrderParser } from './hooks/useOrderParser';
 import { getExperimentMaterialUsage } from './utils/experimentMaterialUsage';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
@@ -821,6 +822,9 @@ function BakeryApp() {
       };
     });
   }, [materials, inventoryUsage]);
+
+  // Reading a pasted order message into the Add Order form (offered only where AI is available).
+  const orderParser = useOrderParser({ orders, menu, materials: remainingInventory, settings, signedIn: !!user, dataReady });
 
   // `remainingInventory` sorted by the user's chosen column and direction.
   const sortedRemainingInventory = useMemo(() => {
@@ -1560,6 +1564,7 @@ function BakeryApp() {
           onSave={addOrderGroup}
           currency={currency}
           presetMenuItemId={addOrderPresetItemId}
+          orderParser={orderParser}
         />
         <IngredientSelectorModal
           isOpen={isIngredientSelectorOpen}

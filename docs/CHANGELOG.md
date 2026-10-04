@@ -1,5 +1,25 @@
 # Changelog
 
+## Add an order from a pasted message
+
+The Add Order form can fill itself from a customer's WhatsApp message
+(`docs/AI_CFO_DESIGN.md`). Paste the message, press "Fill the form", and the items,
+quantities, customer, date, payment, discount and delivery address are filled in for
+you to check. Nothing is saved until you press Add Order, and stock is still checked.
+
+- It only uses what the message says: quantities, names, the date phrase, the address
+  and discounts must all be written in the message, or the reading is rejected and you
+  fill the form by hand. The date is worked out by the app ("Saturday", "12 Oct",
+  "12/10"), and a percentage discount is turned into an amount from the order's value.
+- Items that are not on your menu are listed ("Couldn't find 'croisant'"), with the
+  closest menu item to pick if you want it. Nothing is added for you.
+- Phone numbers and the names of your existing customers are not sent: a known
+  customer is recognised on your device and filled in from their own record. The name
+  of a new customer and the delivery address, if in the message, are read by the AI.
+- New: an optional **delivery address** on the Add Order form.
+- 30 messages a day per account (`AI_PARSE_DAILY_LIMIT`). Not shown in the demo or to
+  accounts without AI.
+
 ## Fix: settings could be reset to the defaults
 
 The Settings screen autosaves a second after `settings` changes. Before the stored

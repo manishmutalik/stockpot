@@ -71,7 +71,7 @@ export function useOrderActions(
    * then claimed atomically in the same batch as the order documents.
    */
   const addOrderGroup = async (
-    common: { date: string; customerName?: string; customerPhone?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number },
+    common: { date: string; customerName?: string; customerPhone?: string; deliveryAddress?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number },
     lineItems: { menuItemId: string; quantity: number }[]
   ) => {
     if (!auth.currentUser || lineItems.length === 0) return;
@@ -114,6 +114,8 @@ export function useOrderActions(
           ...stampFor(menu.find(m => m.id === item.menuItemId)!, materials),
           ...(common.customerName && { customerName: common.customerName }),
           ...(common.customerPhone && { customerPhone: common.customerPhone }),
+          // Where it is going belongs to the whole order, so it is on every item of the group.
+          ...(common.deliveryAddress && { deliveryAddress: common.deliveryAddress }),
           ...(orderGroupId && { orderGroupId }),
           // Only "pay later" is stored; an order with no value counts as paid.
           ...(common.paymentStatus === 'unpaid' && { paymentStatus: 'unpaid' as const }),
