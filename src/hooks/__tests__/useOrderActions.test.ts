@@ -79,6 +79,22 @@ describe('addOrderGroup — adding a customer order with one or more items', () 
     expect(showAlert).toHaveBeenCalledWith('Order Added', expect.stringContaining('2'));
   });
 
+  it('puts the delivery address on every item of the order, and omits it when there is none', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials));
+    await result.current.addOrderGroup(
+      { date: '2026-04-01', deliveryAddress: '12 MG Road, Bengaluru' },
+      [{ menuItemId: 'cake', quantity: 1 }, { menuItemId: 'cookie', quantity: 1 }]
+    );
+    const orderCalls = batchSet.mock.calls.filter(([ref]: any[]) => ref.path.includes('/orders/'));
+    expect(orderCalls).toHaveLength(2);
+    for (const [, payload] of orderCalls) expect(payload.deliveryAddress).toBe('12 MG Road, Bengaluru');
+
+    batchSet.mockClear();
+    await result.current.addOrderGroup({ date: '2026-04-01' }, [{ menuItemId: 'cake', quantity: 1 }]);
+    const plain = batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('/orders/'));
+    expect(plain[1]).not.toHaveProperty('deliveryAddress');
+  });
+
   it('rejects an unknown menuItemId before writing anything', async () => {
     const showAlert = vi.fn();
     const { result } = renderHook(() =>

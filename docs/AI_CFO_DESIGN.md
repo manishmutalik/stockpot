@@ -217,7 +217,7 @@ rounding.
   same number of days just before.
 - Firestore rules: `users/{uid}/briefings/{day}` is owner-read, server-write; the
   usage counters are unreachable from any client (tested in the emulator).
-- Not yet: order parsing (the briefing and the chat are below).
+- Built on top of this: the briefing, the chat and order parsing (below).
 
 ## Daily briefing (built)
 
@@ -286,6 +286,47 @@ available, so never in the demo and never to accounts without AI.
 - **Not built yet:** the `run_pricing_scenario` tool (Phase 2), and answers about
   customers beyond the top 10 per list and the ones named in the question.
 
+## Order parsing (built)
+
+The Add Order form has a "Fill from a message" box, shown only when
+`GET /api/ai/status` says AI is available (never in the demo). The owner pastes a
+customer's WhatsApp message and presses "Fill the form"; the form is pre-filled and
+**nothing is saved until the owner checks it and presses Add Order**. There is no
+separate "Quick Log" screen in the app, so the Add Order form is where it lives. It
+also gained an optional delivery address, which is saved on every item of the order
+(`addOrderGroup`'s `deliveryAddress`). The same box does not exist for production
+runs (the handoff's `parse-production-run`) yet.
+
+- **Privacy** (`utils/aiPrivacy.ts`, `utils/orderParse.ts`). In the browser, before
+  anything is sent: phone numbers become `[phone]` (and the first one is kept to
+  fill the Phone field), and the names of customers the app already knows become
+  their label. So the server and the model never see a phone number or a known
+  customer's name. What does reach the model is what the message itself holds: the
+  name of a customer who is not yet known and the delivery address. Reading those is
+  the point of the feature, and the owner is told what is not sent.
+- **What the model returns** (`ORDER_SCHEMA`, `POST /api/ai/parse-order`, one
+  `parse` use, 30 a day, `AI_PARSE_DAILY_LIMIT`): the items (as written, the menu id
+  it means or null, a quantity), a customer label or name, the phrase for the date as
+  written, a delivery address, whether it is paid or to be paid later, how, and a
+  discount amount or percentage. Every field is present; "not said" is null.
+- **It never invents.** `validateParsedOrder` rejects the answer, and the model is
+  asked once more with the problems listed, if: a quantity is not written in the
+  message (digits, words, "a dozen", "half a dozen", "2 dozen" is 24; one is always
+  allowed); an item name, customer name, date phrase or address is not text from the
+  message; a menu id is not on the menu; a discount is not a number written in the
+  message. If it still fails nothing is returned and the owner fills the form by hand.
+- **Financial truth.** The model does no money maths. A percentage discount is turned
+  into an amount in the browser from the order's own value (`buildOrderForm`), and a
+  discount is capped at the order's value. The date is not worked out by the model:
+  it returns the phrase and `resolveWhen` (today, tomorrow, weekday names, "12 Oct",
+  "12/10", day first) works it out in the business's own time zone, or the form says
+  it could not tell.
+- **Matching.** A known customer is matched on the device by label and their name and
+  phone come from their own record. An item the model could not match is shown as
+  "Couldn't find 'croisant' on the menu", with the closest menu item as a suggestion
+  (`suggestMenuItem`) that is only used if the owner accepts it. Stock is still a hard
+  cap when the order is saved.
+
 ## Delivery plan
 
 1. Customer insights, time zone setting, design doc (built).
@@ -294,7 +335,7 @@ available, so never in the demo and never to accounts without AI.
    registry, and the text guard (built). No user-facing AI yet.
 3. Daily briefing (with the canned demo sample) (built).
 4. Ask Your Business (without the what-if tool until Phase 2 exists) (built).
-5. Order parsing in Quick Log (the Add Order form also needs a delivery address).
+5. Order parsing in the Add Order form, with a delivery address (built).
 6. Reorder-point suggestions, then the briefing's stock items.
 
 Deferred: everything that needs Phase 2 (`pricing.ts`): repricing alerts, price

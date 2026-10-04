@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, Check, CirclePlus, Phone, ShoppingBag, Trash2, User } from 'lucide-react';
+import { Calendar, Check, CirclePlus, Loader2, MapPin, Phone, ShoppingBag, Sparkles, Trash2, User } from 'lucide-react';
 import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
 import { PAYMENT_METHODS, type PaymentMethod } from '../types';
+import type { OrderParser } from '../hooks/useOrderParser';
+import type { NotFoundItem } from '../utils/orderParse';
 
 interface MenuItem {
   id: string;
@@ -27,13 +29,15 @@ interface AddOrderModalProps {
    * open and the user can retry; nothing partially saves.
    */
   onSave: (
-    common: { date: string; customerName?: string; customerPhone?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number },
+    common: { date: string; customerName?: string; customerPhone?: string; deliveryAddress?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number },
     lineItems: OrderLineItem[]
   ) => Promise<void>;
   /** When set, the modal opens with a single line item pre-filled to this
    * menu item instead of defaulting to the first one — used by Market
    * Stock's "Add to Order" action. */
   presetMenuItemId?: string | null;
+  /** When set, the form offers to fill itself from a pasted message (only for accounts AI is available to). */
+  orderParser?: OrderParser | null;
 }
 
 const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderLineItem => ({ menuItemId: menu[0]?.id || '', quantity: 1 });
@@ -50,11 +54,12 @@ const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderLineItem => ({ menuItemId: menu
  * @param currency - Locale currency config; only `symbol` is used for display.
  * @param presetMenuItemId - See AddOrderModalProps.
  */
-export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId }: AddOrderModalProps) {
+export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser }: AddOrderModalProps) {
   const today = new Date().toISOString().split('T')[0];
   const [date,          setDate]          = useState(today);
   const [customerName,  setCustomerName]  = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState('');
   const [payLater,      setPayLater]      = useState(false);
   const [method,        setMethod]        = useState<PaymentMethod | ''>('');
   const [discountText,  setDiscountText]  = useState('');
@@ -62,6 +67,13 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
   const [isSaving,      setIsSaving]      = useState(false);
   const [error,         setError]         = useState('');
   const [invalidRowIndex, setInvalidRowIndex] = useState<number | null>(null);
+  // Filling the form from a pasted message.
+  const [message,       setMessage]       = useState('');
+  const [isReading,     setIsReading]     = useState(false);
+  const [readError,     setReadError]     = useState('');
+  const [filled,        setFilled]        = useState(false);
+  const [readNotes,     setReadNotes]     = useState<string[]>([]);
+  const [notFound,      setNotFound]      = useState<NotFoundItem[]>([]);
 
   // Re-sync every row's selected item against the *current* menu whenever
   // the modal opens — same reasoning as ProductionRunModal's equivalent
@@ -104,11 +116,68 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
     setDate(today);
     setCustomerName('');
     setCustomerPhone('');
+    setDeliveryAddress('');
     setPayLater(false);
     setMethod('');
     setDiscountText('');
     setLineItems([EMPTY_LINE_ITEM(menu)]);
     setInvalidRowIndex(null);
+    setMessage('');
+    setReadError('');
+    setFilled(false);
+    setReadNotes([]);
+    setNotFound([]);
+  };
+
+  // Pre-fills the form from the message. Nothing is saved: the owner checks it and presses Add Order.
+  const readMessage = async () => {
+    if (!orderParser || isReading) return;
+    setIsReading(true);
+    setReadError('');
+    setFilled(false);
+    setReadNotes([]);
+    setNotFound([]);
+    try {
+      const outcome = await orderParser.parse(message);
+      if (outcome.ok === false) { setReadError(outcome.message); return; }
+      const f = outcome.form;
+      const notes: string[] = [];
+      if (f.lineItems.length > 0) {
+        setLineItems(f.lineItems);
+      } else {
+        // Nothing matched: leave an empty row to choose from, not the first menu item standing in for the customer's.
+        setLineItems([{ menuItemId: '', quantity: 1 }]);
+        if (f.notFound.length === 0) notes.push('No items were found in the message.');
+      }
+      if (f.customerName !== undefined) setCustomerName(f.customerName);
+      if (f.customerPhone !== undefined) setCustomerPhone(f.customerPhone);
+      if (f.knownCustomer) notes.push('This looks like an existing customer; their details were filled in.');
+      if (f.date) setDate(f.date);
+      if (f.dateNotUnderstood) notes.push(`Couldn't tell the date from "${f.dateNotUnderstood}". Please check the order date.`);
+      if (f.payLater !== undefined) setPayLater(f.payLater);
+      if (f.method) setMethod(f.method);
+      if (f.discountAmount !== undefined) setDiscountText(String(f.discountAmount));
+      if (f.deliveryAddress !== undefined) setDeliveryAddress(f.deliveryAddress);
+      setNotFound(f.notFound);
+      setReadNotes(notes);
+      setFilled(true);
+      setError('');
+      setInvalidRowIndex(null);
+    } finally {
+      setIsReading(false);
+    }
+  };
+  const applySuggestion = (missing: NotFoundItem) => {
+    if (!missing.suggestion) return;
+    const id = missing.suggestion.id;
+    setLineItems(prev => {
+      const existing = prev.find(li => li.menuItemId === id);
+      if (existing) return prev.map(li => (li.menuItemId === id ? { ...li, quantity: li.quantity + missing.quantity } : li));
+      // The empty row left when nothing matched is replaced rather than kept beside it.
+      if (prev.length === 1 && prev[0].menuItemId === '') return [{ menuItemId: id, quantity: missing.quantity }];
+      return [...prev, { menuItemId: id, quantity: missing.quantity }];
+    });
+    setNotFound(prev => prev.filter(n => n !== missing));
   };
   const handleClose = () => {
     resetForm();
@@ -161,7 +230,8 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
     setIsSaving(true);
     try {
       await onSave(
-        { date, customerName: customerName.trim() || undefined, customerPhone: customerPhone.trim() || undefined, paymentStatus: payLater ? 'unpaid' : 'paid',
+        { date, customerName: customerName.trim() || undefined, customerPhone: customerPhone.trim() || undefined,
+          deliveryAddress: deliveryAddress.trim() || undefined, paymentStatus: payLater ? 'unpaid' : 'paid',
           paymentMethod: !payLater && method ? method : undefined, discount: discount > 0 ? discount : undefined },
         lineItems
       );
@@ -206,6 +276,55 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
         </>
       }
     >
+      {/* Fill the form from a pasted message (only when AI is available) */}
+      {orderParser && (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+          <label htmlFor="order-message" className={`${MODAL_LABEL} flex items-center gap-1.5 !mb-0 text-primary`}>
+            <Sparkles size={12} /> Fill from a message
+          </label>
+          <textarea
+            id="order-message"
+            value={message}
+            onChange={e => setMessage(e.target.value)}
+            rows={3}
+            maxLength={1500}
+            placeholder="Paste the customer's WhatsApp message here"
+            className={`${modalField()} resize-none bg-white`}
+          />
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={readMessage}
+              disabled={isReading || message.trim() === ''}
+              className="h-10 px-4 shrink-0 whitespace-nowrap rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {isReading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {isReading ? 'Reading…' : 'Fill the form'}
+            </button>
+            <p className="text-[11px] text-muted leading-snug">Phone numbers and the names of your existing customers are not sent. You check everything before the order is added.</p>
+          </div>
+          {readError && <p role="alert" className="text-xs font-semibold text-coral">{readError}</p>}
+          {filled && (
+            <div className="space-y-1.5 text-xs text-ink">
+              <p className="font-semibold">Filled from your message. Please check it.</p>
+              {readNotes.map(n => <p key={n} className="text-muted">{n}</p>)}
+              {notFound.map((n, i) => (
+                <div key={`${n.nameAsWritten}-${i}`} className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-amber-800">
+                  <span>Couldn&apos;t find &ldquo;{n.nameAsWritten}&rdquo; on the menu (×{n.quantity}).</span>
+                  {n.suggestion ? (
+                    <button type="button" onClick={() => applySuggestion(n)} className="font-semibold text-primary hover:text-primary-dark underline">
+                      Use {n.suggestion.name}?
+                    </button>
+                  ) : (
+                    <span>Pick it from the list below.</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Items */}
       <div>
         <label className={MODAL_LABEL}>
@@ -271,10 +390,11 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
       {/* Date + customer */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
-          <label className={`${MODAL_LABEL} flex items-center gap-1.5`}>
+          <label htmlFor="order-date" className={`${MODAL_LABEL} flex items-center gap-1.5`}>
             <Calendar size={12} /> Order date
           </label>
           <input
+            id="order-date"
             type="date"
             value={date}
             onChange={e => setDate(e.target.value)}
@@ -282,10 +402,11 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
           />
         </div>
         <div>
-          <label className={`${MODAL_LABEL} flex items-center gap-1.5`}>
+          <label htmlFor="order-customer" className={`${MODAL_LABEL} flex items-center gap-1.5`}>
             <User size={12} /> Customer (optional)
           </label>
           <input
+            id="order-customer"
             type="text"
             value={customerName}
             onChange={e => setCustomerName(e.target.value)}
@@ -294,10 +415,11 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
           />
         </div>
         <div>
-          <label className={`${MODAL_LABEL} flex items-center gap-1.5`}>
+          <label htmlFor="order-phone" className={`${MODAL_LABEL} flex items-center gap-1.5`}>
             <Phone size={12} /> Phone (optional)
           </label>
           <input
+            id="order-phone"
             type="text"
             value={customerPhone}
             onChange={e => setCustomerPhone(e.target.value)}
@@ -305,6 +427,20 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
             className={modalField()}
           />
         </div>
+      </div>
+
+      <div>
+        <label htmlFor="order-address" className={`${MODAL_LABEL} flex items-center gap-1.5`}>
+          <MapPin size={12} /> Delivery address (optional)
+        </label>
+        <input
+          id="order-address"
+          type="text"
+          value={deliveryAddress}
+          onChange={e => setDeliveryAddress(e.target.value)}
+          placeholder="Leave empty for pick-up"
+          className={modalField()}
+        />
       </div>
 
       <div>

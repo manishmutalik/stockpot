@@ -15,6 +15,7 @@
 import { validateAiText } from './aiFigures';
 import { knownIdsFromSnapshot } from './aiBriefing';
 import type { AiSnapshot } from './aiSnapshot';
+import { redactPhones, replaceCustomerNames } from './aiPrivacy';
 import { addDays } from './localDate';
 
 export const CHAT_MAX_QUESTION_CHARS = 500;
@@ -47,41 +48,18 @@ export function validateChatAnswer(raw: unknown, snapshot: AiSnapshot): ChatAnsw
   return checked.ok ? { ok: true, answer: (obj.answer as string).trim() } : { ok: false, problems: checked.problems };
 }
 
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const PHONE_LIKE = /\+?\d[\d\s().-]{6,}\d/g;
-
 /**
  * The question as it is sent. Customer names become labels (so the server never
  * sees a name) and the labels found are returned so the snapshot can include
- * those customers. A first name alone matches only when it is unique.
+ * those customers. A first name alone matches only when it is unique. Phone
+ * numbers are removed.
  */
 export function prepareQuestion(
   raw: string,
   customers: { name: string; label: string }[]
 ): { text: string; mentioned: string[] } {
-  let text = raw.replace(/\s+/g, ' ').trim().replace(PHONE_LIKE, '[number]');
-
-  const firstNames = new Map<string, string[]>();
-  for (const c of customers) {
-    const first = c.name.trim().split(/\s+/)[0]?.toLowerCase();
-    if (first && first.length >= 3) firstNames.set(first, [...(firstNames.get(first) ?? []), c.label]);
-  }
-  const candidates: { phrase: string; label: string }[] = [];
-  for (const c of customers) {
-    const full = c.name.trim();
-    if (full.length >= 3) candidates.push({ phrase: full, label: c.label });
-  }
-  for (const [first, labels] of firstNames) if (labels.length === 1) candidates.push({ phrase: first, label: labels[0] });
-  candidates.sort((a, b) => b.phrase.length - a.phrase.length);
-
-  const mentioned: string[] = [];
-  for (const { phrase, label } of candidates) {
-    const re = new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(phrase).replace(/\s+/g, '\\s+')}(?![\\p{L}\\p{N}])`, 'giu');
-    if (re.test(text)) {
-      text = text.replace(re, label);
-      if (!mentioned.includes(label)) mentioned.push(label);
-    }
-  }
+  const cleaned = redactPhones(raw.replace(/\s+/g, ' ').trim()).text;
+  const { text, mentioned } = replaceCustomerNames(cleaned, customers);
   return { text: text.slice(0, CHAT_MAX_QUESTION_CHARS), mentioned };
 }
 
