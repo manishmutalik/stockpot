@@ -1,5 +1,17 @@
 # Changelog
 
+## Fix: settings could be reset to the defaults
+
+The Settings screen autosaves a second after `settings` changes. Before the stored
+settings had been read (a slow connection, a read that failed, a new sign-in)
+`settings` was only the built-in defaults, so the autosave could write those over
+the stored values, blanking the business name, phone number, UPI id, address, email,
+GST settings, fixed costs, payment fee rates and time zone (categories and currency
+are saved separately and were not affected). Now nothing is saved until the stored
+settings have loaded, and then only what differs from what was loaded; the Save
+button does nothing before then; and a new sign-in starts again from "not loaded".
+Existing settings that were already overwritten have to be entered again.
+
 ## Ask Your Business
 
 A chat for questions about your own business (`docs/AI_CFO_DESIGN.md`), opened
