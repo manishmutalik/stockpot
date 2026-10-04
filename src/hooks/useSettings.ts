@@ -15,7 +15,7 @@
  * is decomposed.
  */
 import type React from 'react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { auth, db, doc, setDoc } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { BakerySettings } from '../types';
@@ -27,7 +27,9 @@ export function useSettings(
   categories: string[],
   currency: any,
   setCurrency: (c: any) => void,
-  setShowSaveFeedback: (b: boolean) => void
+  setShowSaveFeedback: (b: boolean) => void,
+  /** True once the stored settings have been read. Until then `settings` is only the built-in defaults. */
+  settingsLoaded: boolean
 ) {
   // Applies the primary theme colour to the CSS custom property so all
   // Tailwind `text-primary` / `bg-primary` classes update instantly.
@@ -51,14 +53,33 @@ export function useSettings(
 
   // Debounce: waits 1 second after the last settings change before writing to
   // Firestore, preventing excessive writes during rapid typing.
+  //
+  // It must never save the built-in defaults over the stored settings: before the
+  // stored document has been read (a slow connection, a read that failed, a new
+  // sign-in), `settings` is only the defaults, and a merge-write of those would
+  // blank the business name, phone number, UPI id, GST and fixed costs. So nothing
+  // is saved until the stored settings have loaded, and then only what differs from
+  // what was loaded.
+  const lastKnown = useRef<string | null>(null);
   useEffect(() => {
+    if (!settingsLoaded || !isAuthReady) {
+      lastKnown.current = null;
+      return;
+    }
+    const current = JSON.stringify(settings);
+    if (lastKnown.current === null) {
+      lastKnown.current = current; // what the server holds: nothing to save yet
+      return;
+    }
+    if (current === lastKnown.current) return;
     const timer = setTimeout(() => {
-      if (isAuthReady && auth.currentUser) {
+      if (auth.currentUser) {
+        lastKnown.current = current;
         saveBakerySettings(settings);
       }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [settings, isAuthReady]);
+  }, [settings, isAuthReady, settingsLoaded]);
 
   /**
    * Patches a single field in the local settings state.
@@ -88,7 +109,8 @@ export function useSettings(
    * Firestore write, then shows a brief success banner via `showSaveFeedback`.
    */
   const saveSettings = async () => {
-    if (!auth.currentUser) return;
+    // Saving before the stored settings have loaded would write the defaults over them.
+    if (!auth.currentUser || !settingsLoaded) return;
     const userId = auth.currentUser.uid;
     try {
       await setDoc(doc(db, 'users', userId, 'settings', 'bakery'), {

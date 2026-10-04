@@ -717,7 +717,7 @@ function BakeryApp() {
   // `settings` state itself stays here (populated by the combined Firestore
   // listener below) — this hook owns the save/update side effects only.
   const { updateSettingsField, updateCurrency, saveSettings } = useSettings(
-    settings, setSettings, isAuthReady, categories, currency, setCurrency, setShowSaveFeedback
+    settings, setSettings, isAuthReady, categories, currency, setCurrency, setShowSaveFeedback, settingsLoaded
   );
 
   // ── Inventory / Materials Actions ────────────────────────────────────────────

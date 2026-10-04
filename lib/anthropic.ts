@@ -10,6 +10,16 @@ import Anthropic from '@anthropic-ai/sdk';
 
 let client: Anthropic | null = null;
 
+/**
+ * An API key that is not tied to one workspace must say which workspace a
+ * request is for. Set ANTHROPIC_WORKSPACE_ID (from the Anthropic Console) for
+ * such a key; a key created inside a workspace needs nothing.
+ */
+export function workspaceHeaders(env: Record<string, string | undefined> = process.env): Record<string, string> | undefined {
+  const id = env.ANTHROPIC_WORKSPACE_ID?.trim();
+  return id ? { 'anthropic-workspace-id': id } : undefined;
+}
+
 export function getAnthropic(): Anthropic {
   if (client) return client;
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -20,7 +30,7 @@ export function getAnthropic(): Anthropic {
     );
   }
   // A short timeout: these are small prompts, and an owner is waiting on the answer.
-  client = new Anthropic({ apiKey, timeout: 30_000, maxRetries: 2 });
+  client = new Anthropic({ apiKey, timeout: 30_000, maxRetries: 2, defaultHeaders: workspaceHeaders() });
   return client;
 }
 

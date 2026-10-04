@@ -306,5 +306,10 @@ only once a material has two or more entries.
 - `ANTHROPIC_API_KEY`, `AI_FEATURES_ENABLED` and the limits are server
   environment variables. The handoff says "Render"; nothing in the repository
   names the host, so set them wherever the server runs.
+- `ANTHROPIC_WORKSPACE_ID`: only for an API key that is not created inside a
+  workspace. Anthropic then rejects every call with "This API key is not scoped
+  to a workspace" until the request names one, which this variable does (the
+  `anthropic-workspace-id` header). A key created inside a workspace needs it
+  not.
 - Prepaid credits: set a monthly spend limit and a low-balance alert in the
   Anthropic Console.

@@ -44,6 +44,8 @@ export function useSettingsListener(authReady: boolean, user: AppUser | null) {
   useEffect(() => {
     if (!authReady || !auth.currentUser) return;
     const userId = auth.currentUser.uid;
+    // A new subscription (a different sign-in) has not read its settings yet.
+    setSettingsLoaded(false);
 
     const unsubscribe = onSnapshot(
       doc(db, 'users', userId, 'settings', 'bakery'),
