@@ -184,6 +184,38 @@ and passed to `AddOrderModal` as `customers`.
   Menu undo toast is `z-[80]`. `overlayStacking.test.tsx` keeps modal > nav and
   confirm > modal.
 
+## Next up: pre-orders, Phase A
+
+Handoff: `pre-orders-handoff.md` (booking, custom line prices, advances, cancellation,
+handover). Not started. Decisions made with the owner on top of the handoff:
+
+- **Figures count only up to today.** Every "actual" figure (profit, revenue, Dashboard,
+  orders, payments, AI snapshot) counts orders dated today or earlier, in the business
+  time zone, and not cancelled (`countsAsSale`). A future-dated pre-order is shown
+  separately as **"Booked for later ₹X"** on Orders and the Dashboard. Revenue still lands
+  on the due date: it enters the actuals when that day arrives. Without this the weekly
+  and monthly ranges, which run to the end of the period, would count a pre-order due next
+  Friday today.
+- **Customer stats ignore not-yet-due pre-orders** (last order, status, spend, due and
+  lapsed lists), so booking something for next week does not make a customer look active.
+- **The mobile app (`bakery-mobile`) is not in use**; an Android and iOS app is planned
+  for the future. Leave it alone.
+
+Corrections to the handoff: the setting is `settings.timezone` (not `timeZone`);
+`stockAging.ts` works on production batches, not orders, so `countsAsSale` does not
+belong there; there is no "Accountant Pack" in the repo (still unlocated); the places
+that sum orders are `profit.ts`, `orderStats.ts`, `payments.ts`, `billing.ts`,
+`customers.ts`, `aiSnapshot.ts`, `SummaryView`, `OrdersView`, `BillModal` and
+`useMenuActions`; `holdsStock` must also cover `resetOrders` and the Shopify/Odoo import
+in `useIntegrations`. Write the stock-integrity tests first (delete, item change,
+quantity change and cancel, for both kinds of order). Afterwards, teach the order message
+reader to switch a future date to Pre-order, fill the notes and pick up an advance.
+
+After that, in the owner's queue: the Phase 2 pricing handoff
+(`price-margin-intelligence-handoff.md`: `pricing.ts`, margin drift, target-margin prices,
+what-if; it also unlocks the chat's `run_pricing_scenario` tool) and the still-open
+`parse-production-run` from the AI handoff.
+
 ## Open items for the user (none blocking)
 
 - **Razorpay or Cashfree instead of Stripe.** The user wanted this later. We
