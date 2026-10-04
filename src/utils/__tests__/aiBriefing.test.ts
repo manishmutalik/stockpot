@@ -179,6 +179,26 @@ describe('buildDeterministicBriefing', () => {
     expect(validateBriefingContent(content, promptSnapshot).ok).toBe(true);
   });
 
+  it('raises a material that will run out soon, with the day and a quantity from the app, unless the low-stock line already has it', () => {
+    const runs = Array.from({ length: 28 }, (_, i) => ({ recipeId: 'cake', quantityProduced: 6, date: addDays(TODAY, -i) }));
+    const build = (mats: any[]) => buildBusinessSnapshot({
+      period: { start: YESTERDAY, end: YESTERDAY }, orders: [order(YESTERDAY)], menu, materials: mats, experiments: [], wastageLogs: [],
+      settings: { name: 'Asha Bakes', ...NO_GST, timezone: 'Asia/Kolkata' } as any, currency: { code: 'INR', symbol: '₹' }, customers: [], today: TODAY, productionRuns: runs,
+    });
+    // 6 cakes a day x 0.5 kg = 3 kg of flour a day: 10 kg lasts 3 days.
+    const soon = build(materials.map(m => (m.id === 'flour' ? { ...m, threshold: 0, dateAdded: addDays(TODAY, -60) } : { ...m, threshold: 0, expiryDate: undefined })));
+    const content = buildDeterministicBriefing(soon.promptSnapshot);
+    const line = content.attention.find(a => a.kind === 'low_stock');
+    expect(line && renderAiText(line.text, soon.registry, ctx)).toBe('Flour may run out around Fri 3 Jul; about 23 kg would cover the next week.'); // 3 kg a day x 11 days, less 10 on hand
+    expect(validateBriefingContent(content, soon.promptSnapshot).ok).toBe(true);
+
+    // When flour is already below its alert level the low-stock line names it, so it is not said twice.
+    const alreadyLow = build(materials.map(m => (m.id === 'flour' ? { ...m, remaining: 1, threshold: 2, dateAdded: addDays(TODAY, -60) } : { ...m, threshold: 0, expiryDate: undefined })));
+    const texts = buildDeterministicBriefing(alreadyLow.promptSnapshot).attention.filter(a => a.kind === 'low_stock').map(a => a.text);
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toMatch(/^Running low:/);
+  });
+
   it('is empty of attention items when nothing needs it', () => {
     const calm = buildBusinessSnapshot({
       period: { start: YESTERDAY, end: YESTERDAY }, orders: [order(YESTERDAY, { customerName: undefined, customerPhone: undefined })], menu,

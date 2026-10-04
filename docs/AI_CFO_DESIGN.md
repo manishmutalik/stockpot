@@ -124,10 +124,14 @@ first server-side entitlement check.
 - Known limits: one person under two phone numbers, or a name typed two ways
   with no phone, shows as two customers; a "No phone" tag marks name-only ones.
 
-## Reorder-point suggestions (Feature 5): proposed rules, not yet built
+## Reorder-point suggestions (Feature 5): built
 
 The original handoff only says "unchanged from the first version", and that
-text is not in the repository, so these rules are proposed here first. Pure
+text is not in the repository, so these rules were written here first and then
+built as written (`src/utils/reorder.ts`, tests in `utils/__tests__/reorder.test.ts`).
+One correction to the wording below: a material's `threshold` is an amount in its
+own unit (the app's low-stock alert fires at `remaining <= threshold`), not a
+percentage, and `at_threshold` uses exactly that test. Pure
 calculation, no model call. Changing a constant is a one-line edit; each is a
 named export so tests pin the behaviour.
 
@@ -184,7 +188,17 @@ purchase order when Purchase Management is built.
 will spoil before it is used), pack sizes and supplier minimums, and materials
 whose use is only through R&D.
 
-**Tests to write with it:** a steady-use material flagged exactly at lead plus
+**Where it shows (built).** A "Reorder suggestions" card on the Inventory tab, for
+every account, with or without AI: the material, how many days are left and the
+run-out day, how much to order, "Already low" / "Low confidence" tags, a Restock
+button, and a note naming materials with too little history. The briefing and the
+chat also get `inventory.reorderSoon` in their snapshot (at most 5, as figures: days
+left, the run-out date and a `quantity` figure with its unit), so what they say is
+rendered by the app from the same numbers. The code-built briefing adds a line
+("X may run out around <date>; about <quantity> would cover the next week") unless
+the material is already in the low-stock line.
+
+**Tests written with it:** a steady-use material flagged exactly at lead plus
 safety days; a busy last week raising the rate; fewer than 7 days of history
 giving no suggestion; unit conversion (a recipe in g, stock in kg); a discard
 counted as use; a restock not counted; R&D excluded; stock already at the
@@ -336,7 +350,7 @@ runs (the handoff's `parse-production-run`) yet.
 3. Daily briefing (with the canned demo sample) (built).
 4. Ask Your Business (without the what-if tool until Phase 2 exists) (built).
 5. Order parsing in the Add Order form, with a delivery address (built).
-6. Reorder-point suggestions, then the briefing's stock items.
+6. Reorder-point suggestions, then the briefing's stock items (built).
 
 Deferred: everything that needs Phase 2 (`pricing.ts`): repricing alerts, price
 drift and the what-if tool. The price log (shipped) gives `materialPriceMoves`

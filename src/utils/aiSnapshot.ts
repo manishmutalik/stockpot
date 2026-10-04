@@ -24,8 +24,9 @@ import { countByStatus, customersForTab, type CustomerProfile } from './customer
 import { EXPIRING_SOON_DAYS, getStockStatus } from './inventoryStatus';
 import { addDays, daysBetween } from './localDate';
 import { financialsForRange, productProfits, type Financials } from './profit';
+import { reorderSuggestions, type ReorderConfidence, type ReorderFlag } from './reorder';
 
-export const SNAPSHOT_LIMITS = { products: 30, customersPerList: 10, stockItems: 10, trendDays: 7, unsoldItems: 15, mentionedCustomers: 5 } as const;
+export const SNAPSHOT_LIMITS = { products: 30, customersPerList: 10, stockItems: 10, trendDays: 7, unsoldItems: 15, mentionedCustomers: 5, reorderSoon: 5 } as const;
 
 export type ComparisonMode = 'same_weekday_last_week' | 'previous_period';
 
@@ -73,7 +74,11 @@ export interface AiSnapshot {
   unsoldItems: string[];
   /** The last few days up to the period end, oldest first. */
   trend: { day: string; revenue: string; trueProfit: string }[];
-  inventory: { cashTiedUp: string; lowStock: string[]; expiringSoon: string[] };
+  inventory: {
+    cashTiedUp: string; lowStock: string[]; expiringSoon: string[];
+    /** Materials likely to run out soon at the current rate of use (see utils/reorder), soonest first. */
+    reorderSoon: { name: string; daysOfCover: string; runOutDate: string; suggestedQty: string; flag: ReorderFlag; confidence: ReorderConfidence }[];
+  };
   customers: {
     total: string; due: string; lapsed: string; newCustomers: string;
     dueList: { label: string; daysSinceLastOrder: string; favourite?: string; contribution: string }[];
@@ -110,6 +115,8 @@ export function buildBusinessSnapshot(input: {
   today: string;
   /** Labels of customers the owner asked about by name (the chat). Their details are added to the snapshot. */
   mentionedCustomers?: string[];
+  /** Production runs, to work out which materials will run out soon. Without them none are listed. */
+  productionRuns?: { recipeId: string; quantityProduced: number; date: string }[];
 }): BuiltSnapshot {
   const { period, orders, menu, materials, settings, currency } = input;
   const comparison = input.comparison ?? comparisonPeriod(period);
@@ -198,6 +205,17 @@ export function buildBusinessSnapshot(input: {
     // Judged against the business's own date, with the same "expiring" window as the Inventory screen.
     .filter(m => !!m.expiryDate && daysBetween(input.today, m.expiryDate) <= EXPIRING_SOON_DAYS)
     .slice(0, SNAPSHOT_LIMITS.stockItems).map(m => nameId('mat', m.id, m.name));
+  // Materials that will run out before the low-stock alert would warn, from recent production and discards.
+  const reorderSoon = reorderSuggestions({
+    materials, menu, productionRuns: input.productionRuns ?? [], wastageLogs: input.wastageLogs, today: input.today,
+  }).suggestions.slice(0, SNAPSHOT_LIMITS.reorderSoon).map(r => ({
+    name: nameId('mat', r.materialId, r.name),
+    daysOfCover: days(`r_${r.materialId}_cover`, `Days of ${r.name} left at the current rate of use`, Math.floor(r.daysOfCover)),
+    runOutDate: add(`r_${r.materialId}_runout`, { kind: 'date', value: r.runOutDate, label: `When ${r.name} runs out at the current rate of use` }),
+    suggestedQty: add(`r_${r.materialId}_qty`, { kind: 'quantity', value: r.suggestedQty, unit: r.unit, label: `How much ${r.name} would cover the next week` }),
+    flag: r.flag,
+    confidence: r.confidence,
+  }));
   const cashTiedUp = money('cash_tied_up', 'Money tied up in stock on hand', materials.reduce((sum, m) => sum + Math.max(m.remaining, 0) * (m.costPerUnit || 0), 0));
 
   // Customers: labels and counts only. Their names stay on the client.
@@ -249,7 +267,7 @@ export function buildBusinessSnapshot(input: {
       business: { name: settings.name, currency: currency.code, gstApplicable: !!settings.gstApplicable, timezone: settings.timezone ?? 'Asia/Kolkata' },
       period, comparison,
       figures: promptFigures, names, drivers, products, unsoldItems, trend,
-      inventory: { cashTiedUp, lowStock, expiringSoon },
+      inventory: { cashTiedUp, lowStock, expiringSoon, reorderSoon },
       customers, notes,
     },
     registry: { figures, names },

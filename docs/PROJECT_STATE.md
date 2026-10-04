@@ -144,7 +144,10 @@ guard, business snapshot, rules) and the daily briefing on the Dashboard
 (`POST /api/ai/briefing`, cached per day, validated with a code-built fallback;
 the demo shows a sample) and Ask Your Business (`POST /api/ai/chat`, a slide-over
 chat; no what-if tool until Phase 2) and order parsing (the Add Order form can be
-filled from a pasted message; `POST /api/ai/parse-order`). Next: reorder suggestions. Rule for every AI feature: no model-generated figures
+filled from a pasted message; `POST /api/ai/parse-order`) and reorder
+suggestions (`utils/reorder.ts`, a card on the Inventory tab, no AI needed). The AI list
+in the handoff is complete except `parse-production-run` and the Phase 2 items
+(repricing alerts, price drift, the what-if tool). Rule for every AI feature: no model-generated figures
 (see the design doc).
 
 ## Firestore security rules

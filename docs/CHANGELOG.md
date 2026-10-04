@@ -1,5 +1,21 @@
 # Changelog
 
+## Reorder suggestions
+
+A **Reorder suggestions** card on the Inventory tab shows which materials will run out
+before the low-stock alert would warn, when, and how much to order
+(`docs/AI_CFO_DESIGN.md`). It is a calculation from your own production runs and
+discards over the last four weeks (the larger of the 28-day and the 7-day rate, so a
+busy week counts), with no AI, so every account sees it.
+
+- A material is shown when it has about four days of stock left (two days to get it plus
+  two spare). The suggested quantity covers the next week on top of that, rounded up.
+- "Already low" marks one the low-stock alert already covers; "Low confidence" marks one
+  with under two weeks of history or very uneven use.
+- A material used for under a week is not guessed at: the card says there is not enough
+  history yet. Restocks and R&D are not counted as use.
+- The briefing and the chat know about it too, with the numbers filled in by the app.
+
 ## Add an order from a pasted message
 
 The Add Order form can fill itself from a customer's WhatsApp message

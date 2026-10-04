@@ -155,6 +155,14 @@ export function buildDeterministicBriefing(snapshot: AiSnapshot): BriefingConten
   const attention: BriefingAttention[] = [];
   const names = (ids: string[]) => ids.slice(0, 3).map(id => `{{name:${id}}}`).join(', ');
   if (snapshot.inventory.lowStock.length) attention.push({ kind: 'low_stock', text: `Running low: ${names(snapshot.inventory.lowStock)}.` });
+  // A material that will run out soon at the current rate of use, and is not already in the low-stock line.
+  const soon = (snapshot.inventory.reorderSoon ?? []).find(r => !snapshot.inventory.lowStock.includes(r.name));
+  if (soon) {
+    attention.push({
+      kind: 'low_stock',
+      text: `{{name:${soon.name}}} may run out around {{fig:${soon.runOutDate}}}; about {{fig:${soon.suggestedQty}}} would cover the next week.`,
+    });
+  }
   if (snapshot.inventory.expiringSoon.length) attention.push({ kind: 'expiring', text: `Expiring soon or expired: ${names(snapshot.inventory.expiringSoon)}.` });
   if (snapshot.figures.unpaid_now) attention.push({ kind: 'unpaid', text: `{{fig:unpaid_now}} of revenue is not paid yet.` });
   const due = snapshot.customers.dueList[0];

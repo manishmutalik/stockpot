@@ -47,6 +47,51 @@ describe('comparisonPeriod', () => {
   });
 });
 
+describe('materials that will run out soon', () => {
+  const run = (daysAgo: number, quantityProduced: number) => ({ recipeId: 'cake', quantityProduced, date: new Date(Date.UTC(2026, 5, 30 - daysAgo)).toISOString().split('T')[0] });
+  // 4 cakes a day x 0.5 kg = 2 kg of flour a day; flour has 10 kg, so 5 days: above the 4-day line.
+  const steady = Array.from({ length: 28 }, (_, i) => run(i, 4));
+  const buildWithFlour = (remaining: number, runs: any[] = steady) => {
+    const mats = materials.map(m => (m.id === 'flour' ? { ...m, remaining, dateAdded: '2026-05-01' } : m));
+    const settings: any = { name: 'Asha Bakes', ...NO_GST, timezone: 'Asia/Kolkata' };
+    return buildBusinessSnapshot({
+      period: { start: '2026-06-29', end: '2026-06-29' }, orders: [], menu, materials: mats, experiments: [], wastageLogs: [],
+      settings, currency: { code: 'INR', symbol: '₹' }, customers: [], today: TODAY, productionRuns: runs,
+    });
+  };
+
+  it('lists a material that runs out within lead time plus safety, with the day and a quantity as figures', () => {
+    const { promptSnapshot, registry } = buildWithFlour(6);
+    expect(promptSnapshot.inventory.reorderSoon).toHaveLength(1);
+    const r = promptSnapshot.inventory.reorderSoon[0];
+    expect(r).toMatchObject({ name: 'mat_flour', flag: 'before_threshold', confidence: 'normal' });
+    expect(registry.figures[r.daysOfCover]).toMatchObject({ kind: 'days', value: 3 });
+    expect(registry.figures[r.runOutDate]).toMatchObject({ kind: 'date', value: '2026-07-03' });
+    expect(registry.figures[r.suggestedQty]).toMatchObject({ kind: 'quantity', value: 16, unit: 'kg' });
+    expect(registry.names.mat_flour).toBe('Flour');
+    expect(promptSnapshot.figures[r.suggestedQty].text).toBe('16 kg');
+    expect(promptSnapshot.figures[r.runOutDate].text).toBe('Fri 3 Jul');
+  });
+
+  it('lists nothing when stock is comfortable, when there are no runs, or when none were given', () => {
+    expect(buildWithFlour(20).promptSnapshot.inventory.reorderSoon).toEqual([]);
+    expect(buildWithFlour(6, []).promptSnapshot.inventory.reorderSoon).toEqual([]);
+    expect(build([]).promptSnapshot.inventory.reorderSoon).toEqual([]);
+  });
+
+  it('is rendered by the app from its own figures, and passes the figure guard', () => {
+    const { promptSnapshot, registry } = buildWithFlour(6);
+    const r = promptSnapshot.inventory.reorderSoon[0];
+    const text = `{{name:${r.name}}} may run out around {{fig:${r.runOutDate}}}; about {{fig:${r.suggestedQty}}} would cover the next week.`;
+    expect(validateAiText(text, { figures: Object.keys(promptSnapshot.figures), names: Object.keys(promptSnapshot.names) }).ok).toBe(true);
+    expect(renderAiText(text, registry, { currencySymbol: '₹' })).toBe('Flour may run out around Fri 3 Jul; about 16 kg would cover the next week.');
+  });
+
+  it('is capped', () => {
+    expect(SNAPSHOT_LIMITS.reorderSoon).toBe(5);
+  });
+});
+
 describe('the figures', () => {
   it('match what the dashboard computes for the same period, exactly', () => {
     const orders = [order(1), order(1, { quantity: 2, discount: 15 }), order(8), order(2)];

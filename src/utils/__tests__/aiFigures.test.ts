@@ -42,6 +42,14 @@ describe('formatFigure', () => {
     expect(formatFigure(registry.figures.last, ctx)).toBe('Fri 2 Oct');
   });
 
+  it('formats a quantity with its unit: decimals below a hundred, whole numbers from there', () => {
+    expect(formatFigure({ kind: 'quantity', value: 2.4, unit: 'kg', label: '' }, ctx)).toBe('2.4 kg');
+    expect(formatFigure({ kind: 'quantity', value: 22, unit: 'kg', label: '' }, ctx)).toBe('22 kg');
+    expect(formatFigure({ kind: 'quantity', value: 1300, unit: 'g', label: '' }, ctx)).toBe('1,300 g');
+    expect(formatFigure({ kind: 'quantity', value: 120000, unit: 'g', label: '' }, ctx)).toBe('1,20,000 g');
+    expect(formatFigure({ kind: 'quantity', value: 5, label: '' }, ctx)).toBe('5');
+  });
+
   it('uses the currency symbol it is given', () => {
     expect(formatFigure(registry.figures.revenue, { currencySymbol: '$', locale: 'en-US' })).toBe('$6,240');
   });

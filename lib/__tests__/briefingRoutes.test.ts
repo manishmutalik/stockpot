@@ -247,6 +247,15 @@ describe('validateSnapshotShape', () => {
     expect(validateSnapshotShape(snapshot)).toBe(true);
   });
 
+  it('accepts reorder suggestions, and a snapshot from an older client without them', () => {
+    const withReorder = clone();
+    withReorder.inventory.reorderSoon = [{ name: 'mat_flour', daysOfCover: 'r_flour_cover', runOutDate: 'r_flour_runout', suggestedQty: 'r_flour_qty', flag: 'before_threshold', confidence: 'normal' }];
+    expect(validateSnapshotShape(withReorder)).toBe(true);
+    const older = clone();
+    delete older.inventory.reorderSoon;
+    expect(validateSnapshotShape(older)).toBe(true);
+  });
+
   it('refuses oversized or malformed parts', () => {
     const cases: [string, (s: any) => void][] = [
       ['a huge name', s => { s.names.item_x = 'x'.repeat(500); }],
@@ -258,6 +267,11 @@ describe('validateSnapshotShape', () => {
       ['too many customers', s => { s.customers.dueList = Array.from({ length: 11 }, () => ({ label: 'C-1' })); }],
       ['a long customer label', s => { s.customers.dueList = [{ label: 'C-' + 'x'.repeat(40) }]; }],
       ['notes that are not text', s => { s.notes = [1]; }],
+      ['reorder suggestions that are not a list', s => { s.inventory.reorderSoon = 'x'; }],
+      ['too many reorder suggestions', s => { s.inventory.reorderSoon = Array.from({ length: 6 }, () => ({ name: 'a', daysOfCover: 'b', runOutDate: 'c', suggestedQty: 'd', flag: 'before_threshold', confidence: 'low' })); }],
+      ['a reorder suggestion with a wrong flag', s => { s.inventory.reorderSoon = [{ name: 'a', daysOfCover: 'b', runOutDate: 'c', suggestedQty: 'd', flag: 'maybe', confidence: 'low' }]; }],
+      ['a reorder suggestion missing a figure', s => { s.inventory.reorderSoon = [{ name: 'a', daysOfCover: 'b', runOutDate: 'c', flag: 'at_threshold', confidence: 'low' }]; }],
+      ['a reorder suggestion with a very long name', s => { s.inventory.reorderSoon = [{ name: 'a'.repeat(100), daysOfCover: 'b', runOutDate: 'c', suggestedQty: 'd', flag: 'at_threshold', confidence: 'low' }]; }],
       ['no business', s => { delete s.business; }],
       ['too big overall', s => { s.notes = Array.from({ length: 10 }, () => 'x'.repeat(150)); s.names = Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`n${i}`, 'x'.repeat(160)])); s.figures = Object.fromEntries(Array.from({ length: 500 }, (_, i) => [`f${i}`, { label: 'x'.repeat(200), text: 'y' }])); }],
     ];
