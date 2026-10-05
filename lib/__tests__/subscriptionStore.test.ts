@@ -11,7 +11,7 @@ vi.mock('firebase-admin/firestore', () => ({
   getFirestore: () => ({ collection: mockCollection }),
 }));
 
-import { getBillingInfo, setBillingInfo, hasActiveAccess, findUidByStripeCustomerId } from '../subscriptionStore';
+import { getBillingInfo, setBillingInfo, hasActiveAccess, findUidByRazorpaySubscriptionId } from '../subscriptionStore';
 
 describe('subscriptionStore', () => {
   beforeEach(() => {
@@ -24,22 +24,26 @@ describe('subscriptionStore', () => {
       mockGet.mockResolvedValueOnce({ data: () => ({}) });
       const info = await getBillingInfo('user1');
       expect(info.status).toBe('none');
-      expect(info.stripeCustomerId).toBeNull();
+      expect(info.razorpaySubscriptionId).toBeNull();
+      expect(info.trialUsed).toBe(false);
+      expect(info.cancelScheduled).toBe(false);
     });
 
     it('returns the stored billing info merged over defaults', async () => {
       mockGet.mockResolvedValueOnce({
-        data: () => ({ billing: { status: 'active', stripeCustomerId: 'cus_123' } }),
+        data: () => ({ billing: { status: 'active', razorpaySubscriptionId: 'sub_123', trialUsed: true } }),
       });
       const info = await getBillingInfo('user1');
       expect(info.status).toBe('active');
-      expect(info.stripeCustomerId).toBe('cus_123');
+      expect(info.razorpaySubscriptionId).toBe('sub_123');
+      expect(info.trialUsed).toBe(true);
+      expect(info.cancelScheduled).toBe(false); // filled in from the defaults
     });
   });
 
   describe('setBillingInfo', () => {
     it('merges the billing field onto the user document with an updatedAt timestamp', async () => {
-      await setBillingInfo('user1', { status: 'active', stripeCustomerId: 'cus_123' });
+      await setBillingInfo('user1', { status: 'active', razorpaySubscriptionId: 'sub_123' });
 
       expect(mockCollection).toHaveBeenCalledWith('users');
       expect(mockDoc).toHaveBeenCalledWith('user1');
@@ -65,18 +69,18 @@ describe('subscriptionStore', () => {
     });
   });
 
-  describe('findUidByStripeCustomerId', () => {
+  describe('findUidByRazorpaySubscriptionId', () => {
     it('returns null when no user matches', async () => {
       mockLimit.mockReturnValue({ get: () => Promise.resolve({ empty: true, docs: [] }) });
-      const uid = await findUidByStripeCustomerId('cus_unknown');
+      const uid = await findUidByRazorpaySubscriptionId('sub_unknown');
       expect(uid).toBeNull();
     });
 
     it('returns the matching user id', async () => {
       mockLimit.mockReturnValue({ get: () => Promise.resolve({ empty: false, docs: [{ id: 'user1' }] }) });
-      const uid = await findUidByStripeCustomerId('cus_123');
+      const uid = await findUidByRazorpaySubscriptionId('sub_123');
       expect(uid).toBe('user1');
-      expect(mockWhere).toHaveBeenCalledWith('billing.stripeCustomerId', '==', 'cus_123');
+      expect(mockWhere).toHaveBeenCalledWith('billing.razorpaySubscriptionId', '==', 'sub_123');
     });
   });
 });

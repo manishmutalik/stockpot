@@ -12,7 +12,7 @@ landing page price is ₹1,200 a month.
 
 Stack: React 18, Vite, TypeScript, Tailwind v4, motion/react, lucide-react,
 react-router-dom, Firebase Auth and Firestore, an Express `server.ts` using
-firebase-admin, Stripe, `qrcode`, `jspdf`, `html2canvas`. Tests are Vitest and
+firebase-admin, Razorpay (plain `fetch`, no SDK), `qrcode`, `jspdf`, `html2canvas`. Tests are Vitest and
 Testing Library; Playwright is used for visual checks.
 
 ## Conventions that matter
@@ -268,10 +268,19 @@ Nothing is queued. The AI list in the handoff is complete.
 
 ## Open items for the user (none blocking)
 
-- **Razorpay or Cashfree instead of Stripe.** The user wanted this later. We
-  need: which provider, whether ₹1,200 includes 18% GST, whether there are
-  existing Stripe subscribers, and whether to keep Stripe.
-- The Stripe price must be set to ₹1,200/month in INR.
+- **Razorpay is built and tested only against mocks.** The account was under review, so
+  nothing has run against Razorpay itself yet. When it is live the owner posts the Test Mode
+  Key Id, Key Secret, a ₹1,200 monthly Plan id and a webhook secret (set as Render
+  environment variables, never in chat). Then, in Test Mode: run a full checkout, check the
+  webhook arrives, and confirm Razorpay accepts a first charge 45 days ahead (the trial). The
+  paywall is still off (`SKIP_BILLING_GATE_FOR_TESTING` in `src/App.tsx`, and
+  `BILLING_DISABLED`); turning it on is the last step. Stripe is gone from the code (no
+  existing Stripe subscribers: the paywall was never on).
+- **Trial and price decisions.** The free trial is 45 days (`src/utils/trial.ts`, shared by the
+  landing page, paywall, Terms and server). ₹1,200 a month becomes GST-inclusive once the
+  business has a GST number (about ₹1,016.95 before GST, ₹183.05 of GST); until then the page
+  makes no GST claim and none is charged. On registration: set the page wording, and make the
+  Razorpay plan amount match what is intended.
 - The banner logo image still shows `$` and `%`; it needs a rupee version.
 
 Done by the owner and tested: the Anthropic workspace id (or a key inside a workspace),

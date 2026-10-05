@@ -76,21 +76,23 @@ describe('PaywallScreen', () => {
     const onContinue = vi.fn(); const onSignOut = vi.fn();
     render(<PaywallScreen needsAttention={false} isBusy={false} onContinue={onContinue} onSignOut={onSignOut} />);
     expect(screen.getByText('Start your free trial')).toBeTruthy();
+    expect(screen.getByText(/free for 45 days/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Start Free Trial' }));
     expect(onContinue).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(onSignOut).toHaveBeenCalled();
   });
 
-  it('asks a lapsed subscriber to update billing', () => {
-    render(<PaywallScreen needsAttention isBusy={false} onContinue={vi.fn()} onSignOut={vi.fn()} />);
-    expect(screen.getByText('Subscription needs attention')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Update Billing' })).toBeTruthy();
+  it('asks a lapsed subscriber to subscribe again, with no mention of a free trial', () => {
+    const { container } = render(<PaywallScreen needsAttention isBusy={false} onContinue={vi.fn()} onSignOut={vi.fn()} />);
+    expect(screen.getByText('Subscribe to keep going')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Subscribe' })).toBeTruthy();
+    expect(container.textContent).not.toMatch(/free for/i);
   });
 
-  it('shows Redirecting while busy', () => {
+  it('shows Opening while busy', () => {
     render(<PaywallScreen needsAttention={false} isBusy onContinue={vi.fn()} onSignOut={vi.fn()} />);
-    expect((screen.getByRole('button', { name: 'Redirecting…' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Opening…' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

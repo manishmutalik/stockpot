@@ -2,7 +2,7 @@
  * anthropic.ts
  *
  * Lazily creates one shared Anthropic client from ANTHROPIC_API_KEY, the same
- * pattern as lib/stripe.ts: the server boots and serves everything else with no
+ * pattern as lib/razorpay.ts: the server boots and serves everything else with no
  * key, and only an actual AI request fails, with a clear message. The key is
  * server-side only and never reaches the browser.
  */

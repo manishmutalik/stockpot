@@ -529,9 +529,9 @@ export interface AppViewProps {
   updateCurrency: (c: any) => void;
   handleLogout: () => void;
 
-  billing: { status: string; currentPeriodEnd: number | null };
-  openBillingPortal: () => void;
-  isOpeningPortal: boolean;
+  billing: { status: string; currentPeriodEnd: number | null; trialUsed: boolean; cancelScheduled: boolean };
+  cancelSubscription: () => void;
+  isCancelling: boolean;
   startCheckout: (email?: string) => void;
   isStartingCheckout: boolean;
 

@@ -569,7 +569,7 @@ function BakeryApp() {
     isImportingOdoo, importOdooOrders,
   } = useIntegrations(menu, materials, orderDate, showAlert, isAuthReady && !!user);
 
-  const { billing, isLoadingBilling, hasAccess, startCheckout, isStartingCheckout, openBillingPortal, isOpeningPortal } = useBilling(isAuthReady && !!user, showAlert);
+  const { billing, isLoadingBilling, hasAccess, startCheckout, isStartingCheckout, cancelSubscription, isCancelling } = useBilling(isAuthReady && !!user, showAlert);
 
   const [isAlertDismissed, setIsAlertDismissed] = useState(false);
   const [isExpiredAlertDismissed, setIsExpiredAlertDismissed] = useState(false);
@@ -1206,9 +1206,9 @@ function BakeryApp() {
     const isPastDueOrCanceled = billing.status === 'past_due' || billing.status === 'canceled';
     return (
       <PaywallScreen
-        needsAttention={isPastDueOrCanceled}
-        isBusy={isStartingCheckout || isOpeningPortal}
-        onContinue={() => isPastDueOrCanceled ? openBillingPortal() : startCheckout(user?.email || undefined)}
+        needsAttention={isPastDueOrCanceled || billing.trialUsed}
+        isBusy={isStartingCheckout}
+        onContinue={() => startCheckout(user?.email || undefined)}
         onSignOut={handleLogout}
       />
     );
@@ -1272,7 +1272,7 @@ function BakeryApp() {
     addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,
-    billing, openBillingPortal, isOpeningPortal, startCheckout, isStartingCheckout,
+    billing, cancelSubscription, isCancelling, startCheckout, isStartingCheckout,
   };
 
   return (
