@@ -341,6 +341,19 @@ runs (the handoff's `parse-production-run`) yet.
   (`suggestMenuItem`) that is only used if the owner accepts it. Stock is still a hard
   cap when the order is saved.
 
+## Pre-orders and the AI (built)
+
+- **Figures.** Every figure handed to the model is an actual one (due today or earlier,
+  not cancelled). The snapshot's `preorders` section carries what is booked ahead: the
+  open pre-orders due today and tomorrow (orders and units per item, top
+  `SNAPSHOT_LIMITS.preorderItems` items) and the booked-for-later total, all registered
+  as figures so text uses tokens, never digits. A kept advance is a profit driver.
+- **Briefing.** A deterministic line comes first: "Pre-orders due today/tomorrow:
+  {{fig}} {{name}}...". The model only adds words around it.
+- **Order parsing.** The parser also returns `notes` and `advanceAmount`; like every field
+  both must appear in the message. A future date switches the form to Pre-order; the
+  browser resolves the date. Nothing is saved until the owner presses the button.
+
 ## Delivery plan
 
 1. Customer insights, time zone setting, design doc (built).

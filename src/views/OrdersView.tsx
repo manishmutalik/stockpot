@@ -464,7 +464,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
       return { date, clusters: searched.filter(matches) };
     });
 
-    const upcomingByDate = byDay(orders.filter(o => isOpenPreorder(o) && o.date > today));
+    const upcomingByDate = byDay(orders.filter(o => !!o.preorder && !o.cancelledOn && o.date > today));
     const upcomingDays = Object.keys(upcomingByDate).sort().map(date => ({ date, clusters: clustersOf(upcomingByDate[date]) }));
     counts.upcoming = upcomingDays.reduce((n, d) => n + d.clusters.length, 0);
 

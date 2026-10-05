@@ -132,18 +132,19 @@ describe('the Upcoming tab', () => {
     pre('nextmonth', { date: '2026-11-20', customerName: 'Nov' }),
   ];
 
-  it('counts the open pre-orders due after today, whatever date range is shown', () => {
+  it('counts the pre-orders due after today (handed over early included), whatever date range is shown', () => {
     render(<OrdersView {...makeProps(orders)} />);
-    expect(screen.getByRole('button', { name: /^Upcoming/ }).textContent).toContain('3');
+    expect(screen.getByRole('button', { name: /^Upcoming/ }).textContent).toContain('4');
   });
 
-  it('lists them soonest first, grouped by due date, with Tomorrow named, and nothing else', () => {
+  it('lists them soonest first, grouped by due date, with Tomorrow named, and no cancelled or past ones', () => {
     render(<OrdersView {...makeProps(orders)} />);
     fireEvent.click(screen.getByRole('button', { name: /^Upcoming/ }));
     expect(screen.getByDisplayValue('Priya')).toBeTruthy();
     expect(screen.getByDisplayValue('Rahul')).toBeTruthy();
     expect(screen.getByDisplayValue('Nov')).toBeTruthy(); // outside the date range, still upcoming
-    for (const name of ['Done', 'Gone', 'Overdue']) expect(screen.queryByDisplayValue(name)).toBeNull();
+    expect(screen.getByDisplayValue('Done')).toBeTruthy(); // handed over early: still booked for a later day, so it stays visible
+    for (const name of ['Gone', 'Overdue']) expect(screen.queryByDisplayValue(name)).toBeNull();
     const text = document.body.textContent ?? '';
     expect(text).toContain('Tomorrow · Mon, 5 October 2026');
     expect(text.indexOf('5 October')).toBeLessThan(text.indexOf('9 October'));
