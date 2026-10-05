@@ -1,5 +1,20 @@
 # Changelog
 
+## New landing page
+
+The home page is rebuilt from the new Stitch design, using the copy from the website content
+plan. Hero with the real Dashboard on a tablet, the three profit leaks, four feature blocks
+(orders from a message, bills and UPI, true profit per order, price alerts), the morning
+briefing and stock cards, a four-step "how it works", the ₹1,200 a month plan with the
+14-day trial, and ten FAQs.
+
+- Screens shown are real captures of the app on the demo kitchen. Old screenshots and the
+  two banner images that nothing uses any more were removed from `public/landing/`.
+- No claim is made about GST on the price (undecided), and design claims the app does not
+  back up (supplier-invoice alerts, baking-loss tracking, brand names) were left out.
+- Nav links scroll to Features, How it works, Pricing and FAQ; the extra web-font load was
+  dropped, the page uses the app's own fonts.
+
 ## Fixes
 
 - **Target margin, alert threshold and price rounding now stay set.** They were saved but not
