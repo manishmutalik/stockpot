@@ -20,8 +20,10 @@
  */
 import { auth, db, doc, setDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { MenuItem, Order, PaymentMethod, RawMaterial } from '../types';
+import { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../types';
 import { stampFor } from '../utils/orderPricing';
+import { holdsStock, isOpenPreorder } from '../utils/preorders';
+import { saleAmounts } from '../utils/profit';
 
 export function useOrderActions(
   menu: MenuItem[],
@@ -32,10 +34,27 @@ export function useOrderActions(
   /** Needed to stamp each new order with what its item costs to make right now. */
   materials: RawMaterial[],
   /** Fee % per payment method (Settings). The rate is copied onto an order when its method is recorded, so later changes don't alter past profit. */
-  paymentFeeRates: Partial<Record<PaymentMethod, number>> = {}
+  paymentFeeRates: Partial<Record<PaymentMethod, number>> = {},
+  options: {
+    /** Today in the business's time zone (YYYY-MM-DD): when an order is booked, an advance received or an order cancelled. Defaults to the UTC date. */
+    today?: () => string;
+    /** GST settings, to work out what the customer pays when deciding whether an advance covers it. Absent: no GST. */
+    gst?: Pick<BakerySettings, 'gstApplicable' | 'gstRate' | 'gstPricingMode'>;
+  } = {}
 ) {
+  const todayDate = () => (options.today ? options.today() : new Date().toISOString().split('T')[0]);
   /** What to write to record how an order was paid, with the fee rate in force right now. */
   const paymentFields = (method: PaymentMethod) => ({ paymentMethod: method, paymentFeeRate: paymentFeeRates[method] ?? 0 });
+
+  const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  /** "Tue 6 Oct", built by hand so it does not depend on the runtime's locale. */
+  const formatDueDate = (iso: string) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
+  };
+  const describeLines = (lines: { menuItemId: string; quantity: number }[], items: MenuItem[]) =>
+    lines.map(l => `${l.quantity} ${items.find(m => m.id === l.menuItemId)?.name ?? 'item'}`).join(', ');
 
   /**
    * Creates one or more Order documents from a single "Add Order"
@@ -71,8 +90,18 @@ export function useOrderActions(
    * then claimed atomically in the same batch as the order documents.
    */
   const addOrderGroup = async (
-    common: { date: string; customerName?: string; customerPhone?: string; deliveryAddress?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number },
-    lineItems: { menuItemId: string; quantity: number }[]
+    common: {
+      date: string; customerName?: string; customerPhone?: string; deliveryAddress?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number;
+      /** Booked ahead of time: `date` is then the due date, no stock is checked or taken until handover. */
+      preorder?: boolean;
+      /** 'morning', 'afternoon', 'evening' or a time. Pre-orders only. Shared by every item. */
+      dueSlot?: string;
+      /** Free text, shared by every item. Pre-orders only. */
+      notes?: string;
+      /** Money received now against a pre-order. Stored once, on the first item. */
+      advance?: { amount: number; method: PaymentMethod };
+    },
+    lineItems: { menuItemId: string; quantity: number; /** The agreed price of one unit, when it is not the menu price. */ unitPrice?: number }[]
   ) => {
     if (!auth.currentUser || lineItems.length === 0) return;
 
@@ -82,63 +111,116 @@ export function useOrderActions(
       throw new Error(`addOrderGroup: no menu item found for menuItemId "${badItem.menuItemId}"`);
     }
 
+    const preorder = common.preorder === true;
     const requestedByItem = new Map<string, number>();
     for (const li of lineItems) {
       requestedByItem.set(li.menuItemId, (requestedByItem.get(li.menuItemId) ?? 0) + li.quantity);
     }
-    for (const [menuItemId, requested] of requestedByItem) {
-      const item = menu.find(m => m.id === menuItemId)!;
-      const available = item.finishedGoodsStock ?? 0;
-      if (requested > available) {
-        showAlert(
-          'Not Enough Stock',
-          `Only ${available} unit(s) of "${item.name}" in stock, but this order needs ${requested}. Log another production run to cover the rest.`
-        );
-        throw new Error(`addOrderGroup: insufficient stock for menuItemId "${menuItemId}" (requested ${requested}, available ${available})`);
+    // A pre-order takes no stock until it is handed over, so only an order from stock is capped.
+    if (!preorder) {
+      for (const [menuItemId, requested] of requestedByItem) {
+        const item = menu.find(m => m.id === menuItemId)!;
+        const available = item.finishedGoodsStock ?? 0;
+        if (requested > available) {
+          showAlert(
+            'Not Enough Stock',
+            `Only ${available} unit(s) of "${item.name}" in stock, but this order needs ${requested}. Log another production run to cover the rest.`
+          );
+          throw new Error(`addOrderGroup: insufficient stock for menuItemId "${menuItemId}" (requested ${requested}, available ${available})`);
+        }
       }
     }
 
     const userId = auth.currentUser.uid;
+    const today = todayDate();
     const orderGroupId = lineItems.length > 1 ? Math.random().toString(36).substr(2, 9) : undefined;
+    const advance = preorder ? common.advance : undefined;
+
+    // What the new orders are, before they are written: the same stamps, so the total below is the one the bill will show.
+    const drafts = lineItems.map((item, index) => {
+      const id = Math.random().toString(36).substr(2, 9);
+      const order: Order = {
+        id,
+        menuItemId: item.menuItemId,
+        quantity: item.quantity,
+        date: common.date,
+        bookedOn: today,
+        // What the item sells for (or the agreed price) and costs now, kept on the order for good (see utils/orderPricing).
+        ...stampFor(menu.find(m => m.id === item.menuItemId)!, materials, item.unitPrice),
+        ...(common.customerName && { customerName: common.customerName }),
+        ...(common.customerPhone && { customerPhone: common.customerPhone }),
+        // Where it is going belongs to the whole order, so it is on every item of the group.
+        ...(common.deliveryAddress && { deliveryAddress: common.deliveryAddress }),
+        ...(orderGroupId && { orderGroupId }),
+        // A discount belongs to the whole order, so it goes on the first item only and is counted once.
+        ...(index === 0 && (common.discount ?? 0) > 0 && { discount: common.discount }),
+        ...(preorder && { preorder: true, stockClaimed: false }),
+        ...(preorder && common.dueSlot && { dueSlot: common.dueSlot }),
+        ...(preorder && common.notes && { notes: common.notes }),
+      };
+      return order;
+    });
+
+    // An advance is checked against what the customer owes, GST and discount included, before anything is written.
+    let advanceCoversAll = false;
+    if (advance) {
+      const owed = Math.round(saleAmounts(drafts, menu, options.gst ?? {}).customerPays * 100) / 100;
+      if (!(advance.amount > 0) || !Number.isFinite(advance.amount)) {
+        showAlert('Error', 'The advance must be more than nothing.');
+        throw new Error('addOrderGroup: advance must be positive');
+      }
+      if (advance.amount > owed + 0.005) {
+        showAlert('Error', `The advance (${advance.amount}) is more than the order comes to (${owed}). Please check it and try again.`);
+        throw new Error('addOrderGroup: advance exceeds the order total');
+      }
+      advanceCoversAll = advance.amount >= owed - 0.005;
+    }
 
     try {
       const batch = writeBatch(db);
-      for (const [index, item] of lineItems.entries()) {
-        const id = Math.random().toString(36).substr(2, 9);
-        const newOrder: Order = {
-          id,
-          menuItemId: item.menuItemId,
-          quantity: item.quantity,
-          date: common.date,
-          // What the item sells for and costs now, kept on the order for good (see utils/orderPricing).
-          ...stampFor(menu.find(m => m.id === item.menuItemId)!, materials),
-          ...(common.customerName && { customerName: common.customerName }),
-          ...(common.customerPhone && { customerPhone: common.customerPhone }),
-          // Where it is going belongs to the whole order, so it is on every item of the group.
-          ...(common.deliveryAddress && { deliveryAddress: common.deliveryAddress }),
-          ...(orderGroupId && { orderGroupId }),
-          // Only "pay later" is stored; an order with no value counts as paid.
-          ...(common.paymentStatus === 'unpaid' && { paymentStatus: 'unpaid' as const }),
-          // How it was paid (a pay-later order has not been paid yet), with the fee rate in force now.
-          ...(common.paymentStatus !== 'unpaid' && common.paymentMethod && paymentFields(common.paymentMethod)),
-          // A discount belongs to the whole order, so it goes on the first item only and is counted once.
-          ...(index === 0 && (common.discount ?? 0) > 0 && { discount: common.discount }),
-        };
-        batch.set(doc(db, 'users', userId, 'orders', id), newOrder);
-      }
-      for (const [menuItemId, requested] of requestedByItem) {
-        const item = menu.find(m => m.id === menuItemId)!;
-        const current = item.finishedGoodsStock ?? 0;
-        batch.set(doc(db, 'users', userId, 'menu', menuItemId), { finishedGoodsStock: current - requested }, { merge: true });
+      drafts.forEach((draft, index) => {
+        const order: Order = { ...draft };
+        // With an advance, whether the balance is still owed decides the payment status for the whole order.
+        const unpaid = advance ? !advanceCoversAll : common.paymentStatus === 'unpaid';
+        // Only "pay later" is stored; an order with no value counts as paid.
+        if (unpaid) order.paymentStatus = 'unpaid';
+        if (advance && index === 0) order.advance = { amount: advance.amount, method: advance.method, feeRate: paymentFeeRates[advance.method] ?? 0, date: today };
+        // How it was paid (a pay-later order has not been paid yet), with the fee rate in force now. An advance that
+        // covered everything was paid by its own method.
+        if (!unpaid) {
+          const method = advance ? advance.method : common.paymentMethod;
+          if (method) Object.assign(order, paymentFields(method));
+        }
+        batch.set(doc(db, 'users', userId, 'orders', order.id), order);
+      });
+      if (!preorder) {
+        for (const [menuItemId, requested] of requestedByItem) {
+          const item = menu.find(m => m.id === menuItemId)!;
+          const current = item.finishedGoodsStock ?? 0;
+          batch.set(doc(db, 'users', userId, 'menu', menuItemId), { finishedGoodsStock: current - requested }, { merge: true });
+        }
       }
       await batch.commit();
-      const firstItemName = menu.find(m => m.id === lineItems[0].menuItemId)?.name;
-      showAlert(
-        'Order Added',
-        lineItems.length > 1
-          ? `Added an order with ${lineItems.length} items.`
-          : `Added order for ${lineItems[0].quantity} unit(s) of ${firstItemName}.`
-      );
+      if (preorder) {
+        const due = formatDueDate(common.date);
+        const notBaked = [...requestedByItem]
+          .map(([id, qty]) => ({ item: menu.find(m => m.id === id)!, qty }))
+          .filter(({ item, qty }) => qty > (item.finishedGoodsStock ?? 0))
+          .map(({ item, qty }) => `${qty} ${item.name}`);
+        showAlert(
+          'Pre-order Added',
+          `Booked ${lineItems.length > 1 ? `${lineItems.length} items` : describeLines(lineItems, menu)} due ${due}.` +
+            (notBaked.length > 0 ? ` Not baked yet: ${notBaked.join(', ')}. Stock is taken when you hand the order over.` : ' Stock is taken when you hand the order over.')
+        );
+      } else {
+        const firstItemName = menu.find(m => m.id === lineItems[0].menuItemId)?.name;
+        showAlert(
+          'Order Added',
+          lineItems.length > 1
+            ? `Added an order with ${lineItems.length} items.`
+            : `Added order for ${lineItems[0].quantity} unit(s) of ${firstItemName}.`
+        );
+      }
     } catch (err: any) {
       console.error('addOrderGroup error:', err);
       showAlert('Error', `Failed to add order: ${err?.message || 'Unknown error'}`);
@@ -147,20 +229,129 @@ export function useOrderActions(
   };
 
   /**
-   * Marks an order as fulfilled — a plain completion status ("has this
-   * order actually been handed over/paid") with no inventory effect of its
-   * own. Stock was already claimed when the order was created (see
-   * addOrderGroup), so there's nothing left to deduct here. No-ops if the
-   * order was already fulfilled.
+   * Marks an order as handed over. For an ordinary order that is a plain
+   * completion status with no inventory effect of its own: stock was already
+   * claimed when the order was created (see addOrderGroup), so there is nothing
+   * left to deduct. No-ops if the order was already fulfilled.
+   *
+   * A pre-order takes its stock now. Every item of the order (a multi-item
+   * order is handed over whole, all or nothing) is checked against the same hard
+   * cap an order from stock meets, and if anything is short nothing is written.
+   * Otherwise one atomic batch claims the stock, marks every item claimed and
+   * handed over, and re-stamps the ingredient and packaging costs, because that
+   * is when the item was actually made. The price the customer agreed at booking
+   * and the item's name are kept. Returns whether the order was handed over.
    */
-  const fulfillOrder = async (order: Order) => {
-    if (!auth.currentUser) return;
-    if (order.fulfilled) return;
+  const fulfillOrder = async (order: Order): Promise<boolean> => {
+    if (!auth.currentUser) return false;
     const userId = auth.currentUser.uid;
+    const members = order.orderGroupId ? orders.filter(o => o.orderGroupId === order.orderGroupId) : [order];
+    const group = members.length > 0 ? members : [order];
+
+    if (!group.some(o => o.preorder)) {
+      // An ordinary order: unchanged.
+      if (order.fulfilled) return false;
+      try {
+        await setDoc(doc(db, 'users', userId, 'orders', order.id), { fulfilled: true }, { merge: true });
+        return true;
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${order.id}`);
+        return false;
+      }
+    }
+
+    if (group.some(o => o.cancelledOn)) {
+      showAlert('Cancelled', 'This pre-order was cancelled, so it cannot be handed over.');
+      return false;
+    }
+    const toHandOver = group.filter(o => !o.fulfilled);
+    if (toHandOver.length === 0) return false;
+
+    const requestedByItem = new Map<string, number>();
+    for (const o of toHandOver) requestedByItem.set(o.menuItemId, (requestedByItem.get(o.menuItemId) ?? 0) + o.quantity);
+    for (const [menuItemId, requested] of requestedByItem) {
+      const item = menu.find(m => m.id === menuItemId);
+      const available = item?.finishedGoodsStock ?? 0;
+      if (!item || requested > available) {
+        showAlert(
+          'Not Enough Stock',
+          `Only ${available} unit(s) of "${item?.name ?? 'this item'}" in stock, but this pre-order needs ${requested}. Log a production run first.`
+        );
+        return false;
+      }
+    }
+
     try {
-      await setDoc(doc(db, 'users', userId, 'orders', order.id), { fulfilled: true }, { merge: true });
+      const batch = writeBatch(db);
+      for (const o of toHandOver) {
+        const item = menu.find(m => m.id === o.menuItemId)!;
+        const costs = stampFor(item, materials);
+        batch.set(doc(db, 'users', userId, 'orders', o.id), {
+          stockClaimed: true,
+          fulfilled: true,
+          // The costs are those of today, when it was made; the booked price and name stay as they were.
+          unitIngredientCostAtSale: costs.unitIngredientCostAtSale,
+          unitPackagingCostAtSale: costs.unitPackagingCostAtSale,
+          unitInputGstAtSale: costs.unitInputGstAtSale,
+        }, { merge: true });
+      }
+      for (const [menuItemId, requested] of requestedByItem) {
+        const item = menu.find(m => m.id === menuItemId)!;
+        batch.set(doc(db, 'users', userId, 'menu', menuItemId), { finishedGoodsStock: (item.finishedGoodsStock ?? 0) - requested }, { merge: true });
+      }
+      await batch.commit();
+      return true;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${order.id}`);
+      return false;
+    }
+  };
+
+  /**
+   * Cancels a pre-order that has not been handed over (every item of it). A
+   * cancelled order is never a sale. Stock is untouched, since a pre-order never
+   * held any before handover. If an advance was paid, `advanceOutcome` says
+   * whether it was refunded (counts as nothing) or kept (income on today's date);
+   * it is required then, and stored on the item that holds the advance.
+   */
+  const cancelPreorder = async (order: Order, advanceOutcome?: 'refunded' | 'kept'): Promise<boolean> => {
+    if (!auth.currentUser) return false;
+    const userId = auth.currentUser.uid;
+    const members = order.orderGroupId ? orders.filter(o => o.orderGroupId === order.orderGroupId) : [order];
+    const group = members.length > 0 ? members : [order];
+
+    if (!group.some(o => o.preorder)) {
+      showAlert('Cannot Cancel', 'Only a pre-order can be cancelled. Delete an ordinary order to give its stock back.');
+      return false;
+    }
+    if (group.some(o => o.cancelledOn)) {
+      showAlert('Already Cancelled', 'This pre-order was already cancelled.');
+      return false;
+    }
+    if (!group.every(isOpenPreorder)) {
+      showAlert('Cannot Cancel', 'This pre-order was already handed over, so it cannot be cancelled.');
+      return false;
+    }
+    const holder = group.find(o => (o.advance?.amount ?? 0) > 0);
+    if (holder && !advanceOutcome) {
+      showAlert('Advance Received', 'An advance was paid on this pre-order. Choose whether it was refunded or kept.');
+      return false;
+    }
+
+    try {
+      const today = todayDate();
+      const batch = writeBatch(db);
+      for (const o of group) {
+        batch.set(doc(db, 'users', userId, 'orders', o.id), {
+          cancelledOn: today,
+          ...(holder && o.id === holder.id && { advanceOutcome }),
+        }, { merge: true });
+      }
+      await batch.commit();
+      return true;
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${order.id}`);
+      return false;
     }
   };
 
@@ -213,6 +404,30 @@ export function useOrderActions(
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const order = orders.find(o => o.id === id);
+
+    // An order that holds no stock (a pre-order not yet handed over, or a cancelled order) has nothing to
+    // rebalance: changing its item or quantity must neither check nor move stock, or it would add units that never left the shelf.
+    if (order && !holdsStock(order) && (field === 'menuItemId' || field === 'quantity')) {
+      const newMenuItemId = field === 'menuItemId' ? String(value) : order.menuItemId;
+      const newQuantity = field === 'quantity' ? Number(value) : order.quantity;
+      if (!newMenuItemId || newQuantity < 1) return; // ignore transient/invalid input mid-edit
+      const targetItem = menu.find(m => m.id === newMenuItemId);
+      if (!targetItem) {
+        showAlert('Error', 'That menu item could not be found.');
+        return;
+      }
+      try {
+        await setDoc(doc(db, 'users', userId, 'orders', id), {
+          menuItemId: newMenuItemId,
+          quantity: newQuantity,
+          // A different item is priced and costed as that item; only the quantity keeps the agreed price.
+          ...(newMenuItemId === order.menuItemId ? {} : stampFor(targetItem, materials)),
+        }, { merge: true });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${id}`);
+      }
+      return;
+    }
 
     if (order && (field === 'menuItemId' || field === 'quantity')) {
       const newMenuItemId = field === 'menuItemId' ? String(value) : order.menuItemId;
@@ -289,7 +504,8 @@ export function useOrderActions(
     try {
       const batch = writeBatch(db);
       batch.delete(doc(db, 'users', userId, 'orders', id));
-      if (order) {
+      // Only an order that held stock gives any back: deleting a pre-order that never took it must not add phantom units.
+      if (order && holdsStock(order)) {
         const item = menu.find(m => m.id === order.menuItemId);
         if (item) {
           batch.set(doc(db, 'users', userId, 'menu', order.menuItemId), { finishedGoodsStock: (item.finishedGoodsStock ?? 0) + order.quantity }, { merge: true });
@@ -318,7 +534,8 @@ export function useOrderActions(
         if (ordersToDelete.length === 0) return;
 
         const restoreByItem = new Map<string, number>();
-        for (const order of ordersToDelete) {
+        // Only the orders that held stock give any back.
+        for (const order of ordersToDelete.filter(holdsStock)) {
           restoreByItem.set(order.menuItemId, (restoreByItem.get(order.menuItemId) ?? 0) + order.quantity);
         }
 
@@ -343,6 +560,7 @@ export function useOrderActions(
   return {
     addOrderGroup,
     fulfillOrder,
+    cancelPreorder,
     markOrdersPaid,
     setOrdersPaymentMethod,
     updateOrder,

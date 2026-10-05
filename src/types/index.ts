@@ -408,8 +408,11 @@ export interface AppViewProps {
    * (only) line item — used by Market Stock's "Add to Order" action. */
   openAddOrderModalFor: (menuItemId: string) => void;
   addOrderGroup: (
-    common: { date: string; customerName?: string; customerPhone?: string },
-    lineItems: { menuItemId: string; quantity: number }[]
+    common: {
+      date: string; customerName?: string; customerPhone?: string; deliveryAddress?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number;
+      preorder?: boolean; dueSlot?: string; notes?: string; advance?: { amount: number; method: PaymentMethod };
+    },
+    lineItems: { menuItemId: string; quantity: number; unitPrice?: number }[]
   ) => Promise<void>;
 
   summaryRefDate: string;
@@ -476,7 +479,10 @@ export interface AppViewProps {
   deleteProductionRunSession: (sessionId: string) => void;
   handleDiscardBatch: (b: any) => void;
   updateOrder: (id: string, f: string, v: any) => void;
-  fulfillOrder: (order: Order) => void;
+  /** Hands an order over. A pre-order claims its stock now (all items, or none); resolves to whether it was handed over. */
+  fulfillOrder: (order: Order) => Promise<boolean>;
+  /** Cancels a pre-order not yet handed over; `advanceOutcome` is required when an advance was paid. Resolves to whether it was cancelled. */
+  cancelPreorder: (order: Order, advanceOutcome?: 'refunded' | 'kept') => Promise<boolean>;
   /** Marks orders paid or unpaid (every id given, in one write). */
   markOrdersPaid: (ids: string[], paid: boolean, method?: PaymentMethod) => void;
   /** Records how already-paid orders were paid. */
