@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ChefHat } from 'lucide-react';
+import { TRIAL_DAYS } from './utils/trial';
 
 /**
  * TermsPage.tsx
@@ -70,16 +71,19 @@ const TermsPage: React.FC = () => {
         <Section title="4. Subscriptions, Billing & Cancellation">
           <ul>
             <li>The Service is billed on a recurring subscription basis (monthly, unless stated
-              otherwise at signup). Payment is processed by Stripe; we do not store your full
-              card number.</li>
+              otherwise at signup). Payment is processed by Razorpay; we do not store your full
+              card number or UPI details.</li>
             <li>Subscriptions renew automatically at the end of each billing period until
-              canceled. You can cancel anytime from the Billing section of the app (via the
-              Stripe Customer Portal); cancellation takes effect at the end of the current
-              billing period, and you retain access until then.</li>
+              canceled. You can cancel anytime from the Subscription section of Settings in the
+              app. Cancelling a paid subscription takes effect at the end of the current billing
+              period, and you retain access until then.</li>
             <li>[Describe your refund policy here — e.g. "Fees are non-refundable except where
               required by law" or "We offer a pro-rated refund within X days of a charge."]</li>
-            <li>[If you offer a free trial: describe its length and what happens when it ends —
-              e.g. whether the card is charged automatically.]</li>
+            <li>New subscribers get a free trial of {TRIAL_DAYS} days. You approve a recurring
+              payment (card or UPI AutoPay) to start it, and nothing is charged during the trial.
+              If you do not cancel before the trial ends, the first monthly payment is taken
+              automatically when it ends. Cancelling during the trial ends your access
+              immediately and you will not be charged.</li>
             <li>We may change subscription pricing with advance notice; continued use after a
               price change takes effect constitutes acceptance of the new price.</li>
           </ul>

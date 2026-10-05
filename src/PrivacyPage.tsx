@@ -57,10 +57,10 @@ const PrivacyPage: React.FC = () => {
               production records, wastage logs, and similar records you input to use the
               Service. This may include personal data about your own customers if you enter
               their names or phone numbers on orders.</li>
-            <li><strong>Billing data:</strong> handled by Stripe, our payment processor. We
-              receive and store your subscription status and Stripe customer/subscription IDs,
-              but never your full card number — Stripe handles that directly under its own{' '}
-              <a href="https://stripe.com/privacy" target="_blank" rel="noreferrer" className="text-primary underline">
+            <li><strong>Billing data:</strong> handled by Razorpay, our payment processor. We
+              receive and store your subscription status and your Razorpay subscription ID,
+              but never your full card number or UPI details — Razorpay handles that directly under its own{' '}
+              <a href="https://razorpay.com/privacy/" target="_blank" rel="noreferrer" className="text-primary underline">
                 privacy policy
               </a>.</li>
             <li><strong>Third-party integration data:</strong> if you connect Shopify or Odoo,
@@ -86,7 +86,7 @@ const PrivacyPage: React.FC = () => {
           <p>We share data with the following categories of service providers, only as needed to run the Service:</p>
           <ul>
             <li><strong>Firebase / Google Cloud</strong> — authentication and database hosting for your account and business data.</li>
-            <li><strong>Stripe</strong> — payment processing and subscription management.</li>
+            <li><strong>Razorpay</strong> — payment processing and subscription management.</li>
             <li><strong>Shopify / Odoo</strong> — only if you choose to connect these integrations, to import your order data.</li>
             <li>[Add any hosting provider (Render/Railway/Fly.io/etc.) here, since your app's infrastructure runs on their servers.]</li>
           </ul>

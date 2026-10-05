@@ -72,7 +72,7 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
     odooStatus, odooUrlInput, setOdooUrlInput, odooDbInput, setOdooDbInput, odooUsernameInput,
     setOdooUsernameInput, odooPasswordInput, setOdooPasswordInput, isConnectingOdoo, connectOdoo, disconnectOdoo,
     updateSettingsField, categories, addCategory, deleteCategory, activeSettingsTab, setActiveSettingsTab,
-    settings, user, saveSettings, showSaveFeedback, handleLogout, billing, openBillingPortal, isOpeningPortal, currency
+    settings, user, saveSettings, showSaveFeedback, handleLogout, billing, cancelSubscription, isCancelling, startCheckout, isStartingCheckout, currency
   } = props;
 
   const [newCategory, setNewCategory] = useState('');
@@ -97,6 +97,17 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
   ];
 
   const billingOk = billing.status === 'active' || billing.status === 'trialing';
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const periodEnd = billing.currentPeriodEnd
+    ? new Date(billing.currentPeriodEnd * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    : null;
+  const subscriptionLabel: Record<string, string> = {
+    none: 'No active plan', incomplete: 'No active plan', trialing: 'Free trial', active: 'Active', past_due: 'Payment needed', canceled: 'Cancelled',
+  };
+  const subscriptionDetail =
+    billing.status === 'trialing' ? (periodEnd ? `Trial ends ${periodEnd}; your first payment is taken then.` : null)
+    : billing.status === 'active' ? (periodEnd ? (billing.cancelScheduled ? `Ends on ${periodEnd}. You will not be charged again.` : `Renews on ${periodEnd}.`) : null)
+    : null;
 
   return (
     <motion.div
@@ -726,20 +737,57 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
                 <Pill tone="slate">Business Owner</Pill>
 
                 <div className="w-full max-w-md pt-5 border-t border-stone-100 space-y-4">
-                  <div className="flex items-center justify-between gap-3 bg-stone-50 rounded-xl px-4 py-3">
-                    <div className="text-left">
-                      <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted">Subscription</p>
-                      <p className={`text-sm font-semibold capitalize ${billingOk ? 'text-[#006143]' : 'text-coral'}`}>
-                        {billing.status === 'none' ? 'No active plan' : billing.status.replace('_', ' ')}
-                      </p>
+                  <div className="bg-stone-50 rounded-xl px-4 py-3 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-left">
+                        <p className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted">Subscription</p>
+                        <p className={`text-sm font-semibold ${billingOk ? 'text-[#006143]' : 'text-coral'}`}>
+                          {subscriptionLabel[billing.status] ?? billing.status}
+                        </p>
+                        {subscriptionDetail && <p className="text-xs text-muted mt-0.5">{subscriptionDetail}</p>}
+                      </div>
+                      {!billingOk && (
+                        <button
+                          onClick={() => startCheckout(user?.email || undefined)}
+                          disabled={isStartingCheckout}
+                          className="shrink-0 text-sm font-semibold text-primary hover:text-primary-dark disabled:opacity-50"
+                        >
+                          {isStartingCheckout ? 'Opening…' : billing.trialUsed ? 'Subscribe' : 'Start free trial'}
+                        </button>
+                      )}
+                      {billingOk && !billing.cancelScheduled && !confirmingCancel && (
+                        <button
+                          onClick={() => setConfirmingCancel(true)}
+                          className="shrink-0 text-sm font-semibold text-muted hover:text-coral"
+                        >
+                          Cancel subscription
+                        </button>
+                      )}
                     </div>
-                    <button
-                      onClick={openBillingPortal}
-                      disabled={isOpeningPortal}
-                      className="text-sm font-semibold text-primary hover:text-primary-dark disabled:opacity-50"
-                    >
-                      {isOpeningPortal ? 'Opening…' : 'Manage Billing'}
-                    </button>
+                    {confirmingCancel && (
+                      <div className="border-t border-stone-200 pt-3 text-left">
+                        <p className="text-sm text-ink">
+                          {billing.status === 'trialing'
+                            ? 'Cancel your free trial? You will lose access now, and you will not be charged.'
+                            : `Cancel your subscription? You keep access${periodEnd ? ` until ${periodEnd}` : ' until the end of the period you paid for'}, and you will not be charged again.`}
+                        </p>
+                        <div className="flex gap-2 mt-2.5">
+                          <button
+                            onClick={() => { setConfirmingCancel(false); cancelSubscription(); }}
+                            disabled={isCancelling}
+                            className="h-9 px-4 rounded-lg bg-coral text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+                          >
+                            {isCancelling ? 'Cancelling…' : 'Yes, cancel'}
+                          </button>
+                          <button
+                            onClick={() => setConfirmingCancel(false)}
+                            className="h-9 px-4 rounded-lg bg-white border border-stone-200 text-ink text-sm font-semibold hover:bg-stone-100"
+                          >
+                            Keep subscription
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <button

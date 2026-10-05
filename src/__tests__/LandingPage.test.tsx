@@ -15,7 +15,7 @@ const renderPage = () => render(<MemoryRouter><LandingPage /></MemoryRouter>);
 describe('LandingPage', () => {
   it('sends every sign-up / log-in call to action to the app', () => {
     renderPage();
-    for (const name of [/sign in \/ demo/i, /start free trial/i, /start your 14-day free trial/i, /start your free trial/i]) {
+    for (const name of [/sign in \/ demo/i, /start free trial/i, /start your 45-day free trial/i, /start your free trial/i]) {
       const links = screen.getAllByRole('link', { name });
       expect(links.length).toBeGreaterThan(0);
       links.forEach(l => expect(l.getAttribute('href')).toBe('/app'));

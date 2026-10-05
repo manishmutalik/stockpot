@@ -7,8 +7,11 @@ import { fileURLToPath } from "url";
 import { requireAuth, AuthedRequest } from "./lib/auth";
 import { requireCsrf, issueCsrfToken } from "./lib/csrf";
 import { saveCredentials, getCredentials, deleteCredentials } from "./lib/integrationStore";
-import { getStripe } from "./lib/stripe";
-import { setBillingInfo, getBillingInfo, findUidByStripeCustomerId, SubscriptionStatus, hasActiveAccess } from "./lib/subscriptionStore";
+import { readRazorpayConfig, createRazorpayApi } from "./lib/razorpay";
+import { setBillingInfo, getBillingInfo, findUidByRazorpaySubscriptionId, hasActiveAccess } from "./lib/subscriptionStore";
+import {
+  createBillingStatusHandler, createSubscriptionHandler, createVerifyPaymentHandler, createCancelHandler, createWebhookHandler,
+} from "./lib/billingRoutes";
 import { readAiConfig } from "./lib/aiConfig";
 import { createAiStatusHandler } from "./lib/aiRoutes";
 import { createBriefingHandler } from "./lib/briefingRoutes";
@@ -30,7 +33,7 @@ const __dirname = path.dirname(__filename);
 
 /**
  * Defense-in-depth: an unhandled promise rejection anywhere in the process
- * (e.g. a Firestore/Stripe/axios call that slipped through without a
+ * (e.g. a Firestore/Razorpay/axios call that slipped through without a
  * try/catch) would otherwise crash the entire server for every user — one
  * bad request taking down the whole app until Render restarts it, which
  * then immediately crashes again on the next request that hits the same
@@ -58,86 +61,32 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  // --- Stripe webhook ---
-  // MUST be registered before app.use(express.json()) below: Stripe's
-  // signature verification needs the exact raw request body bytes, not the
-  // already-parsed JSON object express.json() would produce. This route
-  // uses express.raw() instead, scoped to just this one path.
-  app.post("/api/billing/webhook", express.raw({ type: "application/json" }), async (req, res) => {
-    const signature = req.headers["stripe-signature"];
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  // --- Billing (Razorpay) ---
 
-    if (!webhookSecret) {
-      console.error("STRIPE_WEBHOOK_SECRET is not configured");
-      return res.status(500).send("Webhook not configured");
-    }
-    if (!signature) {
-      return res.status(400).send("Missing stripe-signature header");
-    }
+  /**
+   * Temporary testing toggle: when BILLING_DISABLED=true, every signed-in
+   * user is treated as having an active subscription, and the billing
+   * routes below refuse to start a subscription (the client-side paywall
+   * never triggers). This is meant to be short-lived — remove the env var
+   * (or set it to anything other than "true") to re-enable real billing.
+   * No other code changes needed either way.
+   */
+  const isBillingDisabled = () => process.env.BILLING_DISABLED === "true";
 
-    let event;
-    try {
-      event = getStripe().webhooks.constructEvent(req.body, signature, webhookSecret);
-    } catch (err: any) {
-      console.error("Stripe webhook signature verification failed:", err.message);
-      return res.status(400).send(`Webhook signature verification failed: ${err.message}`);
-    }
+  // Handlers live in lib/billingRoutes.ts with their dependencies passed in.
+  const billingDeps = {
+    billingDisabled: isBillingDisabled,
+    config: () => readRazorpayConfig(),
+    api: createRazorpayApi,
+    store: { get: getBillingInfo, set: setBillingInfo, findUidBySubscriptionId: findUidByRazorpaySubscriptionId },
+    now: () => Date.now(),
+  };
 
-    try {
-      switch (event.type) {
-        case "checkout.session.completed": {
-          const session = event.data.object as any;
-          const uid = session.client_reference_id;
-          const subscriptionId = session.subscription as string;
-          const customerId = session.customer as string;
-          if (uid && subscriptionId) {
-            const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
-            await setBillingInfo(uid, {
-              stripeCustomerId: customerId,
-              stripeSubscriptionId: subscriptionId,
-              status: subscription.status as SubscriptionStatus,
-              currentPeriodEnd: (subscription as any).current_period_end ?? null,
-            });
-          }
-          break;
-        }
-        case "customer.subscription.updated":
-        case "customer.subscription.deleted": {
-          const subscription = event.data.object as any;
-          const customerId = subscription.customer as string;
-          const uid = await findUidByStripeCustomerId(customerId);
-          if (uid) {
-            await setBillingInfo(uid, {
-              stripeCustomerId: customerId,
-              stripeSubscriptionId: subscription.id,
-              status: subscription.status as SubscriptionStatus,
-              currentPeriodEnd: subscription.current_period_end ?? null,
-            });
-          }
-          break;
-        }
-        case "invoice.payment_failed": {
-          const invoice = event.data.object as any;
-          const customerId = invoice.customer as string;
-          const uid = await findUidByStripeCustomerId(customerId);
-          if (uid) {
-            await setBillingInfo(uid, { status: "past_due" });
-          }
-          break;
-        }
-        default:
-          // Unhandled event types are fine to ignore — Stripe sends many
-          // more event types than this app currently needs to react to.
-          break;
-      }
-      res.json({ received: true });
-    } catch (err: any) {
-      console.error("Error processing Stripe webhook:", err.message);
-      // Still 200 here would hide real bugs from Stripe's retry mechanism;
-      // 500 tells Stripe to retry delivery.
-      res.status(500).send("Webhook handler error");
-    }
-  });
+  // The webhook MUST be registered before app.use(express.json()) below: Razorpay's
+  // signature is over the exact raw request body bytes, not the already-parsed JSON
+  // object express.json() would produce. This route uses express.raw() instead,
+  // scoped to just this one path.
+  app.post("/api/billing/webhook", express.raw({ type: "application/json" }), createWebhookHandler(billingDeps));
 
   app.use(express.json());
   app.use(cookieParser());
@@ -154,17 +103,6 @@ async function startServer() {
   const api = express.Router();
   api.use(requireAuth);
 
-  // --- Billing Routes ---
-
-  /**
-   * Temporary testing toggle: when BILLING_DISABLED=true, every signed-in
-   * user is treated as having an active subscription, and the checkout/
-   * portal routes below are never actually reached (the client-side paywall
-   * never triggers). This is meant to be short-lived — remove the env var
-   * (or set it to anything other than "true") to re-enable real billing.
-   * No other code changes needed either way.
-   */
-  const isBillingDisabled = () => process.env.BILLING_DISABLED === "true";
 
   // --- AI features (switched off unless AI_FEATURES_ENABLED=true; see lib/aiGuard.ts) ---
   // Every route that calls the model goes through requireAiAccess(feature, aiGuardDeps)
@@ -188,105 +126,11 @@ async function startServer() {
   api.post("/ai/parse-order", requireCsrf, createOrderParseHandler({ ...aiGuardDeps, model: createOrderParseModel() }));
   api.post("/ai/parse-production-run", requireCsrf, createProductionParseHandler({ ...aiGuardDeps, model: createProductionParseModel() }));
 
-  api.get("/billing/status", async (req: AuthedRequest, res) => {
-    if (isBillingDisabled()) {
-      return res.json({
-        stripeCustomerId: null,
-        stripeSubscriptionId: null,
-        status: "active",
-        currentPeriodEnd: null,
-        updatedAt: Date.now(),
-      });
-    }
-    try {
-      const info = await getBillingInfo(req.uid!);
-      res.json(info);
-    } catch (err: any) {
-      console.error("Failed to fetch billing status:", err.message);
-      res.status(500).json({ error: "Failed to fetch billing status" });
-    }
-  });
-
-  /**
-   * Number of days for the free trial on a brand-new subscription. Only
-   * applied when the customer has never subscribed before (see below) —
-   * otherwise canceling and resubscribing would grant an infinite free
-   * trial. Change this single constant to adjust the trial length; no
-   * other code needs to change.
-   */
-  const TRIAL_PERIOD_DAYS = 14;
-
-  /**
-   * Creates a Stripe Checkout session for the single subscription plan
-   * (STRIPE_PRICE_ID). Reuses an existing Stripe customer for this uid if
-   * one was already created by a previous checkout attempt, so a user
-   * abandoning checkout and retrying doesn't create duplicate customers.
-   *
-   * Grants a free trial only on someone's first-ever subscription attempt
-   * (no existing Stripe customer on file) — resubscribing after a
-   * cancellation does not grant a second trial.
-   */
-  api.post("/billing/create-checkout-session", requireCsrf, async (req: AuthedRequest, res) => {
-    if (isBillingDisabled()) {
-      return res.status(400).json({ error: "Billing is temporarily disabled for testing." });
-    }
-    const priceId = process.env.STRIPE_PRICE_ID;
-    const appUrl = (process.env.APP_URL || "").replace(/\/$/, "");
-    if (!priceId || !appUrl) {
-      return res.status(500).json({ error: "Billing is not configured on this server." });
-    }
-
-    try {
-      const existing = await getBillingInfo(req.uid!);
-      const isFirstEverSubscription = !existing.stripeCustomerId;
-
-      const session = await getStripe().checkout.sessions.create({
-        mode: "subscription",
-        line_items: [{ price: priceId, quantity: 1 }],
-        client_reference_id: req.uid!,
-        customer: existing.stripeCustomerId || undefined,
-        customer_email: existing.stripeCustomerId ? undefined : req.body?.email,
-        subscription_data: isFirstEverSubscription
-          ? { trial_period_days: TRIAL_PERIOD_DAYS }
-          : undefined,
-        success_url: `${appUrl}/app?billing=success`,
-        cancel_url: `${appUrl}/app?billing=canceled`,
-      });
-      res.json({ url: session.url });
-    } catch (err: any) {
-      console.error("Failed to create checkout session:", err.message);
-      res.status(500).json({ error: "Failed to start checkout" });
-    }
-  });
-
-  /**
-   * Creates a Stripe Billing Portal session so a subscribed user can update
-   * their payment method, view invoices, or cancel — without this app
-   * needing to build any of that UI itself.
-   */
-  api.post("/billing/create-portal-session", requireCsrf, async (req: AuthedRequest, res) => {
-    if (isBillingDisabled()) {
-      return res.status(400).json({ error: "Billing is temporarily disabled for testing." });
-    }
-    const appUrl = (process.env.APP_URL || "").replace(/\/$/, "");
-
-    try {
-      const info = await getBillingInfo(req.uid!);
-
-      if (!info.stripeCustomerId) {
-        return res.status(400).json({ error: "No billing account found. Subscribe first." });
-      }
-
-      const session = await getStripe().billingPortal.sessions.create({
-        customer: info.stripeCustomerId,
-        return_url: `${appUrl}/app`,
-      });
-      res.json({ url: session.url });
-    } catch (err: any) {
-      console.error("Failed to create billing portal session:", err.message);
-      res.status(500).json({ error: "Failed to open billing portal" });
-    }
-  });
+  api.get("/billing/status", createBillingStatusHandler(billingDeps));
+  // The free trial length is TRIAL_DAYS in src/utils/trial.ts, shared with the landing page.
+  api.post("/billing/create-subscription", requireCsrf, createSubscriptionHandler(billingDeps));
+  api.post("/billing/verify-payment", requireCsrf, createVerifyPaymentHandler(billingDeps));
+  api.post("/billing/cancel", requireCsrf, createCancelHandler(billingDeps));
 
   // --- Shopify OAuth Routes ---
 

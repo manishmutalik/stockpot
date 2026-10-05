@@ -1,5 +1,29 @@
 # Changelog
 
+## Payments move from Stripe to Razorpay, and the free trial is 45 days
+
+Subscriptions now use Razorpay Subscriptions. Checkout opens in a Razorpay popup over the app
+(the customer no longer leaves it); when they pay, the app sends Razorpay's signed proof to the
+server, which checks it and reads the real state of the subscription from Razorpay, and a
+webhook keeps it right afterwards (renewals, failed charges, cancellations).
+
+- **Free trial: 45 days** (was 14), set in one place (`src/utils/trial.ts`) for the landing
+  page, paywall, Terms and the server. The customer approves a payment mandate to start, and the
+  first charge is taken when the trial ends. Cancelling and re-subscribing never gives a second
+  trial.
+- **Cancel in Settings.** The Stripe billing portal is gone; Settings shows the plan (free trial,
+  active, payment needed, cancelled), when it renews or ends, and a Cancel subscription button
+  that asks first. A paid plan ends at the end of the period already paid for; a trial ends at
+  once and is never charged. Someone without a plan can start or restart one there.
+- **Safer by design.** A payment is only believed after its signature checks out against the
+  account's own subscription; webhooks are signature-checked on the raw body, ignore a replaced
+  checkout, and ignore an event older than one already applied.
+- **Needs Razorpay set up before it can be used:** `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`,
+  `RAZORPAY_PLAN_ID` and `RAZORPAY_WEBHOOK_SECRET` (see `.env.example` and the README). The
+  paywall is still switched off, as before. Only tested against mocks so far: it needs a run in
+  Razorpay's Test Mode, including whether a first charge 45 days ahead is accepted.
+- The `stripe` package and `lib/stripe.ts` are removed. Terms and Privacy now name Razorpay.
+
 ## Landing page hero
 
 The top of the home page now follows the updated design: a "STOCKPOT / Kitchen Intelligence"

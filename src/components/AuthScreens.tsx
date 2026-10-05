@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, Globe, Loader2, Mail, Sparkles, CreditCard } from 'lucide-react';
+import { TRIAL_DAYS } from '../utils/trial';
 
 export type AuthMode = 'login' | 'signup' | 'google';
 
@@ -190,6 +191,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
 /** Signed in but without an active or trialing subscription. */
 export const PaywallScreen: React.FC<{
+  /** The account has used its free trial: its subscription ended or a payment failed. */
   needsAttention: boolean;
   isBusy: boolean;
   onContinue: () => void;
@@ -200,19 +202,19 @@ export const PaywallScreen: React.FC<{
       <CreditCard size={26} />
     </div>
     <h2 className="text-xl font-bold tracking-tight text-ink mb-2">
-      {needsAttention ? 'Subscription needs attention' : 'Start your free trial'}
+      {needsAttention ? 'Subscribe to keep going' : 'Start your free trial'}
     </h2>
     <p className="text-sm text-muted mb-6">
       {needsAttention
-        ? "There's an issue with your payment method, or your subscription has ended. Update your billing details to keep using the app."
-        : 'Try Stockpot free for 14 days — inventory, orders, production, and everything else.'}
+        ? 'Your subscription has ended, or a payment did not go through. Subscribe again to keep using the app.'
+        : `Try Stockpot free for ${TRIAL_DAYS} days — inventory, orders, production, and everything else.`}
     </p>
     <button
       onClick={onContinue}
       disabled={isBusy}
       className="w-full h-12 bg-primary hover:bg-primary-dark text-white rounded-xl text-sm font-semibold transition-colors shadow-md shadow-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
     >
-      {isBusy ? 'Redirecting…' : needsAttention ? 'Update Billing' : 'Start Free Trial'}
+      {isBusy ? 'Opening…' : needsAttention ? 'Subscribe' : 'Start Free Trial'}
     </button>
     <button onClick={onSignOut} className="w-full mt-3 text-sm text-muted hover:text-ink font-medium">
       Sign out

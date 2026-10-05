@@ -14,8 +14,8 @@ const makeProps = (over: Record<string, any> = {}) => ({
   addCategory: vi.fn(), deleteCategory: vi.fn(),
   user: { name: 'Asha', email: 'asha@example.com' },
   handleLogout: vi.fn(),
-  billing: { status: 'active', currentPeriodEnd: null },
-  openBillingPortal: vi.fn(), isOpeningPortal: false,
+  billing: { status: 'active', currentPeriodEnd: null, trialUsed: true, cancelScheduled: false },
+  cancelSubscription: vi.fn(), isCancelling: false, startCheckout: vi.fn(), isStartingCheckout: false,
   shopifyStatus: { connected: false }, shopifyConfig: { hasEnvCredentials: true },
   shopifyShopInput: '', setShopifyShopInput: vi.fn(), isConnectingShopify: false,
   connectShopify: vi.fn(), disconnectShopify: vi.fn(),
@@ -119,20 +119,71 @@ describe('SettingsView', () => {
     expect(props.updateSettingsField).toHaveBeenCalledWith('logo', '');
   });
 
-  it('shows the account, billing state and sign out', () => {
+  it('shows the account and sign out', () => {
     const props = makeProps({ activeSettingsTab: 'account' });
     render(<SettingsView {...props} />);
     expect(screen.getByText('asha@example.com')).toBeTruthy();
-    expect(screen.getByText('active')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Manage Billing' }));
-    expect(props.openBillingPortal).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: /Sign Out of Stockpot/ }));
     expect(props.handleLogout).toHaveBeenCalled();
   });
 
-  it('says when there is no plan', () => {
-    render(<SettingsView {...makeProps({ activeSettingsTab: 'account', billing: { status: 'none', currentPeriodEnd: null } })} />);
-    expect(screen.getByText('No active plan')).toBeTruthy();
+  describe('subscription', () => {
+    const END = Date.parse('2026-12-19T10:00:00Z') / 1000;
+    const date = new Date(END * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    const withBilling = (billing: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
+      makeProps({ activeSettingsTab: 'account', billing: { status: 'active', currentPeriodEnd: END, trialUsed: true, cancelScheduled: false, ...billing }, ...extra });
+
+    it('says when there is no plan, and offers the free trial to someone who has not had it', () => {
+      const props = withBilling({ status: 'none', currentPeriodEnd: null, trialUsed: false });
+      render(<SettingsView {...props} />);
+      expect(screen.getByText('No active plan')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Start free trial' }));
+      expect(props.startCheckout).toHaveBeenCalledWith('asha@example.com');
+    });
+
+    it('offers a plain Subscribe to someone whose subscription ended', () => {
+      render(<SettingsView {...withBilling({ status: 'canceled' })} />);
+      expect(screen.getByText('Cancelled')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Subscribe' })).toBeTruthy();
+    });
+
+    it('shows when an active plan renews', () => {
+      render(<SettingsView {...withBilling({})} />);
+      expect(screen.getByText('Active')).toBeTruthy();
+      expect(screen.getByText(`Renews on ${date}.`)).toBeTruthy();
+    });
+
+    it('shows when a trial ends and the first payment is taken', () => {
+      render(<SettingsView {...withBilling({ status: 'trialing' })} />);
+      expect(screen.getByText('Free trial')).toBeTruthy();
+      expect(screen.getByText(`Trial ends ${date}; your first payment is taken then.`)).toBeTruthy();
+    });
+
+    it('asks before cancelling a paying plan, says access continues, and cancels only on the second click', () => {
+      const props = withBilling({});
+      render(<SettingsView {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel subscription' }));
+      expect(props.cancelSubscription).not.toHaveBeenCalled();
+      expect(screen.getByText(`Cancel your subscription? You keep access until ${date}, and you will not be charged again.`)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Yes, cancel' }));
+      expect(props.cancelSubscription).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns that cancelling a trial ends access now, and can be backed out of', () => {
+      const props = withBilling({ status: 'trialing' });
+      render(<SettingsView {...props} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel subscription' }));
+      expect(screen.getByText(/lose access now, and you will not be charged/)).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Keep subscription' }));
+      expect(props.cancelSubscription).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Cancel subscription' })).toBeTruthy();
+    });
+
+    it('once cancelled, says when it ends and offers no second cancel', () => {
+      render(<SettingsView {...withBilling({ cancelScheduled: true })} />);
+      expect(screen.getByText(`Ends on ${date}. You will not be charged again.`)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Cancel subscription' })).toBeNull();
+    });
   });
 
   describe('categories', () => {

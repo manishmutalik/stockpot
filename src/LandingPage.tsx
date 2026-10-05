@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import {
   ArrowRight, Boxes, ChevronDown, CircleCheck, IndianRupee, MessageCircle, Receipt, Send, Sun, TrendingUp
 } from 'lucide-react';
+import { TRIAL_DAYS } from './utils/trial';
 
 /**
  * The public landing page. Every screenshot below is a real capture of the
@@ -11,18 +12,19 @@ import {
  * never promises a screen the product doesn't have, and nothing on it is an
  * invented statistic or testimonial. It only describes features that are live.
  *
- * What the page says about billing has to match server.ts: the free trial is
- * 14 days and Stripe Checkout collects a card to start it, so the copy says a
- * card is required and never "no credit card". The monthly price is defined
- * once here; it must equal the Stripe price in STRIPE_PRICE_ID (in INR). It does
- * not say whether the price includes GST: that is still undecided (see
- * docs/PROJECT_STATE.md), so add it here once it is.
+ * What the page says about billing has to match the server: the free trial
+ * length is TRIAL_DAYS (src/utils/trial.ts, shared with the server) and
+ * Razorpay collects a payment mandate to start it, so the copy says a card is
+ * required and never "no credit card". The monthly price is defined once here;
+ * it must equal the amount of the Razorpay plan in RAZORPAY_PLAN_ID (in INR).
+ * It does not say whether the price includes GST: the plan is to make ₹1,200
+ * inclusive once the business is GST-registered (see docs/PROJECT_STATE.md);
+ * add that here on that day, not before.
  *
  * Fonts and colours are the app's own (src/index.css): Manrope for text and
  * JetBrains Mono for figures and labels.
  */
 const PRICE = { symbol: '₹', amount: '1,200', period: 'month' };
-const TRIAL_DAYS = 14;
 
 /** The strip of four facts under the hero photo. Each one is a feature that is live. */
 const HERO_FACTS = [

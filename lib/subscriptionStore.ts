@@ -1,8 +1,8 @@
 /**
  * subscriptionStore.ts
  *
- * Server-side subscription status, written only by billing routes (checkout
- * completion, Stripe webhooks) via the Firebase Admin SDK. Stored at
+ * Server-side subscription status, written only by billing routes (payment
+ * verification, Razorpay webhooks) via the Firebase Admin SDK. Stored at
  * `users/{uid}` on a `billing` field, readable by the owning client (so the
  * app can gate features / show plan status) but NOT writable by the client —
  * only the trusted server can change subscription status, since it's what
@@ -19,18 +19,27 @@ export type SubscriptionStatus =
   | 'incomplete';
 
 export interface BillingInfo {
-  stripeCustomerId: string | null;
-  stripeSubscriptionId: string | null;
+  /** The Razorpay subscription this account is currently on (the latest one started). */
+  razorpaySubscriptionId: string | null;
   status: SubscriptionStatus;
-  currentPeriodEnd: number | null; // unix seconds
+  /** Unix seconds: when the trial ends or the current period renews or ends. */
+  currentPeriodEnd: number | null;
+  /** True once a payment mandate was approved, so cancelling and re-subscribing never gives a second free trial. */
+  trialUsed: boolean;
+  /** The subscription will end at the end of the period already paid for. */
+  cancelScheduled: boolean;
+  /** Millisecond time of the newest webhook applied, so a late, older one cannot undo a newer one. */
+  lastEventAt: number;
   updatedAt: number;
 }
 
 const DEFAULT_BILLING: BillingInfo = {
-  stripeCustomerId: null,
-  stripeSubscriptionId: null,
+  razorpaySubscriptionId: null,
   status: 'none',
   currentPeriodEnd: null,
+  trialUsed: false,
+  cancelScheduled: false,
+  lastEventAt: 0,
   updatedAt: 0,
 };
 
@@ -57,16 +66,13 @@ export function hasActiveAccess(status: SubscriptionStatus): boolean {
 }
 
 /**
- * Looks up which Firebase uid a Stripe customer ID belongs to. Needed
- * because Stripe webhook events carry a Stripe customer/subscription ID,
- * not a Firebase uid — we store the mapping on the user doc at checkout
- * time and reverse-look-it-up here for events that arrive later
- * (subscription updated/canceled, invoice payment failed, etc.).
+ * Looks up which Firebase uid owns a Razorpay subscription. Webhooks carry the
+ * uid in the subscription's notes; this is the fallback for one that does not.
  */
-export async function findUidByStripeCustomerId(stripeCustomerId: string): Promise<string | null> {
+export async function findUidByRazorpaySubscriptionId(subscriptionId: string): Promise<string | null> {
   const snap = await getFirestore()
     .collection('users')
-    .where('billing.stripeCustomerId', '==', stripeCustomerId)
+    .where('billing.razorpaySubscriptionId', '==', subscriptionId)
     .limit(1)
     .get();
   if (snap.empty) return null;

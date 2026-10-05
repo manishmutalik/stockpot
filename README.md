@@ -29,11 +29,12 @@ Odoo.
   not on any single server's local disk. `firestore.rules` explicitly denies
   client-side access to that subcollection; only the trusted server (which
   bypasses security rules via the Admin SDK) can read or write it.
-- **Billing:** subscriptions are handled by Stripe (`lib/stripe.ts`,
-  `lib/subscriptionStore.ts`, `useBilling` hook). Subscription status lives
-  at `users/{uid}.billing` — readable by the owning client (so the app can
-  show plan status and gate access) but **not writable by the client**;
-  only the server (checkout completion, or a Stripe webhook) can change it.
+- **Billing:** subscriptions are handled by Razorpay (`lib/razorpay.ts`,
+  `lib/billingRoutes.ts`, `lib/subscriptionStore.ts`, `useBilling` hook).
+  Subscription status lives at `users/{uid}.billing` — readable by the owning
+  client (so the app can show plan status and gate access) but **not writable
+  by the client**; only the server (payment verification, or a Razorpay
+  webhook) can change it.
   Signed-in users without an active or trialing subscription see a paywall
   screen instead of the app.
 
@@ -43,7 +44,7 @@ cleanup/remediation work this codebase has been through.
 ## Setup
 
 **Prerequisites:** Node.js >= 20, a Firebase project (Auth + Firestore
-enabled), a Stripe account.
+enabled), a Razorpay account.
 
 1. Install dependencies:
    ```
@@ -53,7 +54,7 @@ enabled), a Stripe account.
 3. Copy your Firebase web app config into `firebase-applet-config.json`
    (client-side config — safe to be public; Firebase's security model relies
    on `firestore.rules`, not on this key being secret).
-4. Set up Stripe (see "Billing setup" below).
+4. Set up Razorpay (see "Billing setup" below).
 5. Run the app:
    ```
    npm run dev
@@ -65,43 +66,54 @@ enabled), a Stripe account.
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `APP_URL` | Yes | Base URL of the running app, used to build the Shopify OAuth callback URL and Stripe redirect URLs. |
+| `APP_URL` | Yes | Base URL of the running app, used to build the Shopify OAuth callback URL. |
 | `SESSION_ENC_KEY` | Yes | Encrypts Shopify/Odoo credentials at rest. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. |
 | `GOOGLE_APPLICATION_CREDENTIALS` or `FIREBASE_SERVICE_ACCOUNT_JSON` | Yes | A Firebase service account, used by the server to verify Firebase ID tokens (`lib/auth.ts`). The former points at a downloaded JSON file; the latter takes the JSON contents directly as a string, for platforms where you can't mount a file. |
-| `STRIPE_SECRET_KEY` | For billing | Stripe secret API key. Without it, the server still boots and every non-billing route works; only billing routes and the paywall fail with a clear error. |
-| `STRIPE_PRICE_ID` | For billing | The Stripe Price ID customers subscribe to. |
-| `STRIPE_WEBHOOK_SECRET` | For billing | Signing secret for the Stripe webhook endpoint (see below). |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | For billing | Razorpay API keys. Without them, the server still boots and every non-billing route works; only billing routes and the paywall fail with a clear error. The Key Id is public (checkout needs it); the Key Secret stays on the server. |
+| `RAZORPAY_PLAN_ID` | For billing | The Razorpay Plan (monthly, INR) customers subscribe to. |
+| `RAZORPAY_WEBHOOK_SECRET` | For billing | The secret you chose for the Razorpay webhook (see below). |
 | `COOKIE_SECRET` | No | Reserved for future cookie signing; currently only the CSRF token cookie is set, and it isn't signed. |
 | `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` | No | Only needed if you want to enable the Shopify order-import integration. |
 | `USDA_API_KEY` | No | Free key from [fdc.nal.usda.gov](https://fdc.nal.usda.gov/api-key-signup.html), used by the Inventory tab's nutrition "Look up" feature. Without it, that one search source returns a clear "not configured" error — Open Food Facts (queried alongside it) needs no key. |
 
 ### Billing setup
 
-1. In the [Stripe Dashboard](https://dashboard.stripe.com), create a
-   recurring **Product & Price** for your subscription plan. Copy the Price
-   ID (`price_...`) into `STRIPE_PRICE_ID`.
-2. Copy your secret API key into `STRIPE_SECRET_KEY` — use a test-mode key
-   (`sk_test_...`) until you're ready to accept real payments.
-3. Create a [webhook endpoint](https://dashboard.stripe.com/webhooks)
-   pointing at `{APP_URL}/api/billing/webhook`, subscribed to at least:
-   `checkout.session.completed`, `customer.subscription.updated`,
-   `customer.subscription.deleted`, `invoice.payment_failed`. Copy its
-   signing secret into `STRIPE_WEBHOOK_SECRET`.
-4. Test locally with the [Stripe CLI](https://stripe.com/docs/stripe-cli):
-   `stripe listen --forward-to localhost:3000/api/billing/webhook` gives you
-   a local webhook secret and forwards real test events without needing a
-   publicly reachable URL.
-5. When ready to charge real money, swap in your live-mode keys
-   (`sk_live_...`) and re-create the webhook endpoint against your
-   production `APP_URL`.
+1. In the [Razorpay Dashboard](https://dashboard.razorpay.com), switch to
+   **Test Mode** and create a monthly **Plan** at ₹1,200 (INR). Copy its ID
+   (`plan_...`) into `RAZORPAY_PLAN_ID`.
+2. Copy the Test Mode **Key Id** and **Key Secret** (Account & Settings → API
+   Keys) into `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`.
+3. Add a [webhook](https://dashboard.razorpay.com/app/webhooks) pointing at
+   `{APP_URL}/api/billing/webhook`, choose a secret and put it in
+   `RAZORPAY_WEBHOOK_SECRET`, and subscribe it to the subscription events
+   (`subscription.authenticated`, `.activated`, `.charged`, `.pending`,
+   `.halted`, `.cancelled`, `.completed`, `.paused`, `.resumed`). Razorpay
+   must be able to reach the URL, so test webhooks on a deployed URL (or
+   through a tunnel such as ngrok).
+4. Turn the paywall on: it is bypassed by `SKIP_BILLING_GATE_FOR_TESTING` in
+   `src/App.tsx` and the `BILLING_DISABLED` environment variable (see
+   `.env.example`).
+5. To take real payments, once Razorpay has activated the account, swap in the
+   Live Mode keys and a Live Mode Plan, and re-create the webhook in Live Mode.
 
-**Free trial:** every first-time subscriber gets a 14-day free trial
-(a card is required at signup, and billing starts automatically when the
-trial ends — this is standard Stripe subscription behavior, not something
-this app enforces separately). To change the trial length, edit the single
-`TRIAL_PERIOD_DAYS` constant in `server.ts`. Canceling and resubscribing
-does not grant a second trial — the trial is only applied the first time a
-given Firebase user has no existing Stripe customer on file.
+**How checkout works:** the app asks the server for a subscription
+(`POST /api/billing/create-subscription`) and opens Razorpay Checkout in a
+popup. When the customer pays, the app sends Razorpay's signed proof to
+`POST /api/billing/verify-payment`; the server checks the signature, reads the
+subscription's real state from Razorpay and saves the plan status. The webhook
+keeps it right afterwards (renewals, failed charges, cancellations).
+`POST /api/billing/cancel` cancels: a paying plan ends at the end of the period
+already paid for, a trial ends at once and is never charged.
+
+**Free trial:** every first-time subscriber gets a free trial of `TRIAL_DAYS`
+days (`src/utils/trial.ts`, shared by the landing page, the paywall and the
+server — change it in that one place). The customer approves a payment mandate
+(card or UPI AutoPay) when they start, and the first charge is taken when the
+trial ends. Cancelling and re-subscribing does not grant a second trial: it is
+only offered while the account has never approved a mandate (`billing.trialUsed`).
+Whether Razorpay accepts a first charge `TRIAL_DAYS` days ahead has to be
+checked in Test Mode: if it refuses, checkout fails with a clear error and the
+trial length must be adjusted.
 
 ## Scripts
 
@@ -123,7 +135,7 @@ on every push and pull request to `main`.
 
 A few things are worth knowing about if you're picking up this codebase:
 
-- **Single subscription plan.** Billing supports one plan (`STRIPE_PRICE_ID`)
+- **Single subscription plan.** Billing supports one plan (`RAZORPAY_PLAN_ID`)
   with no tiers. Adding tiers means: multiple Price IDs, a plan-selection
   step before checkout, and feature-gating logic keyed by plan — none of
   which exists yet. The landing page pricing section and paywall screen
@@ -131,7 +143,7 @@ A few things are worth knowing about if you're picking up this codebase:
   beyond it) rather than advertising tiers the product can't yet deliver.
 - **No admin/support tooling.** There's no way to look up a customer's
   subscription, issue a refund, or grant free access from within the app —
-  that has to be done directly in the Stripe Dashboard for now.
+  that has to be done directly in the Razorpay Dashboard for now.
 - **Legal pages are drafts, not finished legal documents.** `/terms` and
   `/privacy` (`src/TermsPage.tsx`, `src/PrivacyPage.tsx`) exist and are
   linked from the landing page footer and the paywall screen, but every
