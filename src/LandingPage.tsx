@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
-  ArrowRight, Boxes, ChevronDown, CircleCheck, IndianRupee, MessageCircle, Receipt, Send, Sun, TrendingUp, Wallet
+  ArrowRight, Boxes, ChevronDown, CircleCheck, IndianRupee, MessageCircle, Receipt, Send, Sun, TrendingUp
 } from 'lucide-react';
 
 /**
@@ -23,6 +23,14 @@ import {
  */
 const PRICE = { symbol: '₹', amount: '1,200', period: 'month' };
 const TRIAL_DAYS = 14;
+
+/** The strip of four facts under the hero photo. Each one is a feature that is live. */
+const HERO_FACTS = [
+  { label: 'Real margin', value: 'Per-dish', note: 'Calculated down to grams' },
+  { label: 'Invoicing', value: 'UPI + QR', note: 'Zero payment chasing' },
+  { label: 'Order intake', value: 'Auto-fill', note: 'Direct from WhatsApp text' },
+  { label: 'Cost drift', value: 'Live Alerts', note: 'When butter or flour rises' },
+];
 
 /** Page gutter and max width. */
 const WRAP = 'w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8';
@@ -140,60 +148,64 @@ const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#F8FAFB] text-ink font-sans antialiased selection:bg-primary-light/40 overflow-x-hidden">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-[#F8FAFB]/90 backdrop-blur-md border-b border-[#D0E4E2]">
+      <header className="sticky top-0 z-50 bg-[#F8FAFB]/95 backdrop-blur-md border-b border-[#D0E4E2]/60">
         <div className={`${WRAP} h-16 sm:h-20 flex items-center justify-between gap-4`}>
-          <a href="#top" className="flex items-center gap-2.5" aria-label="Stockpot home">
-            <img src="/logo-icon.png" alt="" className="w-9 h-9" />
-            <span className="text-xl font-extrabold tracking-tight">Stockpot</span>
+          <a href="#top" className="flex items-center gap-2.5 sm:gap-3 group" aria-label="Stockpot home">
+            <img src="/logo-icon.png" alt="" className="w-9 h-9 object-contain group-hover:scale-105 transition-transform" />
+            <span className="flex flex-col">
+              <span className="font-extrabold text-lg sm:text-xl tracking-tight text-primary leading-none uppercase">Stockpot</span>
+              <span className={`${MONO} hidden sm:block text-[9px] uppercase tracking-wider text-muted mt-1 font-semibold`}>Kitchen Intelligence</span>
+            </span>
           </a>
-          <nav aria-label="Sections" className="hidden md:flex items-center gap-8 text-sm font-semibold text-muted">
+          <nav aria-label="Sections" className="hidden md:flex items-center gap-8 text-[15px] font-medium text-ink">
             <a href="#features" className="hover:text-primary transition-colors">Features</a>
             <a href="#how" className="hover:text-primary transition-colors">How it works</a>
             <a href="#pricing" className="hover:text-primary transition-colors">Pricing</a>
             <a href="#faq" className="hover:text-primary transition-colors">FAQ</a>
           </nav>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <Link to="/app" className="whitespace-nowrap text-sm font-semibold text-ink hover:text-primary transition-colors px-2">Log In</Link>
-            <Link to="/app" className="whitespace-nowrap inline-flex items-center gap-1.5 h-10 px-4 sm:px-5 rounded-full bg-primary hover:bg-primary-dark text-white text-sm font-bold shadow-sm transition-colors">
+          <div className="flex items-center gap-1 sm:gap-4">
+            <Link to="/app" className="whitespace-nowrap text-sm font-semibold text-ink hover:text-primary transition-colors px-2 sm:px-3 py-2">
+              <span className="sm:hidden">Log In</span>
+              <span className="hidden sm:inline">Sign In / Demo</span>
+            </Link>
+            <Link to="/app" className="whitespace-nowrap inline-flex items-center justify-center h-10 px-4 sm:px-5 rounded-xl bg-primary hover:bg-primary-dark text-white text-sm font-semibold shadow-sm transition-all hover:shadow active:scale-95">
               <span className="hidden sm:inline">Start Free Trial</span>
               <span className="sm:hidden">Start Free</span>
-              <ArrowRight size={16} />
             </Link>
           </div>
         </div>
       </header>
 
       <main id="top">
-        {/* 1. Hero: the promise, then the Dashboard on a tablet among the bakes */}
-        <section className="relative pt-12 sm:pt-16 pb-16 sm:pb-24 bg-gradient-to-b from-[#FAF6F0] via-[#F7F2EA]/60 to-[#F8FAFB]">
+        {/* 1. Hero: the promise, then a bakery counter with the tablet that runs it */}
+        <section className="pt-10 sm:pt-12 pb-14 sm:pb-16">
           <div className={`${WRAP} flex flex-col items-center text-center`}>
             <motion.div
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className={`inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-white border border-[#D0E4E2] mb-6 ${EYEBROW}`}
+              className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-[#EAF4F3] border border-[#D0E4E2] mb-6"
             >
-              <span className="relative flex h-2 w-2" aria-hidden="true">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-margin opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-margin" />
+              <span className="w-2 h-2 rounded-full bg-margin animate-pulse shrink-0" aria-hidden="true" />
+              <span className={`${MONO} text-[10px] sm:text-xs font-bold uppercase tracking-wider text-primary`}>
+                For home bakers, chefs, tiffin services &amp; cloud kitchens
               </span>
-              For home bakers, home chefs, tiffin services and small cloud kitchens
             </motion.div>
             <motion.h1
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.06 }}
-              className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-[-0.03em] leading-[1.1] max-w-4xl mb-6"
+              className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-[-0.03em] leading-[1.1] max-w-4xl mb-6"
             >
-              Know exactly what your food business <span className="text-primary">makes.</span>
+              Know exactly what your food business makes.
             </motion.h1>
             <motion.p
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.12 }}
-              className="text-lg sm:text-xl text-muted max-w-2xl leading-relaxed mb-8"
+              className="text-lg md:text-xl text-muted max-w-2xl leading-relaxed mb-8"
             >
-              Stockpot tracks your ingredients, orders and costs, and shows what every order actually earns you — after packaging, delivery, discounts, payment fees and GST.
+              Stockpot tracks your ingredients, orders, and fluctuating costs. It calculates what every single order actually earns you — after packaging, delivery, discounts, payment fees, and GST.
             </motion.p>
             <motion.div
               initial={{ opacity: 0, y: 14 }}
@@ -205,54 +217,63 @@ const LandingPage: React.FC = () => {
                 Start your {TRIAL_DAYS}-day free trial
               </Link>
               <a href="#how" className={`${BTN_SECONDARY} w-full sm:w-auto`}>
-                See how it works <ArrowRight size={16} />
+                Explore Kitchen Tour <ArrowRight size={16} />
               </a>
             </motion.div>
-            <p className="mt-4 text-sm text-muted">
-              <span className={`${MONO} font-bold text-ink`}>{PRICE.symbol}{PRICE.amount}/{PRICE.period}</span> after the trial · Card required to start · Cancel anytime
+            <p className={`${MONO} mt-4 mb-10 sm:mb-12 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs md:text-sm text-muted`}>
+              <span><span className="font-semibold text-ink">{PRICE.symbol}{PRICE.amount}</span> /{PRICE.period} after trial</span>
+              <span className="hidden sm:inline text-[#D0E4E2]" aria-hidden="true">•</span>
+              <span>Card required to start</span>
+              <span className="hidden sm:inline text-[#D0E4E2]" aria-hidden="true">•</span>
+              <span>Cancel anytime</span>
             </p>
 
-            {/* The tablet on the counter: a real Dashboard capture in a device frame, over the bakery photo */}
+            {/* The bakery counter, with the tablet that runs the kitchen */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.25 }}
-              className="relative mt-12 sm:mt-16 w-full max-w-5xl rounded-3xl overflow-hidden border border-[#D0E4E2] shadow-2xl bg-[#F3E9DA]"
+              className="relative w-full max-w-5xl rounded-3xl overflow-hidden border border-[#D0E4E2]/70 shadow-2xl bg-[#E9DFD0]"
             >
               <img
-                src="/landing/pastries.webp"
-                alt="Croissants, pain au chocolat and bread on a rustic bakery counter"
-                width={1376}
-                height={768}
+                src="/landing/hero-kitchen.webp"
+                alt="An artisan bakery counter with fresh sourdough, a layered cake, cookies on a rack and the Stockpot dashboard open on a tablet"
+                width={1118}
+                height={622}
                 decoding="async"
-                className="absolute inset-0 w-full h-full object-cover"
+                fetchPriority="high"
+                className="w-full h-auto block aspect-[4/3] sm:aspect-[16/9] object-cover object-[28%_50%] sm:object-center"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-ink/35 via-ink/5 to-transparent" aria-hidden="true" />
-              <div className="relative px-4 sm:px-10 pt-24 sm:pt-28 lg:pt-32 pb-8 sm:pb-12 flex justify-center">
-                <div className="w-full max-w-[44rem] rounded-[1.6rem] bg-ink p-2.5 sm:p-3 shadow-[0_28px_56px_-12px_rgba(0,0,0,0.5)]">
-                  <img
-                    src="/landing/dashboard-capture.webp"
-                    alt="Stockpot's Dashboard on a tablet: the pre-orders due today and tomorrow, yesterday's briefing with true profit, and the day's figures"
-                    width={1366}
-                    height={1024}
-                    decoding="async"
-                    fetchPriority="high"
-                    className="w-full h-auto block rounded-[1.1rem]"
-                  />
-                </div>
-              </div>
-              <div className="absolute top-4 left-4 sm:top-6 sm:left-6 flex items-center gap-3 max-w-[16rem] sm:max-w-xs bg-white/95 backdrop-blur-md p-3 sm:p-3.5 rounded-2xl shadow-xl border border-[#D0E4E2] text-left">
-                <div className="w-9 h-9 rounded-xl bg-margin/15 text-margin flex items-center justify-center shrink-0">
-                  <Wallet size={20} />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none" aria-hidden="true" />
+              <div className="absolute top-3 left-3 sm:top-6 sm:left-6 flex items-center gap-3 sm:gap-3.5 max-w-[calc(100%-1.5rem)] bg-white/95 backdrop-blur-md p-3 sm:p-4 rounded-2xl shadow-lg border border-[#D0E4E2]/80 text-left">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#EAF4F3] border border-[#D0E4E2]/60 text-margin flex items-center justify-center shrink-0">
+                  <IndianRupee size={20} strokeWidth={2.5} aria-hidden="true" />
                 </div>
                 <div>
-                  <p className="text-[11px] text-muted font-medium">Butter Croissant × 8 · demo kitchen</p>
-                  <p className="text-xs sm:text-sm font-semibold text-ink">
-                    Made <span className={`${MONO} font-bold text-margin`}>₹743.04</span> on this order
+                  <p className={`${MONO} text-[10px] sm:text-[11px] font-semibold text-muted uppercase tracking-wider`}>Butter Croissant × 8 · demo kitchen</p>
+                  <p className="text-sm sm:text-[15px] font-extrabold text-ink mt-0.5">
+                    Made <span className={`${MONO} text-margin text-base tracking-tight`}>₹743.04</span> <span className="text-muted font-normal text-xs">on this order</span>
                   </p>
                 </div>
               </div>
+              <div className={`${MONO} absolute bottom-3 right-3 sm:bottom-6 sm:right-6 inline-flex items-center gap-2 bg-black/60 backdrop-blur-md text-white/90 text-[11px] sm:text-xs px-3 sm:px-3.5 py-1.5 rounded-full border border-white/10`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-margin" aria-hidden="true" />
+                Stockpot Demo Kitchen
+              </div>
             </motion.div>
+
+            {/* Four quick facts */}
+            <dl className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 max-w-4xl w-full mt-12 sm:mt-14 pt-8 border-t border-[#D0E4E2]/60">
+              {HERO_FACTS.map(f => (
+                <div key={f.label} className="flex flex-col items-center text-center">
+                  <dt className={`${MONO} text-[11px] font-bold uppercase tracking-wider text-muted mb-1`}>{f.label}</dt>
+                  <dd className="m-0 flex flex-col items-center">
+                    <span className={`${MONO} text-lg sm:text-2xl font-extrabold text-primary`}>{f.value}</span>
+                    <span className="text-xs text-muted mt-0.5">{f.note}</span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </section>
 

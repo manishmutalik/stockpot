@@ -15,7 +15,7 @@ const renderPage = () => render(<MemoryRouter><LandingPage /></MemoryRouter>);
 describe('LandingPage', () => {
   it('sends every sign-up / log-in call to action to the app', () => {
     renderPage();
-    for (const name of [/log in/i, /start free trial/i, /start your 14-day free trial/i, /start your free trial/i]) {
+    for (const name of [/sign in \/ demo/i, /start free trial/i, /start your 14-day free trial/i, /start your free trial/i]) {
       const links = screen.getAllByRole('link', { name });
       expect(links.length).toBeGreaterThan(0);
       links.forEach(l => expect(l.getAttribute('href')).toBe('/app'));
@@ -64,7 +64,7 @@ describe('LandingPage', () => {
     const { container } = renderPage();
     const shots = [...container.querySelectorAll('img')].filter(img => img.getAttribute('src')?.startsWith('/landing/'));
     const srcs = shots.map(img => img.getAttribute('src'));
-    for (const name of ['dashboard-capture', 'phone-order', 'phone-bill', 'laptop-pricing', 'pastries', 'sourdough']) {
+    for (const name of ['hero-kitchen', 'phone-order', 'phone-bill', 'laptop-pricing', 'pastries', 'sourdough']) {
       expect(srcs).toContain(`/landing/${name}.webp`);
     }
     shots.forEach(img => {
@@ -73,7 +73,7 @@ describe('LandingPage', () => {
       const decorative = img.getAttribute('aria-hidden') === 'true';
       expect(decorative ? img.getAttribute('alt') === '' : !!img.getAttribute('alt')).toBe(true);
     });
-    expect(screen.getByAltText(/dashboard on a tablet/i)).toBeTruthy();
+    expect(screen.getByAltText(/dashboard open on a tablet/i)).toBeTruthy();
     expect(screen.getByAltText(/add order form on a phone/i)).toBeTruthy();
     expect(screen.getByAltText(/bill for that order on a phone/i)).toBeTruthy();
     expect(screen.getByAltText(/menu on a laptop/i)).toBeTruthy();
@@ -81,7 +81,7 @@ describe('LandingPage', () => {
 
   it('does not reference the old screenshots that were removed', () => {
     const { container } = renderPage();
-    for (const old of ['dashboard', 'device-laptop', 'device-phone', 'add-item', 'add-order', 'gst', 'inventory', 'orders', 'production', 'recipes', 'rnd', 'wastage', 'banner-wide', 'banner-tablet']) {
+    for (const old of ['dashboard', 'dashboard-capture', 'device-laptop', 'device-phone', 'add-item', 'add-order', 'gst', 'inventory', 'orders', 'production', 'recipes', 'rnd', 'wastage', 'banner-wide', 'banner-tablet']) {
       expect(container.querySelector(`img[src="/landing/${old}.webp"]`)).toBeNull();
     }
   });
@@ -100,6 +100,15 @@ describe('LandingPage', () => {
     ]) {
       expect(text).toContain(phrase);
     }
+  });
+
+  it('shows the hero promise, the trial terms and four quick facts', () => {
+    const { container } = renderPage();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Know exactly what your food business makes.');
+    const text = container.textContent ?? '';
+    expect(text).toMatch(/after trial/);
+    for (const fact of ['Per-dish', 'UPI + QR', 'Auto-fill', 'Live Alerts']) expect(text).toContain(fact);
+    expect(text).toContain('₹743.04');
   });
 
   it('does not repeat design claims the app does not back up', () => {
