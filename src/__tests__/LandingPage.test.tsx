@@ -15,10 +15,18 @@ const renderPage = () => render(<MemoryRouter><LandingPage /></MemoryRouter>);
 describe('LandingPage', () => {
   it('sends every sign-up / log-in call to action to the app', () => {
     renderPage();
-    for (const name of [/log in/i, /start free trial/i, /start your 14-day free trial/i, /get started free/i]) {
+    for (const name of [/log in/i, /start free trial/i, /start your 14-day free trial/i, /start your free trial/i]) {
       const links = screen.getAllByRole('link', { name });
       expect(links.length).toBeGreaterThan(0);
       links.forEach(l => expect(l.getAttribute('href')).toBe('/app'));
+    }
+  });
+
+  it('links the nav and footer to the sections of the page', () => {
+    const { container } = renderPage();
+    for (const id of ['features', 'how', 'pricing', 'faq']) {
+      expect(container.querySelector(`section#${id}`)).not.toBeNull();
+      expect(container.querySelector(`a[href="#${id}"]`)).not.toBeNull();
     }
   });
 
@@ -28,12 +36,14 @@ describe('LandingPage', () => {
     expect(screen.getByRole('link', { name: /privacy policy/i }).getAttribute('href')).toBe('/privacy');
   });
 
-  it('shows the monthly price in rupees', () => {
+  it('shows the monthly price in rupees without claiming anything about GST on it', () => {
     const { container } = renderPage();
-    expect(container.textContent).toContain('₹1,200');
-    expect(container.textContent).toContain('/ month');
-    expect(container.textContent).not.toMatch(/\$\d/);
-    expect(container.textContent).not.toMatch(/₹499/);
+    const text = container.textContent ?? '';
+    expect(text).toContain('₹1,200');
+    expect(text).toContain('/ month');
+    expect(text).not.toMatch(/\$\d/);
+    expect(text).not.toMatch(/₹499/);
+    expect(text).not.toMatch(/\+\s*18%\s*GST|incl(uding|usive of)\s+GST/i);
   });
 
   it('makes no invented claims: no testimonials or made-up statistics', () => {
@@ -50,46 +60,52 @@ describe('LandingPage', () => {
     expect(text).toMatch(/card required/i);
   });
 
-  it('only shows screenshots that ship with the app, each with alt text', () => {
-    renderPage();
-    const shots = screen.getAllByRole('img').filter(img => img.getAttribute('src')?.startsWith('/landing/'));
-    // a handful of real screens (dashboard, recipes, inventory) plus the photos; the rest is text
-    expect(shots.length).toBeGreaterThanOrEqual(5);
-    expect(shots.length).toBeLessThanOrEqual(7);
-    shots.forEach(img => {
-      expect(img.getAttribute('alt')).toBeTruthy();
-      expect(img.getAttribute('src')).toMatch(/^\/landing\/[a-z-]+\.webp$/);
-    });
-  });
-
-  it('shows the banner and food photos with alt text', () => {
+  it('only shows screenshots and photos that ship with the app, each described', () => {
     const { container } = renderPage();
-    const srcs = [...container.querySelectorAll('img, source')].map(el => el.getAttribute('src') ?? el.getAttribute('srcset'));
-    for (const name of ['banner-wide', 'banner-tablet', 'pastries', 'sourdough']) {
+    const shots = [...container.querySelectorAll('img')].filter(img => img.getAttribute('src')?.startsWith('/landing/'));
+    const srcs = shots.map(img => img.getAttribute('src'));
+    for (const name of ['dashboard-capture', 'phone-order', 'phone-bill', 'laptop-pricing', 'pastries', 'sourdough']) {
       expect(srcs).toContain(`/landing/${name}.webp`);
     }
-    expect(screen.getByAltText(/inventory and margin tracking on a tablet/i)).toBeTruthy();
-    expect(screen.getByAltText(/croissants, pain au chocolat/i)).toBeTruthy();
+    shots.forEach(img => {
+      expect(img.getAttribute('src')).toMatch(/^\/landing\/[a-z-]+\.webp$/);
+      // product screenshots carry real alt text; purely decorative photos are hidden from readers
+      const decorative = img.getAttribute('aria-hidden') === 'true';
+      expect(decorative ? img.getAttribute('alt') === '' : !!img.getAttribute('alt')).toBe(true);
+    });
+    expect(screen.getByAltText(/dashboard on a tablet/i)).toBeTruthy();
+    expect(screen.getByAltText(/add order form on a phone/i)).toBeTruthy();
+    expect(screen.getByAltText(/bill for that order on a phone/i)).toBeTruthy();
+    expect(screen.getByAltText(/menu on a laptop/i)).toBeTruthy();
   });
 
-  it('describes the other features in words instead of screenshots', () => {
+  it('does not reference the old screenshots that were removed', () => {
+    const { container } = renderPage();
+    for (const old of ['dashboard', 'device-laptop', 'device-phone', 'add-item', 'add-order', 'gst', 'inventory', 'orders', 'production', 'recipes', 'rnd', 'wastage', 'banner-wide', 'banner-tablet']) {
+      expect(container.querySelector(`img[src="/landing/${old}.webp"]`)).toBeNull();
+    }
+  });
+
+  it('covers the features in words', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
-    for (const phrase of ['Automated stock logs', 'True fulfilment profitability', 'Built for India', 'See what spoilage really costs']) {
+    for (const phrase of [
+      'Take orders the way customers send them',
+      'Get paid without chasing',
+      'Know what every order made',
+      'Know when a price needs to go up',
+      'A business briefing every morning',
+      'Stock that keeps itself up to date',
+      'Built for India',
+    ]) {
       expect(text).toContain(phrase);
-    }
-    expect(text).toContain('Delivery charged to the customer vs. fee paid to the courier');
-    for (const unused of ['production', 'orders', 'gst', 'wastage', 'rnd', 'recipes', 'inventory']) {
-      expect(container.querySelector(`img[src="/landing/${unused}.webp"]`)).toBeNull();
     }
   });
 
-  it('shows one screenshot on a laptop and another on a phone', () => {
+  it('does not repeat design claims the app does not back up', () => {
     const { container } = renderPage();
-    expect(container.querySelector('img[src="/landing/device-laptop.webp"]')).not.toBeNull();
-    expect(container.querySelector('img[src="/landing/device-phone.webp"]')).not.toBeNull();
-    expect(screen.getByAltText(/recipe costing screen on a laptop/i)).toBeTruthy();
-    expect(screen.getByAltText(/stock alerts on a phone/i)).toBeTruthy();
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/supplier invoice|Amul|Order #1042|Kitchen Margin OS|shrinkage/i);
   });
 
   it('opens and closes FAQ answers with the right aria state', () => {
@@ -103,16 +119,18 @@ describe('LandingPage', () => {
     expect(second.getAttribute('aria-expanded')).toBe('true');
     expect(first.getAttribute('aria-expanded')).toBe('false');
     expect(screen.getByRole('region', { name: /accounting background/i }).hasAttribute('hidden')).toBe(false);
-    expect(screen.getByText(/know your ingredient costs/i)).toBeTruthy();
+    expect(screen.getByText(/if you know what you paid for your ingredients/i)).toBeTruthy();
 
     fireEvent.click(second);
     expect(second.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('loads its fonts for the page only and removes them on leave', () => {
+  it('loads no extra web fonts and leaves page scrolling as it found it', () => {
+    const before = document.documentElement.style.scrollBehavior;
     const { unmount } = renderPage();
-    expect(document.head.querySelector('link[href*="Space+Grotesk"]')).not.toBeNull();
-    unmount();
     expect(document.head.querySelector('link[href*="Space+Grotesk"]')).toBeNull();
+    expect(document.head.querySelector('link[href*="fonts.googleapis"]')).toBeNull();
+    unmount();
+    expect(document.documentElement.style.scrollBehavior).toBe(before);
   });
 });

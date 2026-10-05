@@ -39,7 +39,9 @@ Testing Library; Playwright is used for visual checks.
   data adds up (batch costs, ingredient and shelf stock derived from recipes)
   with end-to-end tests (#21, #22).
 - Landing page rebuilt from the Stitch design, with banner and food photos,
-  fewer screenshots, and a laptop and phone showcase (#23-#29).
+  fewer screenshots, and a laptop and phone showcase (#23-#29). Rebuilt again from the
+  second Stitch design with real captures of the current app (hero tablet, two phones,
+  laptop pricing); the price carries no GST claim until that is decided.
 - India-first: Indian demo data, INR default, ₹1,200/month price (#25).
 - Bills (#30, #31): Generate Bill from an order, UPI and "view online" QR
   codes, WhatsApp send, and a public `/bill/:token` page served from a
