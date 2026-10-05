@@ -73,3 +73,12 @@ export function daysBetween(from: string, to: string): number {
 
 /** Yesterday's date in a time zone. */
 export const yesterdayInZone = (timeZone: unknown, now: Date = new Date()): string => addDays(todayInZone(timeZone, now), -1);
+
+const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Tue 6 Oct" from a YYYY-MM-DD date. Built by hand so the text does not depend on the runtime's locale data. */
+export function formatShortDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${SHORT_WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${SHORT_MONTHS[m - 1]}`;
+}

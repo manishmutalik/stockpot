@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { actualOrders, advanceOf, countsAsSale, holdsStock, isActual, isBookedForLater, isOpenPreorder } from '../preorders';
 import { bookedAhead, financialsForRange, orderContribution, productProfits } from '../profit';
-import { billBalance, buildBill, buildBillMessage, buildBillUpiLink } from '../billing';
+import { billBalance, buildBill, buildBillMessage, buildBillUpiLink, buildPreorderConfirmation, describeDueSlot } from '../billing';
 import { groupPendingPayments } from '../payments';
 import { buildCustomerDirectory } from '../customers';
 import { buildBusinessSnapshot } from '../aiSnapshot';
-import { addDays } from '../localDate';
+import { addDays, formatShortDate } from '../localDate';
 
 const TODAY = '2026-10-04';
 const day = (n: number) => addDays(TODAY, n);
@@ -355,5 +355,41 @@ describe('the AI snapshot', () => {
     const total = s.promptSnapshot.drivers.reduce((sum, d) => sum + value(s, d.figure), 0);
     expect(total).toBeCloseTo(value(s, 'true_profit_change'), 2);
     expect(s.promptSnapshot.drivers.some(d => d.label.startsWith('Advances kept'))).toBe(true);
+  });
+});
+
+describe('formatShortDate', () => {
+  it('writes the weekday, day and month', () => {
+    expect(formatShortDate('2026-10-06')).toBe('Tue 6 Oct');
+    expect(formatShortDate('2026-01-01')).toBe('Thu 1 Jan');
+    expect(formatShortDate('2028-02-29')).toBe('Tue 29 Feb');
+  });
+});
+
+describe('the WhatsApp confirmation of a pre-order', () => {
+  const base = { customerName: 'Priya', lines: [{ name: 'Sourdough', quantity: 2 }], date: '2026-10-06', currency: { symbol: '₹' }, total: 500 };
+
+  it('says what, when, the advance and the balance', () => {
+    expect(buildPreorderConfirmation({ ...base, dueSlot: 'morning', advance: 200 }))
+      .toBe('Hi Priya, your order for 2 Sourdough on Tue 6 Oct (morning) is confirmed. Advance received: ₹200.00. Balance: ₹300.00.');
+  });
+
+  it('says the total when nothing was paid, and paid in full when the advance covers it', () => {
+    expect(buildPreorderConfirmation(base)).toBe('Hi Priya, your order for 2 Sourdough on Tue 6 Oct is confirmed. Total: ₹500.00.');
+    expect(buildPreorderConfirmation({ ...base, advance: 500 })).toContain('Paid in full: ₹500.00.');
+    expect(buildPreorderConfirmation({ ...base, advance: 900 })).toContain('Paid in full: ₹500.00.');
+  });
+
+  it('lists several items, and works without a name or a slot', () => {
+    const m = buildPreorderConfirmation({ ...base, customerName: undefined, lines: [{ name: 'Sourdough', quantity: 2 }, { name: 'Cookie', quantity: 6 }, { name: 'Cake', quantity: 1 }] });
+    expect(m).toBe('Your order for 2 Sourdough, 6 Cookie and 1 Cake on Tue 6 Oct is confirmed. Total: ₹500.00.');
+  });
+
+  it('names a time as a time, and thanks the business when it is named', () => {
+    expect(buildPreorderConfirmation({ ...base, dueSlot: '16:30', businessName: 'Asha Bakes' })).toContain('on Tue 6 Oct (at 16:30) is confirmed.');
+    expect(buildPreorderConfirmation({ ...base, businessName: 'Asha Bakes' })).toMatch(/Thank you, Asha Bakes\.$/);
+    expect(describeDueSlot('')).toBe('');
+    expect(describeDueSlot(undefined)).toBe('');
+    expect(describeDueSlot('evening')).toBe('evening');
   });
 });

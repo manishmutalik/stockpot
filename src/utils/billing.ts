@@ -14,6 +14,7 @@
  */
 import type { BakerySettings, MenuItem, Order } from '../types';
 import type { GstPricingMode } from './gstCalculations';
+import { formatShortDate } from './localDate';
 import { saleAmounts } from './profit';
 import { clusterOrdersByGroup } from './orderClustering';
 import { advanceOf } from './preorders';
@@ -220,4 +221,48 @@ export function resolveBillToken(
 ): { token: string; isNew: boolean } {
   const existing = orders.map(o => o[field]).find(isValidBillToken);
   return existing ? { token: existing, isNew: false } : { token: generateBillToken(), isNew: true };
+}
+
+/** "morning", "afternoon", "evening" or a time such as "16:30", in words for a message. */
+export const describeDueSlot = (slot: string | undefined): string => {
+  const s = (slot ?? '').trim();
+  if (!s) return '';
+  return /^\d{1,2}:\d{2}$/.test(s) ? `at ${s}` : s;
+};
+
+/** "2 Sourdough", "2 Sourdough and 1 Chocolate Cake", "A, B and C". */
+const listItems = (lines: { name: string; quantity: number }[]) => {
+  const parts = lines.map(l => `${l.quantity} ${l.name}`);
+  return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+};
+
+/**
+ * The WhatsApp confirmation for a booked pre-order: what, when, and what has been paid and what is left.
+ * "Hi Priya, your order for 2 Sourdough on Tue 6 Oct (morning) is confirmed. Advance received: ₹200. Balance: ₹300."
+ */
+export function buildPreorderConfirmation(input: {
+  customerName?: string;
+  lines: { name: string; quantity: number }[];
+  /** The due date, YYYY-MM-DD. */
+  date: string;
+  dueSlot?: string;
+  currency: { symbol: string };
+  /** What the customer pays for the order. */
+  total: number;
+  /** The advance received, if any. */
+  advance?: number;
+  businessName?: string;
+}): string {
+  const money = (n: number) => formatMoney(n, input.currency);
+  const slot = describeDueSlot(input.dueSlot);
+  const greeting = input.customerName ? `Hi ${input.customerName}, your` : 'Your';
+  const what = `${greeting} order for ${listItems(input.lines)} on ${formatShortDate(input.date)}${slot ? ` (${slot})` : ''} is confirmed.`;
+  const advance = Math.max(input.advance ?? 0, 0);
+  const balance = Math.max(Math.round((input.total - advance) * 100) / 100, 0);
+  const money_line = advance <= 0
+    ? ` Total: ${money(input.total)}.`
+    : balance <= 0
+      ? ` Paid in full: ${money(input.total)}.`
+      : ` Advance received: ${money(advance)}. Balance: ${money(balance)}.`;
+  return `${what}${money_line}${input.businessName ? ` Thank you, ${input.businessName}.` : ''}`;
 }

@@ -22,6 +22,7 @@ import { auth, db, doc, setDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../types';
 import { stampFor } from '../utils/orderPricing';
+import { formatShortDate } from '../utils/localDate';
 import { holdsStock, isOpenPreorder } from '../utils/preorders';
 import { saleAmounts } from '../utils/profit';
 
@@ -46,13 +47,6 @@ export function useOrderActions(
   /** What to write to record how an order was paid, with the fee rate in force right now. */
   const paymentFields = (method: PaymentMethod) => ({ paymentMethod: method, paymentFeeRate: paymentFeeRates[method] ?? 0 });
 
-  const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  /** "Tue 6 Oct", built by hand so it does not depend on the runtime's locale. */
-  const formatDueDate = (iso: string) => {
-    const [y, m, d] = iso.split('-').map(Number);
-    return `${WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
-  };
   const describeLines = (lines: { menuItemId: string; quantity: number }[], items: MenuItem[]) =>
     lines.map(l => `${l.quantity} ${items.find(m => m.id === l.menuItemId)?.name ?? 'item'}`).join(', ');
 
@@ -202,7 +196,7 @@ export function useOrderActions(
       }
       await batch.commit();
       if (preorder) {
-        const due = formatDueDate(common.date);
+        const due = formatShortDate(common.date);
         const notBaked = [...requestedByItem]
           .map(([id, qty]) => ({ item: menu.find(m => m.id === id)!, qty }))
           .filter(({ item, qty }) => qty > (item.finishedGoodsStock ?? 0))

@@ -1576,6 +1576,7 @@ function BakeryApp() {
           orderParser={orderParser}
           customers={customerDirectory}
           today={todayInZone(settings.timezone)}
+          gst={settings}
         />
         <IngredientSelectorModal
           isOpen={isIngredientSelectorOpen}
