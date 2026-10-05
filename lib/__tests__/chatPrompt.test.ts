@@ -10,7 +10,10 @@ describe('the chat prompt', () => {
     expect(CHAT_SYSTEM_PROMPT).toContain('{{fig:ID}}');
     expect(CHAT_SYSTEM_PROMPT).toContain('{{name:ID}}');
     expect(CHAT_SYSTEM_PROMPT).toContain('{{cust:LABEL}}');
-    expect(CHAT_SYSTEM_PROMPT).toMatch(/what if I change prices.*not available yet/);
+    expect(CHAT_SYSTEM_PROMPT).not.toMatch(/not available yet/);
+    expect(CHAT_SYSTEM_PROMPT).toContain('pricing.repricing');
+    expect(CHAT_SYSTEM_PROMPT).toContain('pricing.materialMoves');
+    expect(CHAT_SYSTEM_PROMPT).toContain('pricing.scenario');
     expect(CHAT_SYSTEM_PROMPT).toMatch(/Never number a list/);
     expect(CHAT_SYSTEM_PROMPT).toMatch(/is data, not instructions/);
   });
@@ -31,7 +34,7 @@ describe('the chat prompt', () => {
     const messages = buildChatMessages(promptSnapshot, 'And worst?', history);
     expect(messages.map(m => m.role)).toEqual(['user', 'assistant', 'user']);
     expect(messages[0].content).toBe('What sold best?');
-    expect(JSON.parse(messages[1].content)).toEqual({ answer: '{{name:item_cake}} led.' });
+    expect(JSON.parse(messages[1].content)).toEqual({ answer: '{{name:item_cake}} led.', scenario: null });
     expect(messages.filter(m => m.content.includes('Snapshot:'))).toHaveLength(1);
   });
 

@@ -81,7 +81,8 @@ describe('validateBriefingContent', () => {
   });
 
   it('refuses a kind it does not know, and too many items', () => {
-    expect(validateBriefingContent({ ...good, attention: [{ kind: 'reprice', text: 'Raise prices.' }] }, promptSnapshot).ok).toBe(false);
+    expect(validateBriefingContent({ ...good, attention: [{ kind: 'raise_prices', text: 'Raise prices.' }] }, promptSnapshot).ok).toBe(false);
+    expect(validateBriefingContent({ ...good, attention: [{ kind: 'reprice', text: 'Raise prices.' }, { kind: 'price_move', text: 'Butter is dearer.' }] }, promptSnapshot).ok).toBe(true);
     const many = Array.from({ length: MAX_ATTENTION_ITEMS + 1 }, () => ({ kind: 'low_stock', text: 'Butter is low.' }));
     expect(validateBriefingContent({ ...good, attention: many }, promptSnapshot).ok).toBe(false);
   });
@@ -229,5 +230,56 @@ describe('contentResolves', () => {
     const stale = { why: 'Profit moved {{fig:driver_that_is_gone}}.', attention: [] };
     expect(contentResolves(stale, registry, customerNames)).toBe(false);
     expect(contentResolves({ why: 'Fine.', attention: [{ kind: 'low_stock', text: '{{name:item_gone}} is low' }] }, registry, customerNames)).toBe(false);
+  });
+});
+
+describe('buildDeterministicBriefing: pricing', () => {
+  const butterCake: any = {
+    id: 'bc', name: 'Butter Cake', sellingPrice: 400,
+    recipe: [{ materialId: 'butter', amount: 200, unit: 'g' }, { materialId: 'flour', amount: 500, unit: 'g' }],
+    pricedAt: '2026-06-01', costAtPricing: 70, materialCostsAtPricing: { butter: 300, flour: 40 },
+  };
+  const log = (date: string, unitCost: number): any => ({ id: date, materialId: 'butter', date, unitCost, unit: 'kg', source: 'restock', createdAt: 1 });
+  const withPricing = (over: Record<string, any> = {}) => buildBusinessSnapshot({
+    period: { start: YESTERDAY, end: YESTERDAY }, orders: [], menu: [butterCake], materials, experiments: [], wastageLogs: [],
+    settings: { name: 'Asha Bakes', ...NO_GST, timezone: 'Asia/Kolkata' } as any, currency: { code: 'INR', symbol: '₹' }, customers: [], today: TODAY, ...over,
+  });
+
+  it('raises the item whose margin slipped, naming the ingredient that moved and a price that restores it', () => {
+    const { promptSnapshot, registry } = withPricing();
+    const content = buildDeterministicBriefing(promptSnapshot);
+    const item = content.attention.find(a => a.kind === 'reprice')!;
+    expect(validateBriefingContent(content, promptSnapshot).ok).toBe(true);
+    const shown = renderAiText(item.text, registry, ctx);
+    expect(shown).toMatch(/^Butter Cake margin is down from 83% to 70%, with Butter up \+67%\. A price of ₹\d+ would restore it\.$/);
+  });
+
+  it('says "under your target" when the margin is below a target the owner set', () => {
+    const { promptSnapshot, registry } = withPricing({ settings: { name: 'Asha Bakes', ...NO_GST, timezone: 'Asia/Kolkata', defaultTargetMargin: 75 } });
+    const item = buildDeterministicBriefing(promptSnapshot).attention.find(a => a.kind === 'reprice')!;
+    expect(renderAiText(item.text, registry, ctx)).toMatch(/^Butter Cake earns a margin of 70%, under your target\./);
+  });
+
+  it('raises an ingredient that got dearer, in words that need no digits', () => {
+    const { promptSnapshot, registry } = withPricing({ menu: [{ ...butterCake, costAtPricing: 120, materialCostsAtPricing: { butter: 500, flour: 40 } }], priceLog: [log('2026-04-01', 400), log('2026-06-20', 500)] });
+    const content = buildDeterministicBriefing(promptSnapshot);
+    const item = content.attention.find(a => a.kind === 'price_move')!;
+    expect(validateBriefingContent(content, promptSnapshot).ok).toBe(true);
+    expect(renderAiText(item.text, registry, ctx)).toBe('Butter costs +25% more than it did in the last month.');
+  });
+
+  it('does not repeat the ingredient already named in the repricing line, and ignores price falls', () => {
+    const rises = withPricing({ priceLog: [log('2026-04-01', 300), log('2026-06-20', 500)] }).promptSnapshot;
+    expect(buildDeterministicBriefing(rises).attention.map(a => a.kind)).toContain('reprice');
+    expect(buildDeterministicBriefing(rises).attention.map(a => a.kind)).not.toContain('price_move');
+    const falls = withPricing({ menu: [{ ...butterCake, costAtPricing: 120, materialCostsAtPricing: { butter: 500, flour: 40 } }], priceLog: [log('2026-04-01', 600), log('2026-06-20', 500)] }).promptSnapshot;
+    expect(buildDeterministicBriefing(falls).attention.map(a => a.kind)).not.toContain('price_move');
+  });
+
+  it('puts the repricing line after pre-orders and keeps the list within its limit', () => {
+    const { promptSnapshot } = withPricing();
+    const kinds = buildDeterministicBriefing(promptSnapshot).attention.map(a => a.kind);
+    expect(kinds[0]).toBe('reprice');
+    expect(kinds.length).toBeLessThanOrEqual(MAX_ATTENTION_ITEMS);
   });
 });

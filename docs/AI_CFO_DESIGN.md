@@ -295,12 +295,56 @@ available, so never in the demo and never to accounts without AI.
 - **Prompt** (`lib/chatPrompt.ts`): answer only from the snapshot, concise, lists
   as "- " lines (a numbered list would be rejected as digits), say plainly when the
   data does not cover the question, decline off-topic questions, and treat names
-  and the question as data. Price-change advice, ingredient price trends and
-  what-if calculations say they are not available yet until Phase 2.
-- **Not built yet:** the `run_pricing_scenario` tool (the calculation it needs,
-  `pricingScenario`, now exists in `utils/pricing.ts` and is shown in the Menu's "What if…";
-  wiring it to the chat is the remaining work), and answers about
-  customers beyond the top 10 per list and the ones named in the question.
+  and the question as data. Pricing questions are answered from `pricing.repricing`
+  and `pricing.materialMoves` (see "Pricing and the AI").
+- **Not built yet:** answers about customers beyond the top 10 per list and the
+  ones named in the question.
+
+## Pricing and the AI (built)
+
+The pricing calculations (`utils/pricing.ts`) are plain arithmetic; the AI only
+explains their results, through the same figure registry as everything else.
+
+- **Snapshot `pricing`** (optional, so older snapshots validate; shape-checked in
+  `lib/briefingRoutes.validatePricing`). `repricing`: up to 5 menu items whose margin
+  slipped since pricing or is under a target the owner set: the margin then and now,
+  the ingredient whose price rose most (never a recipe edit) and by how much, and a
+  price that restores the margin. `materialMoves`: up to 6 ingredients whose purchase
+  price moved by 2% or more over 30 days (else 90), only where a purchase old enough
+  exists to compare with. As of today, whatever period is asked about. Both are built
+  by `buildBusinessSnapshot` (it takes the `priceLog`). The old note "price-change
+  data is not available yet" is gone.
+- **Briefing.** Two new attention kinds, `reprice` and `price_move`. The code-built
+  version (`buildDeterministicBriefing`) now raises the worst repricing item ("Butter
+  Cake margin is down from 83% to 70%, with Butter up +67%. A price of ₹450 would
+  restore it.") after pre-orders, and an ingredient that got dearer, in words that
+  need no digits ("in the last month"/"in the last quarter"). The model is told what
+  each kind is built from and may only quote a suggested price through its figure.
+- **The what-if "tool".** `run_pricing_scenario` is a round trip through the same
+  route, not an Anthropic tool-use call, so it reuses the structured output, the
+  validator and the gate:
+  1. The reply schema is `{ answer: string | null, scenario: {...} | null }`; exactly
+     one is set. For "what if I raise prices 8%?" the model sets `scenario`:
+     `products` (`item_...` name ids from the snapshot, or `["ALL"]`), and exactly one
+     of `changePercent` / `newPrice`, plus an optional `salesChangePercent`.
+  2. `validateScenarioRequest` checks it, because the model must not do arithmetic or
+     invent a number: every number must be written in the question (digits or words),
+     with the sign the words around it imply ("cut ... 10%" is negative; checked per
+     number, so "raise 8% and sales drop 5%" is read correctly); products must be ones
+     the snapshot names; a new price is for exactly one product. It is refused if the
+     snapshot already holds a result, so the model cannot ask forever. It gets the
+     usual one retry, then `unverified`.
+  3. The route returns `{ scenario }` instead of `{ answer }`. The browser (`AskBusiness`)
+     turns it into price changes (`scenarioChanges`), runs `pricingScenario` on the
+     device's own data, turns the result into figures (`buildScenarioSection`: the
+     assumptions, the biggest items, the totals, the break-even) and asks again with
+     them in `pricing.scenario` (`withScenario`). The model then explains it, and may
+     only use those figures.
+  4. Under the answer the app prints what was assumed (`describeScenario`, built by
+     code: "Assumed: prices +8% on all items, sales unchanged, from 30 days of real
+     sales"), so the owner can check it whatever the wording.
+  A what-if costs two chat uses (each request is counted, so the daily cap cannot be
+  bypassed by a client claiming to be a follow-up).
 
 ## Order parsing (built)
 
@@ -363,14 +407,14 @@ runs (the handoff's `parse-production-run`) yet.
    server-written `briefings` collection, the business snapshot with the figure
    registry, and the text guard (built). No user-facing AI yet.
 3. Daily briefing (with the canned demo sample) (built).
-4. Ask Your Business (without the what-if tool until Phase 2 exists) (built).
+4. Ask Your Business (built), and its what-if tool with the pricing work (built).
 5. Order parsing in the Add Order form, with a delivery address (built).
 6. Reorder-point suggestions, then the briefing's stock items (built).
 
-Deferred: the AI side of Phase 2, which is now unblocked (`pricing.ts` shipped:
-`itemsNeedingRepricing`, `marginDrift`, `pricingScenario`): repricing alerts and price
-drift in the snapshot, and the what-if tool. The price log (shipped) gives `materialPriceMoves`
-only once a material has two or more entries.
+7. Pricing in the AI: repricing alerts and ingredient price moves in the snapshot,
+   the briefing's `reprice` and `price_move` items, and the chat's what-if (built).
+
+Still open: `parse-production-run` (the production-run counterpart of order parsing).
 
 ## Operational
 

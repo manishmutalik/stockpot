@@ -146,8 +146,8 @@ the demo shows a sample) and Ask Your Business (`POST /api/ai/chat`, a slide-ove
 chat; no what-if tool until Phase 2) and order parsing (the Add Order form can be
 filled from a pasted message; `POST /api/ai/parse-order`) and reorder
 suggestions (`utils/reorder.ts`, a card on the Inventory tab, no AI needed). The AI list
-in the handoff is complete except `parse-production-run` and the Phase 2 items
-(repricing alerts, price drift, the what-if tool). Rule for every AI feature: no model-generated figures
+in the handoff is complete except `parse-production-run` (the Phase 2 items, repricing
+alerts, price drift and the what-if tool, are built). Rule for every AI feature: no model-generated figures
 (see the design doc).
 
 ## Firestore security rules
@@ -255,13 +255,14 @@ now also returning `grossRevenue`, `paymentFees` and `costOfGoods`) and `priceLo
   `RepricingCard`.
 - **Menu margins are now on the pre-GST price** (`basePriceOf` in `gstCalculations.ts`),
   as the handoff requires; `summarizeMenu` takes the settings for this.
-- **Not done.** The AI side: the snapshot's `repricingAlerts` / drift, and the chat's
-  `run_pricing_scenario` tool (see `docs/AI_CFO_DESIGN.md`). Per-category targets were
-  skipped (the handoff made them optional). The Menu "Suggest" tile shows the suggestion
-  but there is no bulk "apply all". The what-if is read-only: it does not change prices.
+- **AI side (built).** Repricing alerts and ingredient price moves are in the AI
+  snapshot, the briefing has `reprice` and `price_move` items, and the chat can run a
+  what-if ("Pricing and the AI" in `docs/AI_CFO_DESIGN.md`).
+- **Not done.** Per-category targets were skipped (the handoff made them optional). The
+  Menu "Suggest" tile shows the suggestion but there is no bulk "apply all". The
+  what-if is read-only: it does not change prices.
 
-Next in the owner's queue: the AI side of the above, and the still-open
-`parse-production-run` from the AI handoff.
+Next in the owner's queue: the still-open `parse-production-run` from the AI handoff.
 
 ## Open items for the user (none blocking)
 
@@ -270,8 +271,10 @@ Next in the owner's queue: the AI side of the above, and the still-open
   existing Stripe subscribers, and whether to keep Stripe.
 - The Stripe price must be set to ₹1,200/month in INR.
 - The banner logo image still shows `$` and `%`; it needs a rupee version.
-- **Deploy the new Firestore rules** (below). Until they are published, the old
-  open rules are live in production.
+
+Done by the owner and tested: the Anthropic workspace id (or a key inside a workspace),
+re-entering the settings blanked by the earlier reset, publishing the Firestore rules,
+and the AI environment variables.
 
 ## Running the app for browser checks
 

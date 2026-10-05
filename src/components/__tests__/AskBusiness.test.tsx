@@ -226,3 +226,116 @@ describe('asking', () => {
     await waitFor(() => expect(within(panel).getByText('Done.')).toBeTruthy());
   });
 });
+
+describe('a what-if question', () => {
+  // 30 days of sales of the cake at ₹100 (cost 20): 7 units, so ₹80 each.
+  const whatIf = 'What if I raise prices by 8%?';
+  const request = { products: ['ALL'], changePercent: 8, newPrice: null, salesChangePercent: null };
+  const ANSWER = 'At the new price the cake makes {{fig:scn_total_change}} a month more, and sales could fall by {{fig:scn_break_even}} before profit is no better.';
+  const manyOrders = [order('2026-06-29', { quantity: 3 }), order('2026-06-10', { quantity: 4 }), order('2026-05-15', { quantity: 1 })];
+
+  /** The model asks for the calculation first, then answers once the result is in the snapshot. */
+  const twoStep = (second = () => reply(200, { answer: ANSWER, remaining: 28 })) => {
+    let calls = 0;
+    apiFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/ai/status') return AVAILABLE()();
+      return ++calls === 1 ? reply(200, { scenario: request, remaining: 29 }) : second();
+    });
+  };
+
+  it('runs the calculation on the device, sends the result back for the model to explain, and shows the answer with the app\'s own numbers', async () => {
+    twoStep();
+    render(<AskBusiness {...props({ orders: manyOrders })} />);
+    const panel = await openPanel();
+    ask(panel, whatIf);
+    await waitFor(() => expect(within(panel).getByText(/At the new price the cake makes/)).toBeTruthy());
+
+    expect(chatCalls()).toHaveLength(2);
+    expect(sentBody(0).snapshot.pricing.scenario).toBeUndefined();
+    const second = sentBody(1);
+    expect(second.question).toBe(whatIf);
+    const sc = second.snapshot.pricing.scenario;
+    expect(sc.assumed.products).toBe('all items');
+    expect(second.snapshot.figures[sc.monthlyChange].text).toMatch(/^\+₹/);
+    expect(second.snapshot.figures[sc.assumed.changePercent].text).toBe('+8%');
+    expect(sc.breakEven.type).toBe('can_lose');
+    expect(second.snapshot.names[sc.items[0].name]).toBe('Chocolate Cake');
+
+    const answer = within(panel).getByText(/At the new price the cake makes/).textContent!;
+    expect(answer).toMatch(/makes \+₹[\d,]+ a month more, and sales could fall by \d+(\.\d)?% before/);
+    expect(answer).not.toContain('{{');
+  });
+
+  it('works the numbers out from the real sales: a 8% rise on ₹80 of contribution a unit', async () => {
+    twoStep();
+    render(<AskBusiness {...props({ orders: manyOrders })} />);
+    const panel = await openPanel();
+    ask(panel, whatIf);
+    await waitFor(() => expect(chatCalls()).toHaveLength(2));
+    const second = sentBody(1);
+    const sc = second.snapshot.pricing.scenario;
+    // 7 units in the last 30 days (the order from May is outside them), at ₹100 with a cost of ₹20 (500 g of flour at ₹40/kg): ₹80 each now, ₹88 at ₹108
+    expect(second.snapshot.figures[sc.items[0].unitsSold].text).toBe('7');
+    expect(second.snapshot.figures[sc.assumed.basedOnDays].text).toBe('30 days');
+    expect(second.snapshot.figures[sc.monthlyNow].text).toBe('₹560');
+    expect(second.snapshot.figures[sc.monthlyAfter].text).toBe('₹616');
+    expect(second.snapshot.figures[sc.monthlyChange].text).toBe('+₹56');
+    expect(second.snapshot.figures[sc.items[0].priceNew].text).toBe('₹108');
+  });
+
+  it('says what was assumed under the answer, built by code and not by the model', async () => {
+    twoStep();
+    render(<AskBusiness {...props({ orders: manyOrders })} />);
+    const panel = await openPanel();
+    ask(panel, whatIf);
+    await waitFor(() => expect(within(panel).getByText(/Assumed: prices \+8% on all items, sales unchanged, from \d+ days? of real sales\./)).toBeTruthy());
+  });
+
+  it('counts both requests against the allowance', async () => {
+    twoStep();
+    render(<AskBusiness {...props({ orders: manyOrders })} />);
+    const panel = await openPanel();
+    ask(panel, whatIf);
+    await waitFor(() => expect(within(panel).getByText('28 questions left today')).toBeTruthy());
+  });
+
+  it('keeps the what-if answer in the history with its tokens', async () => {
+    twoStep();
+    render(<AskBusiness {...props({ orders: manyOrders })} />);
+    const panel = await openPanel();
+    ask(panel, whatIf);
+    await waitFor(() => expect(within(panel).getByText(/At the new price the cake makes/)).toBeTruthy());
+    apiFetch.mockImplementation(async (url: string) => (url === '/api/ai/status' ? AVAILABLE()() : reply(200, { answer: 'Fine.', remaining: 27 })));
+    ask(panel, 'And now?');
+    await waitFor(() => expect(chatCalls()).toHaveLength(3));
+    expect(sentBody(2).history).toEqual([{ question: whatIf, answer: ANSWER }]);
+  });
+
+  it('says so when the items asked about are not on the menu or have no price', async () => {
+    let calls = 0;
+    apiFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/ai/status') return AVAILABLE()();
+      return ++calls === 1 ? reply(200, { scenario: { ...request, products: ['item_gone'] }, remaining: 29 }) : reply(200, { answer: 'Never reached.', remaining: 28 });
+    });
+    render(<AskBusiness {...props({ orders: manyOrders })} />);
+    const panel = await openPanel();
+    ask(panel, whatIf);
+    await waitFor(() => expect(within(panel).getByText(/could not find those items/)).toBeTruthy());
+    expect(chatCalls()).toHaveLength(1);
+  });
+
+  it('shows the failure, and nothing unchecked, when the second answer cannot be verified', async () => {
+    twoStep(() => reply(200, { answer: null, code: 'unverified', error: 'I could not give a checked answer to that.', remaining: 28 }));
+    render(<AskBusiness {...props({ orders: manyOrders })} />);
+    const panel = await openPanel();
+    ask(panel, whatIf);
+    await waitFor(() => expect(within(panel).getByText('I could not give a checked answer to that.')).toBeTruthy());
+    expect(within(panel).queryByText(/Assumed:/)).toBeNull();
+  });
+
+  it('offers the what-if as a starter question', async () => {
+    route({ 'GET /api/ai/status': AVAILABLE() });
+    render(<AskBusiness {...props()} />);
+    expect(within(await openPanel()).getByRole('button', { name: 'What if I raise prices by 8%?' })).toBeTruthy();
+  });
+});

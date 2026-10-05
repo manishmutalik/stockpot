@@ -35,6 +35,8 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const pct = (now: number, before: number) => ((now - before) / before) * 100;
 
 type GstSettings = Pick<BakerySettings, 'gstApplicable' | 'gstRate' | 'gstPricingMode'>;
+/** The settings pricing reads: GST, and the owner's margin and rounding choices. */
+export type PricingSettings = GstSettings & Pick<BakerySettings, 'defaultTargetMargin' | 'marginAlertPoints' | 'priceRounding'>;
 
 /** Gross margin % of a menu price at a unit cost, on the pre-GST price. 0 when there is no price. */
 export function marginOf(menuPrice: number, unitCost: number, settings: GstSettings): number {
@@ -164,7 +166,7 @@ export interface MarginDrift {
  * the price moves of the materials the item still uses (at today's amounts), and whatever is left, which is
  * the recipe having been edited. Null when the item has no price, no recipe cost or no pricing stamp.
  */
-export function marginDrift(item: MenuItem, materials: RawMaterial[], settings: BakerySettings): MarginDrift | null {
+export function marginDrift(item: MenuItem, materials: RawMaterial[], settings: PricingSettings): MarginDrift | null {
   const costAtPricing = item.costAtPricing;
   const stamped = item.materialCostsAtPricing;
   if (!(item.sellingPrice > 0) || typeof costAtPricing !== 'number' || !stamped) return null;
@@ -246,7 +248,7 @@ export function roundUpTo(value: number, step: number): number {
  * The price that earns a target margin on a unit cost: cost / (1 - target), grossed up for GST in inclusive
  * pricing, rounded up (never down, so the margin is never below the target).
  */
-export function suggestedPriceForTarget(unitCost: number, targetMargin: number, settings: BakerySettings): SuggestedPrice {
+export function suggestedPriceForTarget(unitCost: number, targetMargin: number, settings: PricingSettings): SuggestedPrice {
   const target = Math.min(Math.max(targetMargin, 0), 99);
   const basePrice = unitCost > 0 ? unitCost / (1 - target / 100) : 0;
   const rate = settings.gstApplicable ? settings.gstRate || 0 : 0;
@@ -256,7 +258,7 @@ export function suggestedPriceForTarget(unitCost: number, targetMargin: number, 
 }
 
 /** The price to suggest for an item at its own target (or the default one). */
-export function suggestedPriceFor(item: MenuItem, materials: RawMaterial[], settings: BakerySettings): SuggestedPrice & { target: number } {
+export function suggestedPriceFor(item: MenuItem, materials: RawMaterial[], settings: PricingSettings): SuggestedPrice & { target: number } {
   const target = targetFor(item, settings).margin;
   return { ...suggestedPriceForTarget(recipeCost(item.recipe, materials), target, settings), target };
 }
@@ -273,7 +275,7 @@ export interface RepriceOption {
  * target when the owner has set one it is below. An option is offered only if it is higher than the current
  * price: a drifting item is never told to cut its price.
  */
-export function repriceOptions(item: MenuItem, drift: MarginDrift, settings: BakerySettings): { restore: RepriceOption | null; target: (RepriceOption & { targetMargin: number }) | null } {
+export function repriceOptions(item: MenuItem, drift: MarginDrift, settings: PricingSettings): { restore: RepriceOption | null; target: (RepriceOption & { targetMargin: number }) | null } {
   const higher = (s: SuggestedPrice): RepriceOption | null => (s.menuPrice > item.sellingPrice + 1e-9 ? { price: s.menuPrice, margin: s.marginAtMenuPrice } : null);
   const restore = drift.pointsLost > 1e-9 ? higher(suggestedPriceForTarget(drift.costNow, drift.marginAtPricing, settings)) : null;
   const target = targetFor(item, settings);
@@ -337,7 +339,7 @@ export function pricingScenario(input: {
   orders: Order[];
   menu: MenuItem[];
   materials: RawMaterial[];
-  settings: BakerySettings;
+  settings: PricingSettings;
   today: string;
 }): PricingScenario {
   const { changes, lookbackDays, orders, menu, materials, settings, today } = input;
@@ -395,7 +397,7 @@ export function pricingScenario(input: {
  * ---------------------------------------------------------------------------------------------- */
 
 /** Items whose margin has slipped or is below target, with the drift that says why. Largest margin loss first. */
-export function itemsNeedingRepricing(menu: MenuItem[], materials: RawMaterial[], settings: BakerySettings): { item: MenuItem; drift: MarginDrift }[] {
+export function itemsNeedingRepricing(menu: MenuItem[], materials: RawMaterial[], settings: PricingSettings): { item: MenuItem; drift: MarginDrift }[] {
   const out: { item: MenuItem; drift: MarginDrift }[] = [];
   for (const item of menu) {
     const drift = marginDrift(item, materials, settings);

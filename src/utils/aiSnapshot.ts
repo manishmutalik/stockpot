@@ -18,7 +18,7 @@
  * The registry (with raw values) stays on the client for rendering; only
  * `promptSnapshot` is sent.
  */
-import type { BakerySettings, MenuItem, Order, RawMaterial, RecipeExperiment, WastageLog } from '../types';
+import type { BakerySettings, MenuItem, Order, PriceLogEntry, RawMaterial, RecipeExperiment, WastageLog } from '../types';
 import { formatFigure, type AiRegistry, type Figure, type FormatContext } from './aiFigures';
 import { countByStatus, customersForTab, type CustomerProfile } from './customers';
 import { EXPIRING_SOON_DAYS, getStockStatus } from './inventoryStatus';
@@ -26,8 +26,9 @@ import { addDays, daysBetween } from './localDate';
 import { bookedAhead, financialsForRange, productProfits, type Financials } from './profit';
 import { actualOrders, summarizeDue } from './preorders';
 import { reorderSuggestions, type ReorderConfidence, type ReorderFlag } from './reorder';
+import { itemsNeedingRepricing, materialPriceStats, repriceOptions, type BreakEven, type PricingScenario } from './pricing';
 
-export const SNAPSHOT_LIMITS = { products: 30, customersPerList: 10, stockItems: 10, trendDays: 7, unsoldItems: 15, mentionedCustomers: 5, reorderSoon: 5, preorderItems: 5 } as const;
+export const SNAPSHOT_LIMITS = { products: 30, customersPerList: 10, stockItems: 10, trendDays: 7, unsoldItems: 15, mentionedCustomers: 5, reorderSoon: 5, preorderItems: 5, repricing: 5, materialMoves: 6, scenarioItems: 8 } as const;
 
 export type ComparisonMode = 'same_weekday_last_week' | 'previous_period';
 
@@ -67,6 +68,39 @@ export interface SnapshotPreorderDay {
   items: { name: string; quantity: string }[];
 }
 
+/** A menu item whose margin has slipped since it was priced, or is under the owner's target (all figures and name ids). */
+export interface SnapshotRepricing {
+  name: string;
+  reason: 'slipped' | 'below_target';
+  marginThen: string;
+  marginNow: string;
+  /** The ingredient whose price rose the most since the item was priced, and by how much. Absent if no price rose. */
+  driver?: { name: string; change: string };
+  /** A price that would put the margin back to what it was (only when higher than today's). */
+  suggestedPrice?: string;
+}
+
+/** An ingredient whose purchase price has moved, from the price log (only where there is a purchase old enough to compare with). */
+export interface SnapshotMaterialMove {
+  name: string;
+  change: string;
+  window: '30 days' | '90 days';
+}
+
+/** The result of a what-if the owner asked for, worked out on the device by `pricingScenario` (all figures). */
+export interface SnapshotScenario {
+  /** What was assumed: who, and by how much. The answer should say this back to the owner. */
+  assumed: { products: 'all items' | 'some items'; changePercent?: string; newPrice?: string; salesChangePercent?: string; basedOnDays: string };
+  /** The items with the biggest effect, then the rest as one figure. */
+  items: { name: string; unitsSold: string; priceNow: string; priceNew: string; monthlyNow: string; monthlyAfter: string }[];
+  othersChange?: string;
+  noRecentSales: string[];
+  monthlyNow: string;
+  monthlyAfter: string;
+  monthlyChange: string;
+  breakEven: { type: BreakEven['type']; percent?: string };
+}
+
 export interface AiSnapshot {
   business: { name: string; currency: string; gstApplicable: boolean; timezone: string };
   period: { start: string; end: string };
@@ -94,6 +128,8 @@ export interface AiSnapshot {
     /** Customers the owner named in a question (matched to a label on the client): a few facts about each. */
     mentioned: { label: string; status: string; daysSinceLastOrder: string; orders: string; spent: string; contribution: string; favourite?: string }[];
   };
+  /** Pricing: items whose margin has slipped, and ingredients whose price has moved. Optional: older snapshots lack it. */
+  pricing?: { repricing: SnapshotRepricing[]; materialMoves: SnapshotMaterialMove[]; scenario?: SnapshotScenario };
   /** Pre-orders to prepare (open: not handed over or cancelled) and the customers' money held against them. */
   preorders: { dueToday: SnapshotPreorderDay | null; dueTomorrow: SnapshotPreorderDay | null; advancesHeld?: string };
   notes: string[];
@@ -118,7 +154,7 @@ export function buildBusinessSnapshot(input: {
   materials: (RawMaterial & { remaining: number })[];
   experiments: RecipeExperiment[];
   wastageLogs: WastageLog[];
-  settings: Pick<BakerySettings, 'name' | 'gstApplicable' | 'gstRate' | 'gstPricingMode' | 'fixedCosts' | 'timezone'>;
+  settings: Pick<BakerySettings, 'name' | 'gstApplicable' | 'gstRate' | 'gstPricingMode' | 'fixedCosts' | 'timezone' | 'defaultTargetMargin' | 'marginAlertPoints' | 'priceRounding'>;
   currency: { code: string; symbol: string };
   customers: CustomerProfile[];
   /** Today in the business's time zone, for the expiry check. */
@@ -127,6 +163,8 @@ export function buildBusinessSnapshot(input: {
   mentionedCustomers?: string[];
   /** Production runs, to work out which materials will run out soon. Without them none are listed. */
   productionRuns?: { recipeId: string; quantityProduced: number; date: string }[];
+  /** Every ingredient purchase price recorded, for the price moves. Without it none are listed. */
+  priceLog?: PriceLogEntry[];
 }): BuiltSnapshot {
   const { period, orders, menu, materials, settings, currency } = input;
   const comparison = input.comparison ?? comparisonPeriod(period);
@@ -285,9 +323,37 @@ export function buildBusinessSnapshot(input: {
     ...(held > 0 && { advancesHeld: money('advances_held', 'Money received in advance on pre-orders not yet handed over', held) }),
   };
 
+  // Pricing: where the margin has slipped, and which ingredients got dearer. As of today, whatever period is asked about.
+  const repricing: SnapshotRepricing[] = itemsNeedingRepricing(menu, materials, settings).slice(0, SNAPSHOT_LIMITS.repricing).map(({ item, drift }) => {
+    const top = drift.drivers.find(d => d.costImpact > 0 && d.pctChange !== null);
+    const restore = repriceOptions(item, drift, settings).restore;
+    const key = item.id;
+    return {
+      name: nameId('item', key, item.name),
+      reason: drift.alert === 'below_target' ? 'below_target' as const : 'slipped' as const,
+      marginThen: percent(`rp_${key}_then`, `Margin on ${item.name} when its price was set`, drift.marginAtPricing, false),
+      marginNow: percent(`rp_${key}_now`, `Margin on ${item.name} now`, drift.marginNow, false),
+      ...(top && { driver: { name: nameId('mat', top.materialId, materials.find(m => m.id === top.materialId)?.name ?? 'An ingredient'), change: percent(`rp_${key}_driver`, `How much the price of ${materials.find(m => m.id === top.materialId)?.name ?? 'the ingredient'} has risen since ${item.name} was priced`, top.pctChange!) } }),
+      ...(restore && { suggestedPrice: money(`rp_${key}_price`, `A price for ${item.name} that would restore its margin`, restore.price) }),
+    };
+  });
+  const materialMoves: SnapshotMaterialMove[] = materials
+    .flatMap(m => {
+      const stats = materialPriceStats(m, input.priceLog ?? [], input.today);
+      const change = stats.change30d ?? stats.change90d;
+      if (change === null || Math.abs(change) < 2) return [];
+      return [{ m, change, window: stats.change30d !== null ? '30 days' as const : '90 days' as const }];
+    })
+    .sort((a, b) => Math.abs(b.change) - Math.abs(a.change) || a.m.id.localeCompare(b.m.id))
+    .slice(0, SNAPSHOT_LIMITS.materialMoves)
+    .map(({ m, change, window }) => ({
+      name: nameId('mat', m.id, m.name),
+      change: percent(`mm_${m.id}_change`, `Change in the price paid for ${m.name} over ${window}`, change),
+      window,
+    }));
+
   const notes: string[] = [];
   if (now.estimated || before.estimated) notes.push("Some orders are valued at today's prices because they were made before prices were recorded on each order.");
-  notes.push('Price-change and repricing data are not available yet.');
 
   const promptFigures: AiSnapshot['figures'] = {};
   for (const [id, f] of Object.entries(figures)) promptFigures[id] = { label: f.label, text: formatFigure(f, fx) };
@@ -298,6 +364,7 @@ export function buildBusinessSnapshot(input: {
       period, comparison,
       figures: promptFigures, names, drivers, products, unsoldItems, trend,
       inventory: { cashTiedUp, lowStock, expiringSoon, reorderSoon },
+      pricing: { repricing, materialMoves },
       customers, preorders, notes,
     },
     registry: { figures, names },
@@ -309,4 +376,84 @@ export function buildBusinessSnapshot(input: {
 function round(n: number, places = 2): number {
   const f = 10 ** places;
   return Math.round((n + Number.EPSILON) * f) / f;
+}
+
+/** The snapshot with a what-if result added: the section the model reads, and its figures (as text) and names, with their values kept for rendering. */
+export function withScenario(built: BuiltSnapshot, extra: ReturnType<typeof buildScenarioSection>, currencySymbol: string): BuiltSnapshot {
+  const fx: FormatContext = { currencySymbol };
+  const figures: AiSnapshot['figures'] = { ...built.promptSnapshot.figures };
+  for (const [id, f] of Object.entries(extra.figures)) figures[id] = { label: f.label, text: formatFigure(f, fx) };
+  const pricing = built.promptSnapshot.pricing ?? { repricing: [], materialMoves: [] };
+  return {
+    promptSnapshot: { ...built.promptSnapshot, figures, names: { ...built.promptSnapshot.names, ...extra.names }, pricing: { ...pricing, scenario: extra.section } },
+    registry: { figures: { ...built.registry.figures, ...extra.figures }, names: { ...built.registry.names, ...extra.names } },
+    customerNames: built.customerNames,
+  };
+}
+
+/**
+ * A what-if result as figures and names, to add to a snapshot so the model can explain it. The numbers are the
+ * ones `pricingScenario` worked out; nothing is estimated here. Returns what to merge in: the section, and the
+ * figures and names it refers to (with their values, for rendering, and as text, for the prompt).
+ */
+export function buildScenarioSection(input: {
+  scenario: PricingScenario;
+  menu: Pick<MenuItem, 'id' | 'name' | 'sellingPrice'>[];
+  /** What was asked, for the answer to say back. */
+  assumed: { allItems: boolean; changePercent?: number; newPrice?: number; salesChangePercent?: number };
+  currency: { symbol: string };
+}): { section: SnapshotScenario; figures: Record<string, Figure>; names: Record<string, string> } {
+  const { scenario, menu } = input;
+  const figures: Record<string, Figure> = {};
+  const names: Record<string, string> = {};
+  const add = (id: string, f: Figure) => { figures[id] = f; return id; };
+  const money = (id: string, label: string, value: number, signed = false) => add(id, { kind: 'money', value: round(value), label, signed });
+  const pct = (id: string, label: string, value: number, signed = true) => add(id, { kind: 'percent', value: round(value, 1), label, signed });
+
+  const rows = scenario.perItem.filter(i => !i.noRecentSales);
+  const byEffect = [...rows].sort((a, b) => Math.abs(b.contributionAfter - b.contributionNow) - Math.abs(a.contributionAfter - a.contributionNow) || a.menuItemId.localeCompare(b.menuItemId));
+  const shown = byEffect.slice(0, SNAPSHOT_LIMITS.scenarioItems);
+  const items = shown.map(i => {
+    const item = menu.find(m => m.id === i.menuItemId);
+    const label = item?.name ?? 'An item';
+    const key = i.menuItemId;
+    names[`item_${key}`] = label;
+    return {
+      name: `item_${key}`,
+      unitsSold: add(`scn_${key}_units`, { kind: 'count', value: i.unitsInPeriod, label: `Units of ${label} sold in the days looked at` }),
+      priceNow: money(`scn_${key}_price_now`, `Current price of ${label}`, item?.sellingPrice ?? 0),
+      priceNew: money(`scn_${key}_price_new`, `New price of ${label} in this what-if`, i.newPrice),
+      monthlyNow: money(`scn_${key}_now`, `What ${label} makes in a month at today's price`, i.contributionNow),
+      monthlyAfter: money(`scn_${key}_after`, `What ${label} would make in a month at the new price`, i.contributionAfter),
+    };
+  });
+  const rest = byEffect.slice(SNAPSHOT_LIMITS.scenarioItems);
+  const noRecentSales = scenario.perItem.filter(i => i.noRecentSales).slice(0, 8).map(i => {
+    const label = menu.find(m => m.id === i.menuItemId)?.name ?? 'An item';
+    names[`item_${i.menuItemId}`] = label;
+    return `item_${i.menuItemId}`;
+  });
+
+  const a = input.assumed;
+  const be = scenario.breakEven;
+  const section: SnapshotScenario = {
+    assumed: {
+      products: a.allItems ? 'all items' : 'some items',
+      ...(a.changePercent !== undefined && { changePercent: pct('scn_change_pct', 'The price change assumed', a.changePercent) }),
+      ...(a.newPrice !== undefined && { newPrice: money('scn_new_price', 'The new price assumed', a.newPrice) }),
+      ...(a.salesChangePercent !== undefined && { salesChangePercent: pct('scn_sales_change_pct', 'The change in sales assumed', a.salesChangePercent) }),
+      basedOnDays: add('scn_days', { kind: 'days', value: scenario.daysUsed, label: 'Days of real sales the what-if is based on' }),
+    },
+    items,
+    ...(rest.length > 0 && { othersChange: money('scn_others_change', `Change in monthly contribution from the ${rest.length} other items`, rest.reduce((s, i) => s + (i.contributionAfter - i.contributionNow), 0), true) }),
+    noRecentSales,
+    monthlyNow: money('scn_total_now', 'Monthly contribution at today\'s prices (what these items make after ingredients, packaging, discounts and payment fees)', scenario.monthlyContributionNow),
+    monthlyAfter: money('scn_total_after', 'Monthly contribution at the new prices', scenario.monthlyContributionAfter),
+    monthlyChange: money('scn_total_change', 'Change in monthly contribution, which is also the change in monthly profit because fixed costs do not move with price', scenario.monthlyContributionAfter - scenario.monthlyContributionNow, true),
+    breakEven: {
+      type: be.type,
+      ...((be.type === 'can_lose' || be.type === 'must_gain') && { percent: pct('scn_break_even', be.type === 'can_lose' ? 'How far sales could fall before profit is no better than today' : 'How far sales would have to rise to make the same profit at the lower prices', be.pct, false) }),
+    },
+  };
+  return { section, figures, names };
 }

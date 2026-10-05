@@ -1,5 +1,20 @@
 # Changelog
 
+## Pricing in the AI
+
+The briefing and "Ask your business" now know about prices.
+
+- **Briefing.** If a menu item's margin has slipped, the briefing says so ("Butter Cake
+  margin is down from 83% to 70%, with Butter up +67%. A price of ₹450 would restore it"),
+  and flags an ingredient that has got dearer over the last month.
+- **Ask your business** can answer "which prices should I raise?" and "which ingredients
+  are getting expensive?" from the same numbers, and "what if I raise prices by 8%?":
+  the app works the sum out from your own sales and the AI explains it, including how far
+  sales could fall before you are no better off. Under that answer it prints what it
+  assumed (which items, how much, how many days of sales) so you can check it. Every figure
+  still comes from your data; the AI only writes the words, and a number it writes
+  that you did not is refused. A what-if uses two of your daily questions.
+
 ## Price & margin intelligence
 
 Stockpot now watches your margins and tells you when a price needs to move. All of it is

@@ -17,18 +17,50 @@ import { knownIdsFromSnapshot } from './aiBriefing';
 import type { AiSnapshot } from './aiSnapshot';
 import { redactPhones, replaceCustomerNames } from './aiPrivacy';
 import { addDays } from './localDate';
+import { numberWritten } from './orderParse';
+import { pricesFromPercent } from './pricing';
 
 export const CHAT_MAX_QUESTION_CHARS = 500;
 export const CHAT_MAX_ANSWER_CHARS = 1200;
 export const CHAT_MAX_HISTORY_TURNS = 4;
 
-/** The JSON schema the model's answer must follow (structured outputs). */
+const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] });
+
+/**
+ * The JSON schema the model's reply must follow (structured outputs): either an answer, or a request to run a
+ * what-if calculation first (the one "tool" the chat has). Exactly one of the two is set; the other is null.
+ */
 export const CHAT_SCHEMA = {
   type: 'object',
-  properties: { answer: { type: 'string' } },
-  required: ['answer'],
+  properties: {
+    answer: nullable({ type: 'string' }),
+    scenario: nullable({
+      type: 'object',
+      properties: {
+        products: { type: 'array', items: { type: 'string' } },
+        changePercent: nullable({ type: 'number' }),
+        newPrice: nullable({ type: 'number' }),
+        salesChangePercent: nullable({ type: 'number' }),
+      },
+      required: ['products', 'changePercent', 'newPrice', 'salesChangePercent'],
+      additionalProperties: false,
+    }),
+  },
+  required: ['answer', 'scenario'],
   additionalProperties: false,
 } as const;
+
+/** A what-if the model asks the app to calculate. Every number in it is one the owner wrote in the question. */
+export interface ScenarioRequest {
+  /** Name ids from the snapshot (`item_...`), or ['ALL']. */
+  products: string[];
+  /** A price change in percent, negative for a cut. Exactly one of this and `newPrice` is set. */
+  changePercent: number | null;
+  /** A new price for a single product. */
+  newPrice: number | null;
+  /** The owner's own guess at how sales would change, in percent. */
+  salesChangePercent: number | null;
+}
 
 /** One earlier exchange, as kept for context: the question as sent, and the model's answer with its tokens. */
 export interface ChatTurn {
@@ -38,14 +70,105 @@ export interface ChatTurn {
 
 export const trimHistory = (turns: ChatTurn[]): ChatTurn[] => turns.slice(-CHAT_MAX_HISTORY_TURNS);
 
-export type ChatAnswerValidation = { ok: true; answer: string } | { ok: false; problems: string[] };
+export type ChatAnswerValidation =
+  | { ok: true; answer: string; scenario?: undefined }
+  | { ok: true; scenario: ScenarioRequest; answer?: undefined }
+  | { ok: false; problems: string[] };
 
-/** Checks the model's answer: its shape, then the figure guard against the ids the snapshot offered. */
-export function validateChatAnswer(raw: unknown, snapshot: AiSnapshot): ChatAnswerValidation {
-  const obj = raw as { answer?: unknown } | null;
-  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return { ok: false, problems: ['the answer is not an object'] };
-  const checked = validateAiText(obj.answer, knownIdsFromSnapshot(snapshot), CHAT_MAX_ANSWER_CHARS);
-  return checked.ok ? { ok: true, answer: (obj.answer as string).trim() } : { ok: false, problems: checked.problems };
+/** Words that say a number is a fall ("cut prices by 10%", "sales drop 5%"). */
+const FALL_WORDS = /\b(cut|cuts|cutting|lower|lowers|lowering|reduce|reduces|reducing|decrease|decreases|decreasing|drop|drops|dropping|fall|falls|falling|fell|slash|slashing|discount|less|down|decline|declines|lose|loss|shrink|shrinks)\b/i;
+
+/** Whether the words around a number written in the question say it is a fall. Without digits to look around, the whole question. */
+function suggestsFall(value: number, question: string): boolean {
+  for (const m of question.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
+    if (Number(m[0].replace(/,/g, '')) !== value) continue;
+    const at = m.index ?? 0;
+    return FALL_WORDS.test(question.slice(Math.max(0, at - 24), at + m[0].length + 10));
+  }
+  return FALL_WORDS.test(question);
+}
+
+const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
+const nullish = (v: unknown) => v === null || v === undefined;
+
+/**
+ * Checks a what-if request against the question and the snapshot. The model must not do arithmetic or invent a
+ * figure, so every number must be one written in the question, with the sign the words around it imply; the
+ * products must be ones the snapshot names (or all of them). A request is refused if the calculation has already
+ * been run for this question.
+ */
+export function validateScenarioRequest(raw: unknown, question: string, snapshot: AiSnapshot): { ok: true; scenario: ScenarioRequest } | { ok: false; problems: string[] } {
+  if (snapshot.pricing?.scenario) return { ok: false, problems: ['the what-if has already been calculated: answer from pricing.scenario instead of asking again'] };
+  if (!isObject(raw)) return { ok: false, problems: ['scenario is not an object'] };
+  const problems: string[] = [];
+
+  const products = raw.products;
+  const names = new Set(Object.keys(snapshot.names).filter(id => id.startsWith('item_')));
+  if (!Array.isArray(products) || products.length < 1 || products.length > 30 || !products.every(p => typeof p === 'string')) {
+    problems.push('products must be a list of product ids, or ["ALL"]');
+  } else if (products.includes('ALL')) {
+    if (products.length !== 1) problems.push('"ALL" must be the only product');
+  } else {
+    for (const p of products) if (!names.has(p)) problems.push(`"${p}" is not a product in the snapshot`);
+  }
+
+  const change = nullish(raw.changePercent) ? null : raw.changePercent;
+  const price = nullish(raw.newPrice) ? null : raw.newPrice;
+  const sales = nullish(raw.salesChangePercent) ? null : raw.salesChangePercent;
+  if ((change === null) === (price === null)) problems.push('give exactly one of changePercent and newPrice');
+
+  const checkPercent = (value: unknown, field: string, max: number) => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value === 0 || Math.abs(value) > max) { problems.push(`${field} must be a non-zero number within ${max} percent`); return; }
+    if (!numberWritten(Math.abs(value), question)) { problems.push(`${field} is not a number written in the question`); return; }
+    if ((value < 0) !== suggestsFall(Math.abs(value), question)) problems.push(`${field} has the wrong sign for what the question says`);
+  };
+  if (change !== null) checkPercent(change, 'changePercent', 300);
+  if (sales !== null) checkPercent(sales, 'salesChangePercent', 100);
+  if (price !== null) {
+    if (typeof price !== 'number' || !Number.isFinite(price) || !(price > 0)) problems.push('newPrice must be a positive number');
+    else if (!numberWritten(price, question)) problems.push('newPrice is not a number written in the question');
+    if (Array.isArray(products) && (products.includes('ALL') || products.length !== 1)) problems.push('newPrice is for exactly one product');
+  }
+  if (problems.length > 0) return { ok: false, problems };
+  return { ok: true, scenario: { products: products as string[], changePercent: change as number | null, newPrice: price as number | null, salesChangePercent: sales as number | null } };
+}
+
+/** Checks the model's reply: an answer (its shape, then the figure guard against the ids the snapshot offered) or a what-if request. */
+export function validateChatAnswer(raw: unknown, snapshot: AiSnapshot, question = ''): ChatAnswerValidation {
+  if (!isObject(raw)) return { ok: false, problems: ['the answer is not an object'] };
+  if (!nullish(raw.scenario)) {
+    if (!nullish(raw.answer)) return { ok: false, problems: ['give either an answer or a scenario, not both'] };
+    const checked = validateScenarioRequest(raw.scenario, question, snapshot);
+    return checked.ok ? { ok: true, scenario: checked.scenario } : checked;
+  }
+  const checked = validateAiText(raw.answer, knownIdsFromSnapshot(snapshot), CHAT_MAX_ANSWER_CHARS);
+  return checked.ok ? { ok: true, answer: (raw.answer as string).trim() } : { ok: false, problems: checked.problems };
+}
+
+/**
+ * What a what-if assumed, in plain words, built by code from the request and what was calculated, to show under
+ * the answer ("Assumed: prices +8% on all items, sales unchanged, from 30 days of real sales."), so the owner
+ * can see what the numbers are for whatever the answer's wording.
+ */
+export function describeScenario(request: ScenarioRequest, itemNames: string[], daysUsed: number): string {
+  const signed = (n: number) => `${n > 0 ? '+' : '−'}${Math.abs(n)}%`;
+  const who = request.products.includes('ALL') ? 'all items' : itemNames.join(', ') || 'the items';
+  const price = request.newPrice !== null ? `price ${request.newPrice} on ${who}` : `prices ${signed(request.changePercent ?? 0)} on ${who}`;
+  const sales = request.salesChangePercent !== null ? `sales ${signed(request.salesChangePercent)}` : 'sales unchanged';
+  return `Assumed: ${price}, ${sales}, from ${daysUsed} ${daysUsed === 1 ? 'day' : 'days'} of real sales.`;
+}
+
+/**
+ * The price changes a what-if request means, from the menu on this device: the menu ids it names (or every priced
+ * item), each with its new price. `item_` name ids carry the menu id after the prefix.
+ */
+export function scenarioChanges(request: ScenarioRequest, menu: { id: string; sellingPrice: number }[]): { menuItemId: string; newPrice: number }[] {
+  const ids = request.products.includes('ALL') ? menu.map(m => m.id) : request.products.map(p => p.replace(/^item_/, ''));
+  if (request.newPrice !== null) {
+    const only = ids.find(id => menu.some(m => m.id === id));
+    return only ? [{ menuItemId: only, newPrice: request.newPrice }] : [];
+  }
+  return pricesFromPercent(menu, ids, request.changePercent ?? 0);
 }
 
 /**
@@ -115,4 +238,5 @@ export const STARTER_QUESTIONS = [
   'What should I stop selling?',
   'Which customers should I get back in touch with?',
   'Where am I losing money?',
+  'What if I raise prices by 8%?',
 ] as const;

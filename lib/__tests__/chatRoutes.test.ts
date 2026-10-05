@@ -61,6 +61,38 @@ describe('answering a question', () => {
   });
 });
 
+describe('a what-if', () => {
+  const scenarioReply = { answer: null, scenario: { products: ['ALL'], changePercent: 8, newPrice: null, salesChangePercent: null } };
+  const whatIf = 'If I increase prices by 8%, what happens to monthly profit?';
+
+  it('returns the request for the app to calculate, counted as one use', async () => {
+    const d = deps({ model: vi.fn().mockResolvedValue({ raw: scenarioReply }) as any });
+    const r = await call(d, { question: whatIf, snapshot });
+    expect(r.code).toBe(200);
+    expect(r.body).toEqual({ scenario: scenarioReply.scenario, remaining: 29 });
+    expect(r.body.answer).toBeUndefined();
+    expect(d.model).toHaveBeenCalledTimes(1);
+    expect(d.reserve).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a request with a number the owner did not write, asks again, and then shows nothing', async () => {
+    const d = deps({ model: vi.fn().mockResolvedValue({ raw: scenarioReply }) as any });
+    const r = await call(d, { question: 'What if I raise prices a little?', snapshot });
+    expect(d.model).toHaveBeenCalledTimes(2);
+    expect(d.model.mock.calls[1][0].problems).toEqual(expect.arrayContaining([expect.stringMatching(/changePercent is not a number written/)]));
+    expect(r.body).toMatchObject({ answer: null, code: 'unverified' });
+  });
+
+  it('answers from the calculation on the second request, and does not accept another request for one', async () => {
+    const withScenario = JSON.parse(JSON.stringify(snapshot));
+    withScenario.pricing = { repricing: [], materialMoves: [], scenario: { assumed: { products: 'all items', basedOnDays: 'scn_days' }, items: [], noRecentSales: [], monthlyNow: 'true_profit_now', monthlyAfter: 'true_profit_now', monthlyChange: 'true_profit_change', breakEven: { type: 'unchanged' } } };
+    const answered = deps({ model: vi.fn().mockResolvedValue({ raw: { answer: 'Profit would move {{fig:true_profit_change}}.', scenario: null } }) as any });
+    expect((await call(answered, { question: whatIf, snapshot: withScenario })).body.answer).toBe('Profit would move {{fig:true_profit_change}}.');
+    const again = deps({ model: vi.fn().mockResolvedValue({ raw: scenarioReply }) as any });
+    expect((await call(again, { question: whatIf, snapshot: withScenario })).body).toMatchObject({ answer: null, code: 'unverified' });
+  });
+});
+
 describe('validation and the one retry', () => {
   it('asks again, saying what was wrong, when the first answer has a number in it', async () => {
     const model = vi.fn()
@@ -95,7 +127,7 @@ describe('validation and the one retry', () => {
   it('answerValidated succeeds on the second try and gives up after two', async () => {
     const input = { snapshot, question, history: [] };
     const ok = vi.fn().mockResolvedValueOnce({ raw: {} }).mockResolvedValueOnce({ raw: goodAnswer });
-    expect(await answerValidated(input, ok as any)).toBe(goodAnswer.answer);
+    expect(await answerValidated(input, ok as any)).toEqual({ answer: goodAnswer.answer });
     const never = vi.fn().mockResolvedValue({ raw: {} });
     expect(await answerValidated(input, never as any)).toBeNull();
     expect(never).toHaveBeenCalledTimes(2);

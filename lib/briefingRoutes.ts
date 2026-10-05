@@ -42,6 +42,28 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const isStringArray = (v: unknown, max: number) => Array.isArray(v) && v.length <= max && v.every(x => typeof x === 'string' && x.length <= 160);
 
+const short = (v: unknown) => typeof v === 'string' && v.length <= 90;
+const optionalShort = (v: unknown) => v === undefined || short(v);
+
+/** The pricing section (repricing alerts, ingredient price moves and, in a chat's second request, a what-if result). */
+function validPricing(p: unknown): boolean {
+  if (!isObject(p) || !Array.isArray(p.repricing) || p.repricing.length > 5 || !Array.isArray(p.materialMoves) || p.materialMoves.length > 6) return false;
+  const repricingOk = p.repricing.every((r: any) =>
+    isObject(r) && short(r.name) && (r.reason === 'slipped' || r.reason === 'below_target') && short(r.marginThen) && short(r.marginNow) && optionalShort(r.suggestedPrice)
+    && (r.driver === undefined || (isObject(r.driver) && short(r.driver.name) && short(r.driver.change))));
+  const movesOk = p.materialMoves.every((m: any) => isObject(m) && short(m.name) && short(m.change) && (m.window === '30 days' || m.window === '90 days'));
+  if (!repricingOk || !movesOk) return false;
+  const sc = p.scenario;
+  if (sc === undefined) return true;
+  if (!isObject(sc) || !isObject(sc.assumed) || !isObject(sc.breakEven)) return false;
+  const a = sc.assumed;
+  if (!(a.products === 'all items' || a.products === 'some items') || !short(a.basedOnDays) || !optionalShort(a.changePercent) || !optionalShort(a.newPrice) || !optionalShort(a.salesChangePercent)) return false;
+  if (!Array.isArray(sc.items) || sc.items.length > 8 || !sc.items.every((i: any) => isObject(i) && ['name', 'unitsSold', 'priceNow', 'priceNew', 'monthlyNow', 'monthlyAfter'].every(f => short(i[f])))) return false;
+  if (!isStringArray(sc.noRecentSales, 8) || !optionalShort(sc.othersChange)) return false;
+  if (!short(sc.monthlyNow) || !short(sc.monthlyAfter) || !short(sc.monthlyChange)) return false;
+  return ['can_lose', 'must_gain', 'unchanged', 'not_applicable'].includes(sc.breakEven.type) && optionalShort(sc.breakEven.percent);
+}
+
 /** A snapshot from a client is checked for shape and size before any of it reaches a prompt. */
 export function validateSnapshotShape(s: unknown): s is AiSnapshot {
   if (!isObject(s)) return false;
@@ -76,6 +98,7 @@ export function validateSnapshotShape(s: unknown): s is AiSnapshot {
   const mentioned = s.customers.mentioned;
   if (mentioned !== undefined && (!Array.isArray(mentioned) || mentioned.length > 5 || !mentioned.every((c: any) => isObject(c) && typeof c.label === 'string' && c.label.length <= 20))) return false;
   if (s.unsoldItems !== undefined && !isStringArray(s.unsoldItems, 15)) return false;
+  if (s.pricing !== undefined && !validPricing(s.pricing)) return false;
   // Pre-orders to prepare: likewise optional.
   const pre = s.preorders;
   if (pre !== undefined) {
