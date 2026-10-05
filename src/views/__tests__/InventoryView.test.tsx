@@ -211,6 +211,30 @@ describe('InventoryView', () => {
       expect(within(dialog).queryByText(/777/)).toBeNull();
     });
 
+    it('shows the price stats, and which recipes the material is in', () => {
+      const bakes = [{ id: 'bread', name: 'Sourdough', sellingPrice: 100, recipe: [{ materialId: 'flour', amount: 500, unit: 'g' }] }]; // flour 10/kg: cost 5
+      const purchases = [
+        { id: 'p1', materialId: 'flour', date: '2026-01-01', unitCost: 8, unit: 'kg', quantity: 10, source: 'restock', createdAt: 1 },
+        { id: 'p2', materialId: 'flour', date: '2026-09-01', unitCost: 10, unit: 'kg', quantity: 10, source: 'restock', createdAt: 2 },
+      ];
+      render(<InventoryView {...makeProps({ priceLog: purchases, menu: bakes, settings: { name: 'T', gstApplicable: false, timezone: 'UTC' } })} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Price history of Bread Flour' }));
+      const dialog = screen.getByRole('dialog', { name: /Price history: Bread Flour/ });
+      const summary = within(dialog).getByLabelText('Price summary');
+      expect(summary.textContent).toMatch(/Last paid\$10\.00 \/ kg/);
+      expect(within(dialog).getByLabelText('Used in').textContent).toMatch(/Sourdough \(100% of its cost\)/);
+      expect(within(dialog).getByLabelText('Used in').textContent).toMatch(/\+\$0\.50 a unit if the price rises 10%/); // 10% of 5.00
+    });
+
+    it('says "not enough history yet" rather than 0% when there is nothing old enough to compare with', () => {
+      const recent = [{ id: 'p', materialId: 'flour', date: todayInZone('UTC'), unitCost: 10, unit: 'kg', quantity: 10, source: 'restock', createdAt: 1 }];
+      render(<InventoryView {...makeProps({ priceLog: recent, settings: { name: 'T', gstApplicable: false, timezone: 'UTC' } })} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Price history of Bread Flour' }));
+      const summary = within(screen.getByRole('dialog')).getByLabelText('Price summary');
+      expect(summary.textContent).toMatch(/30-day changenot enough history yet/);
+      expect(summary.textContent).toMatch(/90-day changenot enough history yet/);
+    });
+
     it('closes again', () => {
       render(<InventoryView {...makeProps({ priceLog: log })} />);
       fireEvent.click(screen.getByRole('button', { name: 'Price history of Bread Flour' }));

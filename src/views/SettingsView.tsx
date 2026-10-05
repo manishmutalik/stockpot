@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import {
   AlertCircle, Building2, Check, CheckCircle2, Copy, Database, Globe, Image, Layers, LogOut, Palette,
-  CreditCard, Percent, Plus, Puzzle, Receipt, Save, Store, Trash2, User as UserIcon, UserCog
+  CreditCard, Percent, Plus, Puzzle, Receipt, Save, Store, Tag, Trash2, User as UserIcon, UserCog
 } from 'lucide-react';
 import { AppViewProps, FixedCost, PAYMENT_METHODS, PaymentMethod } from '../types';
 import { COMMON_TIME_ZONES, resolveTimeZone } from '../utils/localDate';
@@ -312,6 +312,55 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
                       />
                     </div>
                   ))}
+                </div>
+              </Section>
+
+              {/* Pricing: the margin to aim for, when to flag a slip, and how suggested prices are rounded */}
+              <Section
+                icon={Tag}
+                title="Pricing"
+                subtitle="How suggested prices and margin alerts work"
+              >
+                <p className="text-sm text-muted -mt-2">
+                  Suggested prices are worked out from your target margin: cost ÷ (1 − margin), plus GST if your prices include it, rounded up. Until you set a target, suggestions use the old 3.5× markup (a 71.4% margin) and no item is flagged as under target. You can also set a target on each menu item.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div>
+                    <label htmlFor="default-target-margin" className={LABEL}>Target margin (%)</label>
+                    <input
+                      id="default-target-margin"
+                      type="number" min="0" max="99" step="0.1"
+                      value={settings.defaultTargetMargin || ''}
+                      onChange={(e) => {
+                        const n = parseFloat(e.target.value);
+                        updateSettingsField('defaultTargetMargin', n > 0 && n < 100 ? n : null);
+                      }}
+                      className={`${FIELD} font-mono`}
+                      placeholder="71.4"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="margin-alert-points" className={LABEL}>Flag a slip of (points)</label>
+                    <input
+                      id="margin-alert-points"
+                      type="number" min="0" step="0.5"
+                      value={settings.marginAlertPoints ?? ''}
+                      onChange={(e) => updateSettingsField('marginAlertPoints', e.target.value === '' ? null : Math.max(parseFloat(e.target.value) || 0, 0))}
+                      className={`${FIELD} font-mono`}
+                      placeholder="5"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="price-rounding" className={LABEL}>Round suggested prices up to ({currency.symbol})</label>
+                    <input
+                      id="price-rounding"
+                      type="number" min="0" step="0.5"
+                      value={settings.priceRounding ?? ''}
+                      onChange={(e) => updateSettingsField('priceRounding', e.target.value === '' ? null : Math.max(parseFloat(e.target.value) || 0, 0))}
+                      className={`${FIELD} font-mono`}
+                      placeholder="5"
+                    />
+                  </div>
                 </div>
               </Section>
 

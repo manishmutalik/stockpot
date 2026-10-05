@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Award, BookOpen, Check, Copy, Edit2, Package, Percent, Plus, Salad, Search, Sparkles, Trash2,
+  Award, BookOpen, Calculator, Check, Copy, Edit2, Package, Percent, Plus, Salad, Search, Sparkles, Trash2,
   TriangleAlert, Utensils, X
 } from 'lucide-react';
 import { AppViewProps, IngredientRequirement, MenuItem as MenuItemType, RawMaterial } from '../types';
@@ -9,12 +9,17 @@ import { MetricCard } from '../components/MetricCard';
 import { NutritionCard } from '../components/NutritionCard';
 import { convertAmount } from '../utils/conversions';
 import { calculateRecipeNutrition } from '../utils/nutritionCalculations';
-import { getMarginInfo, MarginTier, recipeCost, SALES_PERIODS, SalesPeriod, salesPeriodRange, suggestedPrice, summarizeMenu } from '../utils/menuStats';
+import { getMarginInfo, MarginTier, recipeCost, SALES_PERIODS, SalesPeriod, salesPeriodRange, summarizeMenu } from '../utils/menuStats';
+import { basePriceOf } from '../utils/gstCalculations';
+import { DEFAULT_TARGET_MARGIN, itemsNeedingRepricing, marginDrift, suggestedPriceFor } from '../utils/pricing';
+import { MarginDriftPanel } from '../components/MarginDriftPanel';
+import { PriceInput } from '../components/PriceInput';
+import { PricingScenarioModal } from '../components/PricingScenarioModal';
 import { productProfits } from '../utils/profit';
 import { todayInZone } from '../utils/localDate';
 import { ProductPerformance } from '../components/ProductPerformance';
 
-type MarginFilter = 'all' | MarginTier;
+type MarginFilter = 'all' | MarginTier | 'repricing';
 
 const MARGIN_PILL: Record<MarginTier, string> = {
   high: 'bg-margin/10 text-[#006143]',
@@ -109,7 +114,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
   const {
     materials, categories, menu, orders, settings, currency, expandedRecipeId, setExpandedRecipeId,
     setIsIngredientSelectorOpen, setActiveRecipeItemId, addMenuItem, updateMenuItem, updateMenuItemField,
-    deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe
+    deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, menuFilterOnOpen
   } = props;
 
   // Purely local, ephemeral UI state for the shareable nutrition card — not
@@ -157,13 +162,18 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
   }, [shareCardItem]);
 
   const [search, setSearch] = useState('');
-  const [marginFilter, setMarginFilter] = useState<MarginFilter>('all');
+  const [marginFilter, setMarginFilter] = useState<MarginFilter>(menuFilterOnOpen ?? 'all');
+  const [scenarioOpen, setScenarioOpen] = useState(false);
   const [salesPeriod, setSalesPeriod] = useState<SalesPeriod>('30');
 
   const money = (n: number) =>
     `${currency.symbol}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const summary = useMemo(() => summarizeMenu(menu, materials), [menu, materials]);
+  const summary = useMemo(() => summarizeMenu(menu, materials, settings), [menu, materials, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]);
+  const today = todayInZone(settings.timezone);
+  // Items whose margin has slipped or is below the owner's target, each with the drift that says why.
+  const repricing = useMemo(() => itemsNeedingRepricing(menu, materials, settings), [menu, materials, settings]);
+  const repricingIds = useMemo(() => new Set(repricing.map(r => r.item.id)), [repricing]);
 
   // What each product sold and made over the chosen period, from the same sums as the Orders and Summary screens.
   const productSales = useMemo(() => {
@@ -178,11 +188,12 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     () => menu.filter(item => {
       if (q && !(item.name || '').toLowerCase().includes(q)) return false;
       if (marginFilter === 'all') return true;
+      if (marginFilter === 'repricing') return repricingIds.has(item.id);
       // Unpriced items have no margin to speak of: they belong under "needs review".
       if (!(item.sellingPrice > 0)) return marginFilter === 'low';
-      return getMarginInfo(item.sellingPrice, recipeCost(item.recipe, materials)).tier === marginFilter;
+      return getMarginInfo(basePriceOf(item.sellingPrice, settings), recipeCost(item.recipe, materials)).tier === marginFilter;
     }),
-    [menu, materials, q, marginFilter]
+    [menu, materials, q, marginFilter, repricingIds, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]
   );
 
   const isPackaging = (req: IngredientRequirement) => materials.find(m => m.id === req.materialId)?.category === 'Packaging Materials';
@@ -276,10 +287,19 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
           <option value="high">60% and up</option>
           <option value="mid">40% – 60%</option>
           <option value="low">Under 40% / unpriced</option>
+          <option value="repricing">Needs repricing ({repricing.length})</option>
         </select>
         <select aria-label="Sales period" value={salesPeriod} onChange={(e) => setSalesPeriod(e.target.value as SalesPeriod)} className={selectCls}>
           {SALES_PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
         </select>
+        <button
+          type="button"
+          onClick={() => setScenarioOpen(true)}
+          className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-primary/10 px-4 text-sm font-semibold text-primary hover:bg-primary/20 transition-colors"
+        >
+          <Calculator size={16} />
+          What if…
+        </button>
         <span className="font-mono text-[11px] text-muted sm:ml-auto">
           {visible.length} of {menu.length} item{menu.length === 1 ? '' : 's'}
         </span>
@@ -308,9 +328,11 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
       <div className="grid gap-4">
         {visible.map((item) => {
           const cost = recipeCost(item.recipe, materials);
-          const { margin, tier, isLoss } = getMarginInfo(item.sellingPrice, cost);
+          const { margin, tier, isLoss } = getMarginInfo(basePriceOf(item.sellingPrice, settings), cost);
           const expanded = expandedRecipeId === item.id;
-          const suggested = suggestedPrice(cost);
+          const suggestion = suggestedPriceFor(item, materials, settings);
+          const suggested = suggestion.menuPrice;
+          const drift = marginDrift(item, materials, settings);
           const ingredientLines = item.recipe.filter(r => !isPackaging(r));
           const packagingLines = item.recipe.filter(r => isPackaging(r));
           return (
@@ -397,12 +419,10 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                     <span className={LABEL}>Sale price</span>
                     <div className="flex items-center gap-1 mt-0.5">
                       <span className="text-sm font-semibold text-muted">{currency.symbol}</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        aria-label="Sale price"
+                      <PriceInput
+                        ariaLabel="Sale price"
                         value={item.sellingPrice ?? 0}
-                        onChange={(e) => updateMenuItemField(item.id, 'sellingPrice', parseFloat(e.target.value) || 0)}
+                        onCommit={(price) => updateMenuItemField(item.id, 'sellingPrice', price)}
                         className={STAT_INPUT}
                         placeholder="Price"
                       />
@@ -434,11 +454,40 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                   <button
                     onClick={() => updateMenuItemField(item.id, 'sellingPrice', suggested)}
                     className="bg-primary/5 hover:bg-primary/10 rounded-xl px-3 py-2 text-left transition-colors"
-                    title="Apply 3.5x markup suggestion"
+                    disabled={!(suggested > 0)}
+                    title={`Apply the price that earns a ${suggestion.target.toFixed(1).replace(/\.0$/, '')}% margin`}
                   >
                     <span className={LABEL}>Suggest</span>
                     <div className="font-mono text-base font-semibold text-primary mt-0.5">{currency.symbol}{suggested.toFixed(2)}</div>
                   </button>
+                </div>
+
+                {/* Target margin, and how the margin has moved since the price was set */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <label className="bg-stone-50 rounded-xl px-3 py-2 block self-start" title="The margin you want this item to earn. Leave empty to use the default from Settings.">
+                    <span className={LABEL}>Target margin (%)</span>
+                    <PriceInput
+                      ariaLabel="Target margin"
+                      blankWhenZero
+                      step="0.1"
+                      value={item.targetMargin ?? 0}
+                      onCommit={(n) => updateMenuItemField(item.id, 'targetMargin', n > 0 && n < 100 ? n : 0)}
+                      className={`${STAT_INPUT} mt-0.5`}
+                      placeholder={(settings.defaultTargetMargin ?? DEFAULT_TARGET_MARGIN).toFixed(1)}
+                    />
+                  </label>
+                  <div className="col-span-2 md:col-span-3 flex items-center">
+                    <div className="w-full">
+                      <MarginDriftPanel
+                        item={item}
+                        drift={drift}
+                        materials={materials}
+                        settings={settings}
+                        currencySymbol={currency.symbol}
+                        onUsePrice={(price) => updateMenuItemField(item.id, 'sellingPrice', price)}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* What it sold and what it made over the period chosen above */}
@@ -601,6 +650,18 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
         })}
       </div>
     </motion.div>
+
+    {scenarioOpen && (
+      <PricingScenarioModal
+        menu={menu}
+        orders={orders ?? []}
+        materials={materials}
+        settings={settings}
+        today={today}
+        currencySymbol={currency.symbol}
+        onClose={() => setScenarioOpen(false)}
+      />
+    )}
 
     {/* Rendered off-screen (not display:none — html2canvas needs real
         layout) purely to be captured as a PNG; never shown to the user. */}

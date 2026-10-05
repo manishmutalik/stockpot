@@ -10,6 +10,7 @@ import { UNIT_CONVERSIONS } from '../utils/conversions';
 import { PriceHistoryModal } from '../components/PriceHistoryModal';
 import { ReorderSuggestions } from '../components/ReorderSuggestions';
 import { reorderSuggestions } from '../utils/reorder';
+import { materialPriceStats, recipesAffectedBy } from '../utils/pricing';
 import { todayInZone } from '../utils/localDate';
 import { getExpiryInfo, getParDeficitPercent, getStockStatus, StockStatus } from '../utils/inventoryStatus';
 
@@ -613,8 +614,13 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
       {historyForId && (() => {
         const material = remainingInventory.find(m => m.id === historyForId);
         // In a portal, so the screen's entrance animation can't offset the fixed overlay.
+        const entries = priceLog ?? [];
+        const stats = material ? materialPriceStats(material, entries, todayInZone(settings.timezone)) : undefined;
+        const usedIn = material
+          ? recipesAffectedBy(material.id, menu ?? [], remainingInventory).map(r => ({ ...r, name: (menu ?? []).find(m => m.id === r.menuItemId)?.name || 'Untitled' }))
+          : [];
         return material ? createPortal(
-          <PriceHistoryModal material={material} entries={priceLog ?? []} currencySymbol={currency.symbol} onClose={() => setHistoryForId(null)} />,
+          <PriceHistoryModal material={material} entries={entries} stats={stats} usedIn={usedIn} currencySymbol={currency.symbol} onClose={() => setHistoryForId(null)} />,
           document.body
         ) : null;
       })()}

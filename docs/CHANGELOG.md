@@ -1,5 +1,37 @@
 # Changelog
 
+## Price & margin intelligence
+
+Stockpot now watches your margins and tells you when a price needs to move. All of it is
+arithmetic over your own purchases, orders and recipes (no AI), and it works on the pre-GST
+price like every other figure.
+
+- **Margin drift.** Each menu item remembers the day its price was set and what it cost then
+  (per ingredient). When ingredient prices rise, the item shows "Margin 68% → 57% · Butter
+  +14%", and expands to the ingredients that moved, what each added to the unit cost, and a
+  one-tap "Use ₹X" that puts the margin back (and starts a new baseline). A recipe edit is
+  shown as its own line ("Recipe changes +₹X, not ingredient prices"), never blamed on an
+  ingredient. Items priced before this shipped show "Tracking margin since <date>" and are
+  measured from that day; nothing is reconstructed.
+- **Target margin.** Set one in Settings (Pricing) and optionally per item. Suggested
+  prices are now cost ÷ (1 − target), plus GST when prices include it, rounded up to the
+  nearest ₹5 (changeable). Until you set a target, suggestions are the old 3.5× markup and
+  nothing is flagged as under target.
+- **Needs repricing.** A Menu filter and a Dashboard card ("2 items need repricing") for
+  items whose margin slipped 5 points (changeable) since pricing, or is under their target.
+- **What if…** On the Menu: change prices by a % or enter exact prices, go by the last 30
+  or 90 days of real sales, optionally guess a sales change, and see monthly contribution
+  now and after plus the honest answer: "You could lose up to 12% of these sales and still
+  make the same profit as today." Fixed costs do not move with price, so this is also the
+  change in profit. Items with no recent sales say so rather than showing 0%.
+- **Ingredient price stats** in each material's price history: last price paid, 90-day
+  average, 30- and 90-day change ("not enough history yet" until there is a purchase old
+  enough to compare with), and which recipes use it with the cost of a 10% rise.
+- **The sale price saves when you finish typing** (leave the field or press Enter) rather
+  than on every keystroke, so one price is one write and one baseline.
+- **Margins on GST-inclusive menus are now worked out on the pre-GST price** on the Menu
+  screen (they were on the GST-inclusive price, which overstated them).
+
 ## Pre-orders
 
 Take an order for a later day. In **Add Order**, switch from *From stock* to *Pre-order*,

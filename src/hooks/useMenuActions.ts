@@ -13,13 +13,18 @@
 import { auth, db, doc, setDoc, deleteDoc } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { MenuItem, RawMaterial, Order, IngredientRequirement, QuickIngredient, getDefaultRecipeUnit } from '../types';
+import { needsBaselineStamp, pricingStamp } from '../utils/pricing';
+import { DEFAULT_TIME_ZONE, todayInZone } from '../utils/localDate';
 
 export function useMenuActions(
   menu: MenuItem[],
   materials: RawMaterial[],
   orders: Order[],
-  showAlert: (title: string, message: string) => void
+  showAlert: (title: string, message: string) => void,
+  options: { today?: () => string } = {}
 ) {
+  const today = options.today ?? (() => todayInZone(DEFAULT_TIME_ZONE));
+
   /**
    * Creates a new blank menu item in Firestore. Starts with an empty recipe
    * and zero selling price; the user edits it inline in the Menu tab.
@@ -67,6 +72,10 @@ export function useMenuActions(
   /**
    * Generically updates any single field on a menu item document.
    * Spreads the existing item to avoid clobbering other fields.
+   *
+   * Setting a price also writes the pricing stamp (the day, the unit cost and each recipe material's cost per
+   * unit), so margin drift can later be measured against the cost the price was set at. Callers must pass the
+   * final price (the Menu screen commits on blur), not every keystroke, or each one would reset the baseline.
    */
   const updateMenuItemField = async (id: string, field: keyof MenuItem, value: any) => {
     if (!auth.currentUser) return;
@@ -74,9 +83,11 @@ export function useMenuActions(
     const item = menu.find(m => m.id === id);
     try {
       if (item) {
+        const stamp = field === 'sellingPrice' && Number(value) > 0 ? { ...pricingStamp(item, materials, today()), pricingIsBaseline: false } : {};
         await setDoc(doc(db, 'users', userId, 'menu', id), {
           ...item,
-          [field]: value
+          [field]: value,
+          ...stamp
         }, { merge: true });
       } else {
         await setDoc(doc(db, 'users', userId, 'menu', id), { [field]: value }, { merge: true });
@@ -84,6 +95,27 @@ export function useMenuActions(
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/menu/${id}`);
     }
+  };
+
+  /**
+   * Gives every priced item that has no pricing stamp a baseline one at today's costs, marked as a baseline
+   * (the cost it was really priced at is not knowable, so past costs are not reconstructed). Each item is
+   * stamped once: after the write it has a stamp and drops out. Returns how many it stamped.
+   */
+  const stampPricingBaselines = async (): Promise<number> => {
+    if (!auth.currentUser) return 0;
+    const userId = auth.currentUser.uid;
+    const pending = menu.filter(needsBaselineStamp);
+    let done = 0;
+    for (const item of pending) {
+      try {
+        await setDoc(doc(db, 'users', userId, 'menu', item.id), { ...pricingStamp(item, materials, today()), pricingIsBaseline: true }, { merge: true });
+        done++;
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/menu/${item.id}`);
+      }
+    }
+    return done;
   };
 
   /**
@@ -243,6 +275,7 @@ export function useMenuActions(
     addMenuItem,
     updateMenuItem,
     updateMenuItemField,
+    stampPricingBaselines,
     deleteMenuItem,
     clearFinishedGoodsStock,
     copyMenuItem,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { summarizeWastage, reasonOf, UNSPECIFIED_REASON } from '../wastageStats';
 import { experimentCost, summarizeExperiments } from '../rndStats';
-import { recipeCost, getMarginInfo, suggestedPrice, summarizeMenu } from '../menuStats';
+import { recipeCost, getMarginInfo, summarizeMenu } from '../menuStats';
 
 const materials: any[] = [
   { id: 'flour', name: 'Flour', unit: 'kg', costPerUnit: 10 },
@@ -65,7 +65,6 @@ describe('menu stats', () => {
     expect(getMarginInfo(10, 7).tier).toBe('low');
     expect(getMarginInfo(10, 12).isLoss).toBe(true);
     expect(getMarginInfo(0, 3).margin).toBe(0);
-    expect(suggestedPrice(2.5)).toBe(8.75);
   });
 
   it('summarises the menu', () => {

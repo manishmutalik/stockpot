@@ -6,7 +6,7 @@ import type { MarginTier } from '../../utils/menuStats';
 
 const money = (n: number) => `₹${n.toFixed(2)}`;
 const profit = (over: Partial<ProductProfit> = {}): ProductProfit => ({
-  menuItemId: 'cake', unitsSold: 40, orderCount: 12, revenue: 6000, contribution: 4200, avgContributionPerUnit: 105, estimated: false, ...over,
+  menuItemId: 'cake', unitsSold: 40, orderCount: 12, revenue: 6000, grossRevenue: 6000, paymentFees: 0, costOfGoods: 0, contribution: 4200, avgContributionPerUnit: 105, estimated: false, ...over,
 });
 const healthy: { tier: MarginTier; margin: number } = { tier: 'high', margin: 70 };
 const show = (p: ProductProfit | undefined, recipe = healthy) =>
