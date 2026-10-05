@@ -20,7 +20,7 @@ import { formatFigure, validateAiText, type AiRegistry, type FormatContext } fro
 import type { AiSnapshot } from './aiSnapshot';
 
 /** What an attention item is about. Repricing and price-move kinds arrive with the pricing work. */
-export const AI_ATTENTION_KINDS = ['profit_driver', 'wastage', 'low_stock', 'expiring', 'reorder_customer', 'unpaid'] as const;
+export const AI_ATTENTION_KINDS = ['preorder', 'profit_driver', 'wastage', 'low_stock', 'expiring', 'reorder_customer', 'unpaid'] as const;
 export type AttentionKind = (typeof AI_ATTENTION_KINDS)[number];
 
 export const MAX_ATTENTION_ITEMS = 4;
@@ -153,6 +153,15 @@ export function buildDeterministicBriefing(snapshot: AiSnapshot): BriefingConten
     : `Nothing changed enough to explain, compared with ${snapshot.comparison.label}.`;
 
   const attention: BriefingAttention[] = [];
+  // Pre-orders to prepare come first: they have a deadline. Each is "N item, N item" with the numbers from the app.
+  const preorderLine = (label: string, day: AiSnapshot['preorders']['dueToday']) =>
+    day && day.items.length > 0
+      ? `Pre-orders due ${label}: ${day.items.slice(0, 3).map(i => `{{fig:${i.quantity}}} {{name:${i.name}}}`).join(', ')}.`
+      : null;
+  const dueToday = preorderLine('today', snapshot.preorders?.dueToday ?? null);
+  const dueTomorrow = preorderLine('tomorrow', snapshot.preorders?.dueTomorrow ?? null);
+  if (dueToday) attention.push({ kind: 'preorder', text: dueToday });
+  if (dueTomorrow) attention.push({ kind: 'preorder', text: dueTomorrow });
   const names = (ids: string[]) => ids.slice(0, 3).map(id => `{{name:${id}}}`).join(', ');
   if (snapshot.inventory.lowStock.length) attention.push({ kind: 'low_stock', text: `Running low: ${names(snapshot.inventory.lowStock)}.` });
   // A material that will run out soon at the current rate of use, and is not already in the low-stock line.

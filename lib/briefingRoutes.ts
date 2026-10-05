@@ -76,6 +76,16 @@ export function validateSnapshotShape(s: unknown): s is AiSnapshot {
   const mentioned = s.customers.mentioned;
   if (mentioned !== undefined && (!Array.isArray(mentioned) || mentioned.length > 5 || !mentioned.every((c: any) => isObject(c) && typeof c.label === 'string' && c.label.length <= 20))) return false;
   if (s.unsoldItems !== undefined && !isStringArray(s.unsoldItems, 15)) return false;
+  // Pre-orders to prepare: likewise optional.
+  const pre = s.preorders;
+  if (pre !== undefined) {
+    if (!isObject(pre) || (pre.advancesHeld !== undefined && (typeof pre.advancesHeld !== 'string' || pre.advancesHeld.length > 90))) return false;
+    for (const day of [pre.dueToday, pre.dueTomorrow]) {
+      if (day === null || day === undefined) continue;
+      if (!isObject(day) || typeof day.orders !== 'string' || day.orders.length > 90 || !Array.isArray(day.items) || day.items.length > 5) return false;
+      if (!day.items.every((i: any) => isObject(i) && typeof i.name === 'string' && i.name.length <= 90 && typeof i.quantity === 'string' && i.quantity.length <= 90)) return false;
+    }
+  }
   return isStringArray(s.notes, 10);
 }
 

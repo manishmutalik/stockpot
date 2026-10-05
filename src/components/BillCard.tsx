@@ -1,6 +1,6 @@
 import React from 'react';
 import { QrImage } from './QrImage';
-import { formatMoney, type Bill } from '../utils/billing';
+import { billBalance, formatMoney, type Bill } from '../utils/billing';
 
 export type OnlineLink = { status: 'loading' } | { status: 'error' } | { status: 'ready'; url: string };
 
@@ -75,8 +75,19 @@ export const BillCard: React.FC<{ bill: Bill; upiLink: string | null; online: On
           </div>
         )}
         <div style={{ ...row, borderTop: `2px solid ${INK}`, paddingTop: 8, marginTop: 8, fontSize: 16, fontWeight: 700 }}>
-          <span>{statement ? 'Total due' : 'Total'}</span><span style={{ fontFamily: MONO }}>{money(bill.total)}</span>
+          <span>{statement && !bill.advance ? 'Total due' : 'Total'}</span><span style={{ fontFamily: MONO }}>{money(bill.total)}</span>
         </div>
+        {bill.advance && (
+          <>
+            <div style={row}>
+              <span style={{ color: MUTED }}>Advance received{bill.advance.date ? ` (${new Date(bill.advance.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })})` : ''}</span>
+              <span style={{ fontFamily: MONO }}>-{money(bill.advance.amount)}</span>
+            </div>
+            <div style={{ ...row, borderTop: `2px solid ${INK}`, paddingTop: 8, marginTop: 8, fontSize: 16, fontWeight: 700 }}>
+              <span>Balance due</span><span style={{ fontFamily: MONO }}>{money(billBalance(bill))}</span>
+            </div>
+          </>
+        )}
       </div>
 
       <div style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 20 }}>

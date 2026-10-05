@@ -16,7 +16,7 @@ const form = (over: Record<string, any> = {}): OrderParseOutcome => ({
 function renderModal(outcome: OrderParseOutcome | null, onSave = vi.fn().mockResolvedValue(undefined)) {
   const parse = vi.fn().mockResolvedValue(outcome);
   const parser: OrderParser | null = outcome ? { parse } : null;
-  render(<AddOrderModal isOpen onClose={vi.fn()} menu={menu as any} onSave={onSave} currency={currency} orderParser={parser} />);
+  render(<AddOrderModal isOpen onClose={vi.fn()} menu={menu as any} onSave={onSave} currency={currency} orderParser={parser} today="2026-10-01" />);
   return { onSave, parse };
 }
 const paste = (text: string) => fireEvent.change(screen.getByLabelText(/Fill from a message/), { target: { value: text } });
@@ -68,7 +68,9 @@ describe('filling the form from a message', () => {
     expect(selects[0].value).toBe('cookie');
     expect(selects[1].value).toBe('cake');
     expect(screen.getAllByPlaceholderText('Qty').map(i => (i as HTMLInputElement).value)).toEqual(['3', '2']);
-    expect(value('Order date')).toBe('2026-10-10');
+    // A date after today makes it a pre-order, so the field is the due date.
+    expect(value('Due date')).toBe('2026-10-10');
+    expect(screen.getByRole('radio', { name: 'Pre-order' }).getAttribute('aria-checked')).toBe('true');
     expect(value(/Customer/)).toBe('Anita');
     expect(value(/Phone/)).toBe('+91 98450 10101');
     expect(value(/Delivery address/)).toBe('12 MG Road');

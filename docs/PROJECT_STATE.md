@@ -184,6 +184,42 @@ and passed to `AddOrderModal` as `customers`.
   Menu undo toast is `z-[80]`. `overlayStacking.test.tsx` keeps modal > nav and
   confirm > modal.
 
+## Pre-orders (Phase A, built)
+
+Handoff: `pre-orders-handoff.md`. The rules live in `src/utils/preorders.ts`
+(`holdsStock`, `countsAsSale`, `isActual`, `isBookedForLater`, `isOpenPreorder`,
+`summarizeDue`). Order gained `preorder`, `bookedOn`, `dueSlot`, `notes`, `stockClaimed`,
+`advance {amount, method, feeRate, date}`, `cancelledOn`, `advanceOutcome`.
+
+- **Stock.** A pre-order holds no stock until handover (`stockClaimed`). Delete, edit,
+  reset and cancel give stock back only when `holdsStock` is true. Handover claims every
+  line of the group or none, and re-stamps costs (not price or name).
+- **Figures count only up to today** (owner's decision). Every actual figure counts
+  orders dated today or earlier, in `settings.timezone`, and not cancelled. Future-dated
+  orders are **Booked for later ₹X** (`bookedAhead` in `profit.ts`) on Orders and the
+  Dashboard. Revenue lands on the due date. Customer stats (last order, status, spend,
+  due, lapsed) ignore not-yet-due pre-orders.
+- **Advance money.** Stored on the first member of a group, like a discount. Payment fee
+  = advance × `advance.feeRate` + balance × the order's own rate (balance fee only when
+  paid with a method recorded). Bills show advance and `balanceDue`; the UPI link asks for
+  the balance; `groupPendingPayments` owes total − advance and skips future and cancelled
+  orders. A kept advance is income on the cancellation day (`forfeitedAdvances` in
+  `financialsForRange`, a driver in the AI snapshot).
+- **UI.** `AddOrderModal` (mode toggle, due date and slot, notes, advance, per-line price,
+  confirmation step), `OrdersView` + `PreorderParts` (Upcoming and Cancelled filters,
+  booked-ahead strip, handover collects the balance, cancel dialogs), `DueTomorrowCard`
+  on the Dashboard. An order handed over before its due date stays under Upcoming until
+  that date.
+- **AI.** Briefing kind `'preorder'` (deterministic lines, placed first), snapshot
+  `preorders` section, parser fills notes, advance and a future date.
+- **Not done.** `bakery-mobile` is unused (a native app is planned) and was left alone.
+  The "Accountant Pack" mentioned in the handoff is not in the repo (still unlocated).
+
+After that, in the owner's queue: the Phase 2 pricing handoff
+(`price-margin-intelligence-handoff.md`: `pricing.ts`, margin drift, target-margin prices,
+what-if; it also unlocks the chat's `run_pricing_scenario` tool) and the still-open
+`parse-production-run` from the AI handoff.
+
 ## Open items for the user (none blocking)
 
 - **Razorpay or Cashfree instead of Stripe.** The user wanted this later. We

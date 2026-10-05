@@ -1,5 +1,37 @@
 # Changelog
 
+## Pre-orders
+
+Take an order for a later day. In **Add Order**, switch from *From stock* to *Pre-order*,
+pick the due date (and a time of day if you like), add notes, and optionally an advance.
+
+- **No stock is taken when you book.** The units leave `finishedGoodsStock` when you hand
+  the order over, all items of a multi-item order together or none. Booking works even
+  when the shelf is empty.
+- **Revenue lands on the due date.** Every actual figure (profit, revenue, Dashboard,
+  Orders stats, Pending Payments, customers, AI figures) counts only orders dated today
+  or earlier in your time zone and not cancelled. Orders booked for later are shown
+  separately as **Booked for later ₹X**, with the advances you hold.
+- **Advances.** An advance can be UPI, cash, card or other. The bill shows the advance and
+  the balance, the UPI QR asks for the balance, and Pending Payments owes the total less
+  the advance. Payment fees are charged on the advance at the rate in force the day it
+  was taken and on the balance at the order's own rate.
+- **Handover** asks you to collect the balance, re-costs the order at today's material
+  prices (the price and item name stay as booked) and takes the stock.
+- **Cancel** a pre-order and either refund the advance or keep it. A kept advance is
+  income on the day of cancellation (it is in profit and True Profit, with its own
+  driver), and the cancelled order is never counted as a sale.
+- **Orders tab.** New *Upcoming* (due after today, grouped by day, handed over early
+  included) and *Cancelled* filters, and a pre-order tag with due date, advance, balance
+  and notes on each row. **Dashboard:** a "Pre-orders due" card for today and tomorrow
+  with *View in Orders*.
+- **Per-line price.** Each item in an order can carry its own price (a custom cake, a
+  wedding quote); the menu price is only the default.
+- **Booking confirmation** with a ready WhatsApp message (date, time, advance, balance).
+- **AI.** The daily briefing leads with pre-orders due today and tomorrow, the chat and
+  snapshot know about them, and the order message reader switches a future date to
+  Pre-order and fills the notes and advance. Customer stats ignore not-yet-due pre-orders.
+
 ## Customer suggestions in Add Order
 
 Type the first letters of a returning customer's name, or three or more digits of their

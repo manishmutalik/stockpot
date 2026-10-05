@@ -24,6 +24,8 @@ Fields:
 - paymentMethod: "upi", "cash", "card" or "other" if the message says how they pay or paid, otherwise null.
 - discountAmount: an amount off if the message states one in money (a number written in the message), otherwise null.
 - discountPercent: a percentage off if the message states one (the number written in the message), otherwise null.
+- notes: anything the customer asks for the order itself that is not an item, a time or an address: a message for a cake, a flavour, "eggless", pick-up instructions. Copy it as written. Null if there is none.
+- advanceAmount: money the customer says they have already paid, or are paying now, as an advance or a token or a deposit (the number written in the message). This is not the whole price: when it is only an advance, paymentStatus stays null. Null if none is mentioned. Use paymentMethod for how the advance was paid, if said.
 
 Phone numbers have been removed from the message and appear as [phone]. Ignore them.
 

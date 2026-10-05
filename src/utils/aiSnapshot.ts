@@ -23,10 +23,11 @@ import { formatFigure, type AiRegistry, type Figure, type FormatContext } from '
 import { countByStatus, customersForTab, type CustomerProfile } from './customers';
 import { EXPIRING_SOON_DAYS, getStockStatus } from './inventoryStatus';
 import { addDays, daysBetween } from './localDate';
-import { financialsForRange, productProfits, type Financials } from './profit';
+import { bookedAhead, financialsForRange, productProfits, type Financials } from './profit';
+import { actualOrders, summarizeDue } from './preorders';
 import { reorderSuggestions, type ReorderConfidence, type ReorderFlag } from './reorder';
 
-export const SNAPSHOT_LIMITS = { products: 30, customersPerList: 10, stockItems: 10, trendDays: 7, unsoldItems: 15, mentionedCustomers: 5, reorderSoon: 5 } as const;
+export const SNAPSHOT_LIMITS = { products: 30, customersPerList: 10, stockItems: 10, trendDays: 7, unsoldItems: 15, mentionedCustomers: 5, reorderSoon: 5, preorderItems: 5 } as const;
 
 export type ComparisonMode = 'same_weekday_last_week' | 'previous_period';
 
@@ -50,6 +51,7 @@ const DRIVERS: { id: string; label: string; sign: 1 | -1; pick: (f: Financials) 
   { id: 'payment_fees', label: 'Payment fees', sign: -1, pick: f => f.paymentFees },
   { id: 'wastage', label: 'Wastage', sign: -1, pick: f => f.wastageExpenses },
   { id: 'fixed_costs', label: 'Fixed costs', sign: -1, pick: f => f.fixedCosts },
+  { id: 'forfeited_advances', label: 'Advances kept from cancelled pre-orders', sign: 1, pick: f => f.forfeitedAdvances },
 ];
 
 export interface SnapshotDriver {
@@ -57,6 +59,12 @@ export interface SnapshotDriver {
   figure: string;
   label: string;
   effect: 'raised' | 'lowered';
+}
+
+/** Pre-orders still to make or hand over on one day: how many orders, and the units of each item (all figures). */
+export interface SnapshotPreorderDay {
+  orders: string;
+  items: { name: string; quantity: string }[];
 }
 
 export interface AiSnapshot {
@@ -86,6 +94,8 @@ export interface AiSnapshot {
     /** Customers the owner named in a question (matched to a label on the client): a few facts about each. */
     mentioned: { label: string; status: string; daysSinceLastOrder: string; orders: string; spent: string; contribution: string; favourite?: string }[];
   };
+  /** Pre-orders to prepare (open: not handed over or cancelled) and the customers' money held against them. */
+  preorders: { dueToday: SnapshotPreorderDay | null; dueTomorrow: SnapshotPreorderDay | null; advancesHeld?: string };
   notes: string[];
 }
 
@@ -132,7 +142,7 @@ export function buildBusinessSnapshot(input: {
   const nameId = (prefix: string, key: string, text: string) => { const id = `${prefix}_${key}`; names[id] = text; return id; };
 
   const financials = (range: { start: string; end: string }) =>
-    financialsForRange({ orders, menu, materials, experiments: input.experiments, wastageLogs: input.wastageLogs, settings, start: range.start, end: range.end });
+    financialsForRange({ orders, menu, materials, experiments: input.experiments, wastageLogs: input.wastageLogs, settings, start: range.start, end: range.end, today: input.today });
   const now = financials(period);
   const before = financials(comparison);
 
@@ -163,7 +173,7 @@ export function buildBusinessSnapshot(input: {
     }));
 
   // Products: the biggest sellers, from the same per-product sums as the Menu screen.
-  const perProduct = productProfits(orders.filter(o => o.date >= period.start && o.date <= period.end), menu, materials, settings);
+  const perProduct = productProfits(actualOrders(orders, input.today).filter(o => o.date >= period.start && o.date <= period.end), menu, materials, settings);
   const products = [...perProduct.values()]
     .filter(p => menu.some(m => m.id === p.menuItemId))
     .sort((a, b) => b.revenue - a.revenue || a.menuItemId.localeCompare(b.menuItemId))
@@ -255,6 +265,26 @@ export function buildBusinessSnapshot(input: {
     }),
   };
 
+  // Pre-orders to prepare. Due today includes any overdue and not yet handed over.
+  const dueDay = (tag: string, label: string, isDue: (date: string) => boolean): SnapshotPreorderDay | null => {
+    const due = summarizeDue(input.orders, menu, isDue);
+    if (!due) return null;
+    return {
+      orders: count(`pre_${tag}_orders`, `Pre-orders due ${label}`, due.orderCount),
+      items: due.items.slice(0, SNAPSHOT_LIMITS.preorderItems).map(i => ({
+        name: nameId('item', i.menuItemId, i.name),
+        quantity: count(`pre_${tag}_${i.menuItemId}_qty`, `Units of ${i.name} due ${label} on pre-orders`, i.quantity),
+      })),
+    };
+  };
+  const tomorrow = addDays(input.today, 1);
+  const held = bookedAhead({ orders: input.orders, menu, materials, settings, today: input.today }).advancesHeld;
+  const preorders = {
+    dueToday: dueDay('today', 'today or overdue', d => d <= input.today),
+    dueTomorrow: dueDay('tomorrow', 'tomorrow', d => d === tomorrow),
+    ...(held > 0 && { advancesHeld: money('advances_held', 'Money received in advance on pre-orders not yet handed over', held) }),
+  };
+
   const notes: string[] = [];
   if (now.estimated || before.estimated) notes.push("Some orders are valued at today's prices because they were made before prices were recorded on each order.");
   notes.push('Price-change and repricing data are not available yet.');
@@ -268,7 +298,7 @@ export function buildBusinessSnapshot(input: {
       period, comparison,
       figures: promptFigures, names, drivers, products, unsoldItems, trend,
       inventory: { cashTiedUp, lowStock, expiringSoon, reorderSoon },
-      customers, notes,
+      customers, preorders, notes,
     },
     registry: { figures, names },
     customerNames,

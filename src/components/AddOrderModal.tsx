@@ -1,11 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, Check, CirclePlus, Loader2, MapPin, Phone, ShoppingBag, Sparkles, Trash2, User } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Calendar, Check, CirclePlus, Clock, Loader2, MapPin, MessageCircle, Phone, ShoppingBag, Sparkles, StickyNote, Trash2, User } from 'lucide-react';
 import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
 import { PAYMENT_METHODS, type PaymentMethod } from '../types';
 import type { OrderParser } from '../hooks/useOrderParser';
 import { CustomerCombobox } from './CustomerCombobox';
 import type { CustomerSuggestion } from '../utils/customers';
 import type { NotFoundItem } from '../utils/orderParse';
+import { buildPreorderConfirmation, buildWhatsAppUrl } from '../utils/billing';
 
 interface MenuItem {
   id: string;
@@ -18,7 +19,30 @@ interface MenuItem {
 export interface OrderLineItem {
   menuItemId: string;
   quantity: number;
+  /** The agreed price of one unit, when it is not the menu price. */
+  unitPrice?: number;
 }
+
+/** A line as it is edited: `priceText` is set only once the owner has typed a price; until then the menu price shows. */
+interface OrderRow {
+  menuItemId: string;
+  quantity: number;
+  priceText?: string;
+}
+
+type OrderMode = 'stock' | 'preorder';
+
+const DUE_SLOTS = [
+  { value: '', label: 'Any time' },
+  { value: 'morning', label: 'Morning' },
+  { value: 'afternoon', label: 'Afternoon' },
+  { value: 'evening', label: 'Evening' },
+  { value: 'time', label: 'At a time…' },
+];
+
+/** What the customer owes for a sale: GST on top in exclusive pricing (an estimate here; the saved order is checked with the exact rules). */
+const amountOwed = (sale: number, gst?: { gstApplicable?: boolean; gstRate?: number; gstPricingMode?: string }) =>
+  gst?.gstApplicable && (gst.gstRate ?? 0) > 0 && (gst.gstPricingMode ?? 'exclusive') === 'exclusive' ? sale * (1 + (gst.gstRate ?? 0) / 100) : sale;
 
 interface AddOrderModalProps {
   isOpen: boolean;
@@ -31,7 +55,10 @@ interface AddOrderModalProps {
    * open and the user can retry; nothing partially saves.
    */
   onSave: (
-    common: { date: string; customerName?: string; customerPhone?: string; deliveryAddress?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number },
+    common: {
+      date: string; customerName?: string; customerPhone?: string; deliveryAddress?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number;
+      preorder?: boolean; dueSlot?: string; notes?: string; advance?: { amount: number; method: PaymentMethod };
+    },
     lineItems: OrderLineItem[]
   ) => Promise<void>;
   /** When set, the modal opens with a single line item pre-filled to this
@@ -42,11 +69,13 @@ interface AddOrderModalProps {
   orderParser?: OrderParser | null;
   /** Past customers, suggested while the name or phone number is typed. Empty or absent: the fields are plain inputs. */
   customers?: CustomerSuggestion[];
-  /** Today in the business's time zone ("last order 12 days ago"). Defaults to the UTC date. */
+  /** Today in the business's time zone ("last order 12 days ago", and a later date means a pre-order). Defaults to the UTC date. */
   today?: string;
+  /** GST settings, so an advance can be compared with what the customer will owe. */
+  gst?: { gstApplicable?: boolean; gstRate?: number; gstPricingMode?: string };
 }
 
-const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderLineItem => ({ menuItemId: menu[0]?.id || '', quantity: 1 });
+const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderRow => ({ menuItemId: menu[0]?.id || '', quantity: 1 });
 
 /**
  * Modal form for adding a customer order with one or more items in a
@@ -60,7 +89,7 @@ const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderLineItem => ({ menuItemId: menu
  * @param currency - Locale currency config; only `symbol` is used for display.
  * @param presetMenuItemId - See AddOrderModalProps.
  */
-export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser, customers = [], today: todayProp }: AddOrderModalProps) {
+export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser, customers = [], today: todayProp, gst }: AddOrderModalProps) {
   const today = todayProp ?? new Date().toISOString().split('T')[0];
   const [date,          setDate]          = useState(today);
   const [customerName,  setCustomerName]  = useState('');
@@ -69,10 +98,22 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
   const [payLater,      setPayLater]      = useState(false);
   const [method,        setMethod]        = useState<PaymentMethod | ''>('');
   const [discountText,  setDiscountText]  = useState('');
-  const [lineItems,     setLineItems]     = useState<OrderLineItem[]>([EMPTY_LINE_ITEM(menu)]);
+  const [lineItems,     setLineItems]     = useState<OrderRow[]>([EMPTY_LINE_ITEM(menu)]);
   const [isSaving,      setIsSaving]      = useState(false);
   const [error,         setError]         = useState('');
   const [invalidRowIndex, setInvalidRowIndex] = useState<number | null>(null);
+  // Pre-orders: booked ahead of time, taking no stock until they are handed over.
+  const [mode,          setMode]          = useState<OrderMode>('stock');
+  const [slot,          setSlot]          = useState('');
+  const [dueTime,       setDueTime]       = useState('');
+  const [notes,         setNotes]         = useState('');
+  const [advanceText,   setAdvanceText]   = useState('');
+  const [advanceMethod, setAdvanceMethod] = useState<PaymentMethod>('upi');
+  // Once the owner picks a mode themselves, choosing a date no longer changes it.
+  const modeChosen = useRef(false);
+  const payChosen = useRef(false);
+  // After a pre-order is booked for a customer with a phone number: offer the confirmation on WhatsApp.
+  const [booked, setBooked] = useState<{ message: string; url: string } | null>(null);
   // Filling the form from a pasted message.
   const [message,       setMessage]       = useState('');
   const [isReading,     setIsReading]     = useState(false);
@@ -101,14 +142,38 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, menu, presetMenuItemId]);
 
-  const subtotal = useMemo(() => lineItems.reduce((sum, li) => {
+  /** The price of one unit on a line: the one typed, else the menu price. A blank or invalid entry falls back to the menu price. */
+  const priceOf = (li: OrderRow) => {
     const item = menu.find(m => m.id === li.menuItemId);
-    return sum + (item ? item.sellingPrice * li.quantity : 0);
-  }, 0), [lineItems, menu]);
+    const typed = li.priceText === undefined ? NaN : parseFloat(li.priceText);
+    return typed > 0 ? typed : item?.sellingPrice ?? 0;
+  };
+  const subtotal = useMemo(() => lineItems.reduce((sum, li) => sum + priceOf(li) * li.quantity, 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lineItems, menu]);
   const discount = Math.max(parseFloat(discountText) || 0, 0);
   const totalValue = Math.max(subtotal - discount, 0);
+  const preorder = mode === 'preorder';
+  const owed = amountOwed(totalValue, gst);
+  const advance = preorder ? Math.max(parseFloat(advanceText) || 0, 0) : 0;
+  const balance = Math.max(owed - advance, 0);
 
-  const updateLineItem = (index: number, patch: Partial<OrderLineItem>) => {
+  // A date after today means a pre-order, unless the owner has chosen the mode themselves.
+  const chooseDate = (d: string) => {
+    setDate(d);
+    if (!modeChosen.current) {
+      const next: OrderMode = d > today ? 'preorder' : 'stock';
+      setMode(next);
+      if (next === 'preorder' && !payChosen.current) setPayLater(true);
+    }
+  };
+  const chooseMode = (next: OrderMode) => {
+    modeChosen.current = true;
+    setMode(next);
+    // A pre-order is usually paid when it is handed over.
+    if (next === 'preorder' && !payChosen.current) setPayLater(true);
+  };
+  const updateLineItem = (index: number, patch: Partial<OrderRow>) => {
     setLineItems(prev => prev.map((li, i) => i === index ? { ...li, ...patch } : li));
     setError('');
     setInvalidRowIndex(null);
@@ -133,6 +198,15 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
     setFilled(false);
     setReadNotes([]);
     setNotFound([]);
+    setMode('stock');
+    setSlot('');
+    setDueTime('');
+    setNotes('');
+    setAdvanceText('');
+    setAdvanceMethod('upi');
+    setBooked(null);
+    modeChosen.current = false;
+    payChosen.current = false;
   };
 
   // Pre-fills the form from the message. Nothing is saved: the owner checks it and presses Add Order.
@@ -158,12 +232,23 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
       if (f.customerName !== undefined) setCustomerName(f.customerName);
       if (f.customerPhone !== undefined) setCustomerPhone(f.customerPhone);
       if (f.knownCustomer) notes.push('This looks like an existing customer; their details were filled in.');
-      if (f.date) setDate(f.date);
+      if (f.date) chooseDate(f.date);
       if (f.dateNotUnderstood) notes.push(`Couldn't tell the date from "${f.dateNotUnderstood}". Please check the order date.`);
       if (f.payLater !== undefined) setPayLater(f.payLater);
       if (f.method) setMethod(f.method);
       if (f.discountAmount !== undefined) setDiscountText(String(f.discountAmount));
       if (f.deliveryAddress !== undefined) setDeliveryAddress(f.deliveryAddress);
+      if (f.notes !== undefined) setNotes(f.notes);
+      if (f.advanceAmount !== undefined) {
+        setAdvanceText(String(f.advanceAmount));
+        if (f.advanceMethod) setAdvanceMethod(f.advanceMethod);
+      }
+      // Notes and an advance belong to a pre-order, unless the owner has already chosen the type.
+      if ((f.notes !== undefined || f.advanceAmount !== undefined) && !modeChosen.current) {
+        setMode('preorder');
+        if (!payChosen.current) setPayLater(true);
+        if (f.advanceAmount !== undefined) notes.push('Set as a pre-order because the message mentions an advance.');
+      }
       setNotFound(f.notFound);
       setReadNotes(notes);
       setFilled(true);
@@ -222,31 +307,79 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
       return;
     }
 
+    // A price typed on a line must be a real price.
+    const badPriceIndex = lineItems.findIndex(li => li.priceText !== undefined && li.priceText.trim() !== '' && !(parseFloat(li.priceText) > 0));
+    if (badPriceIndex !== -1) {
+      setInvalidRowIndex(badPriceIndex);
+      setError(lineItems.length > 1 ? `Please enter a price for row ${badPriceIndex + 1}, or clear it to use the menu price.` : 'Please enter a price, or clear it to use the menu price.');
+      return;
+    }
+
     // Stock is a hard cap — combine quantities first, since the same item
     // can appear in more than one row and each row passing individually
-    // doesn't mean their total fits what's actually available.
-    const requestedByItem = new Map<string, number>();
-    for (const li of lineItems) {
-      requestedByItem.set(li.menuItemId, (requestedByItem.get(li.menuItemId) ?? 0) + li.quantity);
+    // doesn't mean their total fits what's actually available. A pre-order is booked before it is baked, so it has no cap
+    // here: its stock is checked when it is handed over.
+    if (!preorder) {
+      const requestedByItem = new Map<string, number>();
+      for (const li of lineItems) {
+        requestedByItem.set(li.menuItemId, (requestedByItem.get(li.menuItemId) ?? 0) + li.quantity);
+      }
+      for (const [menuItemId, requested] of requestedByItem) {
+        const item = menu.find(m => m.id === menuItemId);
+        const available = item?.finishedGoodsStock ?? 0;
+        if (requested > available) {
+          setInvalidRowIndex(lineItems.findIndex(li => li.menuItemId === menuItemId));
+          setError(`Only ${available} unit(s) of "${item?.name}" in stock — this order needs ${requested}.`);
+          return;
+        }
+      }
     }
-    for (const [menuItemId, requested] of requestedByItem) {
-      const item = menu.find(m => m.id === menuItemId);
-      const available = item?.finishedGoodsStock ?? 0;
-      if (requested > available) {
-        setInvalidRowIndex(lineItems.findIndex(li => li.menuItemId === menuItemId));
-        setError(`Only ${available} unit(s) of "${item?.name}" in stock — this order needs ${requested}.`);
+
+    if (preorder && advanceText.trim() !== '') {
+      if (!(parseFloat(advanceText) > 0)) { setError('The advance must be more than nothing, or leave it empty.'); return; }
+      if (advance > owed + 0.005) {
+        setError(`The advance (${currency.symbol}${advance.toFixed(2)}) is more than the order comes to (${currency.symbol}${owed.toFixed(2)}).`);
         return;
       }
     }
+    if (preorder && slot === 'time' && !/^\d{1,2}:\d{2}$/.test(dueTime)) {
+      setError('Please choose the time, or pick another time of day.');
+      return;
+    }
+    const dueSlot = slot === 'time' ? dueTime : slot;
 
     setIsSaving(true);
     try {
       await onSave(
         { date, customerName: customerName.trim() || undefined, customerPhone: customerPhone.trim() || undefined,
           deliveryAddress: deliveryAddress.trim() || undefined, paymentStatus: payLater ? 'unpaid' : 'paid',
-          paymentMethod: !payLater && method ? method : undefined, discount: discount > 0 ? discount : undefined },
-        lineItems
+          paymentMethod: !payLater && method ? method : undefined, discount: discount > 0 ? discount : undefined,
+          ...(preorder && {
+            preorder: true,
+            ...(dueSlot && { dueSlot }),
+            ...(notes.trim() && { notes: notes.trim() }),
+            ...(advance > 0 && { advance: { amount: advance, method: advanceMethod } }),
+          }) },
+        lineItems.map(li => {
+          const custom = priceOf(li);
+          const menuPrice = menu.find(m => m.id === li.menuItemId)?.sellingPrice ?? 0;
+          return { menuItemId: li.menuItemId, quantity: li.quantity, ...(custom !== menuPrice && { unitPrice: custom }) };
+        })
       );
+      // A pre-order for a customer with a phone number: offer to confirm it on WhatsApp before closing.
+      const phone = customerPhone.trim();
+      const message = preorder && phone
+        ? buildPreorderConfirmation({
+            customerName: customerName.trim() || undefined,
+            lines: lineItems.map(li => ({ name: menu.find(m => m.id === li.menuItemId)?.name ?? 'item', quantity: li.quantity })),
+            date, dueSlot, currency, total: owed, advance: advance > 0 ? advance : undefined,
+          })
+        : '';
+      const url = message ? buildWhatsAppUrl(phone, message) : null;
+      if (url) {
+        setBooked({ message, url });
+        return;
+      }
       resetForm();
       onClose();
     } catch (err) {
@@ -262,11 +395,26 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
 
   return (
     <ModalShell
-      title="Add Order"
-      subtitle="Log a customer order"
+      title={booked ? 'Pre-order Booked' : preorder ? 'Book Pre-order' : 'Add Order'}
+      subtitle={booked ? 'Let the customer know' : preorder ? 'Take an order for later' : 'Log a customer order'}
       icon={ShoppingBag}
       onClose={handleClose}
-      footer={
+      footer={booked ? (
+        <div className="flex gap-3">
+          <button
+            onClick={handleClose}
+            className="flex-1 sm:flex-none sm:w-36 h-12 rounded-xl bg-stone-100 text-ink text-sm font-semibold hover:bg-stone-200 transition-colors"
+          >
+            Done
+          </button>
+          <button
+            onClick={() => window.open(booked.url, '_blank', 'noopener,noreferrer')}
+            className="flex-1 h-12 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark transition-colors shadow-md shadow-primary/20 flex items-center justify-center gap-2"
+          >
+            <MessageCircle size={18} /> Send confirmation
+          </button>
+        </div>
+      ) : (
         <>
           <div className="flex gap-3">
             <button
@@ -281,13 +429,48 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
               className="flex-1 h-12 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md shadow-primary/20 flex items-center justify-center gap-2"
             >
               {!isSaving && <Check size={18} />}
-              {isSaving ? 'Adding...' : lineItems.length > 1 ? `Add Order (${lineItems.length} Items)` : 'Add Order'}
+              {isSaving ? (preorder ? 'Booking...' : 'Adding...') : preorder
+                ? (lineItems.length > 1 ? `Book Pre-order (${lineItems.length} Items)` : 'Book Pre-order')
+                : lineItems.length > 1 ? `Add Order (${lineItems.length} Items)` : 'Add Order'}
             </button>
           </div>
           {error && <div className="text-coral text-xs font-semibold mt-2 text-center">{error}</div>}
         </>
-      }
+      )}
     >
+      {booked ? (
+        <div className="space-y-3">
+          <p className="text-sm text-ink">The pre-order is booked. Send the customer a confirmation on WhatsApp?</p>
+          <blockquote className="rounded-xl bg-stone-50 px-4 py-3 text-sm text-ink whitespace-pre-wrap">{booked.message}</blockquote>
+        </div>
+      ) : (<>
+      {/* From stock, or a pre-order booked for later */}
+      <div>
+        <div className={MODAL_LABEL}>Order type</div>
+        <div role="radiogroup" aria-label="Order type" className="inline-flex p-1 bg-stone-100 rounded-xl">
+          {([['stock', 'From stock'], ['preorder', 'Pre-order']] as const).map(([value, label]) => {
+            const selected = mode === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => chooseMode(value)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${selected ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {preorder && (
+          <p className="text-xs text-muted mt-1.5">
+            Booked for later: no stock is needed or taken now. It takes stock when you hand it over, and counts as a sale on its due date.
+          </p>
+        )}
+      </div>
+
       {/* Fill the form from a pasted message (only when AI is available) */}
       {orderParser && (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
@@ -353,7 +536,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
                     id={`order-item-${i}`}
                     aria-label={lineItems.length > 1 ? `Item ${i + 1}` : 'Item'}
                     value={li.menuItemId}
-                    onChange={e => updateLineItem(i, { menuItemId: e.target.value })}
+                    onChange={e => updateLineItem(i, { menuItemId: e.target.value, priceText: undefined })}
                     className={`${modalField(invalidRowIndex === i && !li.menuItemId)} flex-1 min-w-0 font-semibold`}
                   >
                     <option value="" disabled>Select an item...</option>
@@ -377,15 +560,30 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
                   )}
                 </div>
                 {item && (
-                  <div className="flex items-center gap-2 mt-1.5 px-1 font-mono text-[11px] text-muted">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 px-1 font-mono text-[11px] text-muted">
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-full font-semibold ${
-                        stock <= 0 ? 'bg-coral/10 text-coral' : 'bg-margin/10 text-[#006143]'
+                        preorder && li.quantity > stock ? 'bg-amber-100 text-amber-700' : stock <= 0 ? 'bg-coral/10 text-coral' : 'bg-margin/10 text-[#006143]'
                       }`}
                     >
-                      {stock} available
+                      {preorder && li.quantity > stock ? `${stock} on the shelf · not baked yet` : `${stock} available`}
                     </span>
-                    <span>{currency.symbol}{item.sellingPrice.toFixed(2)} each</span>
+                    <label className="inline-flex items-center gap-1">
+                      <span>{currency.symbol}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        inputMode="decimal"
+                        aria-label={lineItems.length > 1 ? `Price of item ${i + 1}` : 'Price of item'}
+                        value={li.priceText ?? String(item.sellingPrice)}
+                        onChange={e => updateLineItem(i, { priceText: e.target.value })}
+                        className={`w-20 bg-stone-50 border rounded-md px-1.5 py-0.5 text-right outline-none focus:bg-white focus:border-primary ${
+                          invalidRowIndex === i && li.priceText !== undefined && li.priceText.trim() !== '' && !(parseFloat(li.priceText) > 0) ? 'border-coral' : 'border-transparent'
+                        } ${li.priceText !== undefined && priceOf(li) !== item.sellingPrice ? 'text-primary font-semibold' : ''}`}
+                      />
+                      <span>each = {currency.symbol}{(priceOf(li) * li.quantity).toFixed(2)}</span>
+                    </label>
                   </div>
                 )}
               </div>
@@ -404,13 +602,13 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div>
           <label htmlFor="order-date" className={`${MODAL_LABEL} flex items-center gap-1.5`}>
-            <Calendar size={12} /> Order date
+            <Calendar size={12} /> {preorder ? 'Due date' : 'Order date'}
           </label>
           <input
             id="order-date"
             type="date"
             value={date}
-            onChange={e => setDate(e.target.value)}
+            onChange={e => chooseDate(e.target.value)}
             className={`${modalField()} font-mono font-semibold`}
           />
         </div>
@@ -447,6 +645,38 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
         </div>
       </div>
 
+      {preorder && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="order-slot" className={`${MODAL_LABEL} flex items-center gap-1.5`}>
+              <Clock size={12} /> Time of day (optional)
+            </label>
+            <div className="flex gap-2">
+              <select id="order-slot" value={slot} onChange={e => setSlot(e.target.value)} className={modalField()}>
+                {DUE_SLOTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              {slot === 'time' && (
+                <input type="time" aria-label="Time" value={dueTime} onChange={e => setDueTime(e.target.value)} className={`${modalField()} font-mono w-32 shrink-0`} />
+              )}
+            </div>
+          </div>
+          <div>
+            <label htmlFor="order-notes" className={`${MODAL_LABEL} flex items-center gap-1.5`}>
+              <StickyNote size={12} /> Notes (optional)
+            </label>
+            <textarea
+              id="order-notes"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={2}
+              maxLength={500}
+              placeholder="Cake message, eggless, pick-up instructions"
+              className={`${modalField()} resize-none`}
+            />
+          </div>
+        </div>
+      )}
+
       <div>
         <label htmlFor="order-address" className={`${MODAL_LABEL} flex items-center gap-1.5`}>
           <MapPin size={12} /> Delivery address (optional)
@@ -461,6 +691,38 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
         />
       </div>
 
+      {preorder && (
+        <div>
+          <div className={MODAL_LABEL}>Advance received (optional)</div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-muted">{currency.symbol}</span>
+            <input
+              id="order-advance"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              aria-label="Advance amount"
+              value={advanceText}
+              onChange={e => setAdvanceText(e.target.value)}
+              placeholder="0"
+              className={`${modalField()} font-mono`}
+            />
+            <select aria-label="Advance paid by" value={advanceMethod} onChange={e => setAdvanceMethod(e.target.value as PaymentMethod)} className={`${modalField()} w-32 shrink-0`}>
+              {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+          </div>
+          {advance > 0 && (
+            <p className="text-xs text-muted mt-1.5">
+              {balance <= 0.005
+                ? 'The advance covers the whole order: it is paid in full.'
+                : `Balance at handover: ${currency.symbol}${balance.toFixed(2)}. It stays under pending payments until it is paid.`}
+            </p>
+          )}
+        </div>
+      )}
+
+      {!(preorder && advance > 0) && (
       <div>
         <div className={MODAL_LABEL}>Payment</div>
         <div role="radiogroup" aria-label="Payment" className="inline-flex p-1 bg-stone-100 rounded-xl">
@@ -472,7 +734,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
                 type="button"
                 role="radio"
                 aria-checked={selected}
-                onClick={() => setPayLater(value === 'later')}
+                onClick={() => { payChosen.current = true; setPayLater(value === 'later'); }}
                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${selected ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
               >
                 {label}
@@ -486,9 +748,10 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
           </p>
         )}
       </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {!payLater && (
+        {!payLater && !(preorder && advance > 0) && (
           <div>
             <label htmlFor="order-method" className={MODAL_LABEL}>Paid by (optional)</label>
             <select
@@ -534,11 +797,15 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
             {currency.symbol}{totalValue.toFixed(2)}
           </div>
           {discount > 0 && <div className="font-mono text-[11px] text-muted mt-0.5">after {currency.symbol}{discount.toFixed(2)} discount</div>}
+          {preorder && advance > 0 && (
+            <div className="font-mono text-[11px] text-muted mt-0.5">advance {currency.symbol}{advance.toFixed(2)} · balance {currency.symbol}{balance.toFixed(2)}</div>
+          )}
         </div>
         <div className="w-12 h-12 rounded-xl bg-white shadow-sm flex items-center justify-center text-primary">
           <ShoppingBag size={22} />
         </div>
       </div>
+      </>)}
     </ModalShell>
   );
 }

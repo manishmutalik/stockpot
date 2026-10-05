@@ -13,7 +13,7 @@ const MENU = [
 const ids = MENU.map(m => m.id);
 const full = (over: Record<string, any> = {}) => ({
   lineItems: [], customerLabel: null, customerName: null, when: null, deliveryAddress: null,
-  paymentStatus: null, paymentMethod: null, discountAmount: null, discountPercent: null, ...over,
+  paymentStatus: null, paymentMethod: null, discountAmount: null, discountPercent: null, notes: null, advanceAmount: null, ...over,
 });
 const check = (raw: any, text: string) => validateParsedOrder(raw, { text, menuIds: ids });
 const problemsOf = (r: ReturnType<typeof check>) => (r.ok === false ? r.problems.join(' | ') : '');
@@ -134,6 +134,20 @@ describe('validateParsedOrder', () => {
     expect(both.ok && both.parsed.customerName).toBeUndefined();
   });
 
+  it('accepts notes and an advance that are written in the message', () => {
+    const t = 'A cake for Saturday please, "Happy birthday Asha", eggless. I paid Rs 500 advance on UPI.';
+    const r = check(full({ notes: 'Happy birthday Asha, eggless', advanceAmount: 500, paymentMethod: 'upi' }), t);
+    expect(r).toEqual({ ok: true, parsed: { lineItems: [], notes: 'Happy birthday Asha, eggless', advanceAmount: 500, paymentMethod: 'upi' } });
+  });
+
+  it('refuses notes that are not in the message, and an advance that is not a number written in it', () => {
+    expect(problemsOf(check(full({ notes: 'No nuts please' }), 'a cake for Saturday'))).toMatch(/notes/);
+    expect(problemsOf(check(full({ advanceAmount: 300 }), 'I paid Rs 500 advance'))).toMatch(/advanceAmount/);
+    expect(problemsOf(check(full({ advanceAmount: 500 }), 'I will pay an advance'))).toMatch(/advanceAmount/);
+    expect(problemsOf(check(full({ advanceAmount: -5 }), 'paid 5'))).toMatch(/advanceAmount/);
+    expect(problemsOf(check(full({ notes: 'x'.repeat(301) }), 'x'.repeat(400)))).toMatch(/notes/);
+  });
+
   it('refuses unknown payment values and a wrong shape', () => {
     expect(problemsOf(check(full({ paymentStatus: 'maybe' }), text))).toMatch(/paymentStatus/);
     expect(problemsOf(check(full({ paymentMethod: 'bitcoin' }), text))).toMatch(/paymentMethod/);
@@ -237,6 +251,15 @@ describe('buildOrderForm', () => {
 
   it('treats an id that is not on the menu as not found', () => {
     expect(form({ lineItems: [{ nameAsWritten: 'ghost', menuItemId: 'deleted', quantity: 1 }] }).notFound).toHaveLength(1);
+  });
+
+  it('fills the notes and the advance, and the method the advance was paid by', () => {
+    expect(form({ notes: 'eggless', advanceAmount: 200, paymentMethod: 'upi' })).toMatchObject({ notes: 'eggless', advanceAmount: 200, advanceMethod: 'upi' });
+    const noMethod = form({ advanceAmount: 200 });
+    expect(noMethod.advanceAmount).toBe(200);
+    expect(noMethod.advanceMethod).toBeUndefined();
+    expect(form({}).notes).toBeUndefined();
+    expect(form({}).advanceAmount).toBeUndefined();
   });
 
   it('takes a known customer\'s name and phone from their own record, not from the message', () => {

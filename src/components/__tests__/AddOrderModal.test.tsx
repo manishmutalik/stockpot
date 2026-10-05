@@ -169,7 +169,8 @@ describe('AddOrderModal — redesigned form', () => {
   it('shows how much of the chosen item is available, and its price', () => {
     renderModal();
     expect(screen.getByText('10 available')).toBeTruthy();
-    expect(screen.getByText('$20.00 each')).toBeTruthy();
+    expect((screen.getByLabelText('Price of item') as HTMLInputElement).value).toBe('20'); // the menu price, ready to edit
+    expect(screen.getByText('each = $20.00')).toBeTruthy();
   });
 
   describe('payment', () => {

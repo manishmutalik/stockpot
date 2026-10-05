@@ -230,6 +230,29 @@ export interface Order {
    * recorded, so changing the rates in Settings later never changes past
    * profit. */
   paymentFeeRate?: number;
+
+  // ── Pre-orders (docs/PROJECT_STATE.md). All optional: an order without them behaves as it always has. ──
+
+  /** True for an order booked ahead of time. `date` is then its due date. */
+  preorder?: boolean;
+  /** When the order was taken (YYYY-MM-DD, business time zone). Set on every new order; absent on older ones. */
+  bookedOn?: string;
+  /** When on the due date: 'morning', 'afternoon', 'evening' or a time such as '16:30'. Shared by a multi-item order. */
+  dueSlot?: string;
+  /** Free text (cake message, eggless, pick-up instructions). Shared by a multi-item order. */
+  notes?: string;
+  /** Whether this order's quantity has been taken out of finishedGoodsStock. Absent means the old rule: a
+   * non-pre-order has always taken its stock when it was created. A pre-order starts false and becomes true
+   * at handover (see utils/preorders.holdsStock). */
+  stockClaimed?: boolean;
+  /** Money received before handover. It belongs to the whole order, so it is stored on the first item only,
+   * like `discount`. `feeRate` is the payment fee rate in force when it was received. */
+  advance?: { amount: number; method: PaymentMethod; feeRate: number; date: string };
+  /** Set (YYYY-MM-DD) when a pre-order is cancelled, on every item. A cancelled order is never a sale. */
+  cancelledOn?: string;
+  /** What happened to the advance when the order was cancelled: 'kept' counts as income on the cancellation
+   * date, 'refunded' does not. Stored on the item that holds the advance. */
+  advanceOutcome?: 'refunded' | 'kept';
 }
 
 export type PaymentMethod = 'upi' | 'cash' | 'card' | 'other';
@@ -385,8 +408,11 @@ export interface AppViewProps {
    * (only) line item — used by Market Stock's "Add to Order" action. */
   openAddOrderModalFor: (menuItemId: string) => void;
   addOrderGroup: (
-    common: { date: string; customerName?: string; customerPhone?: string },
-    lineItems: { menuItemId: string; quantity: number }[]
+    common: {
+      date: string; customerName?: string; customerPhone?: string; deliveryAddress?: string; paymentStatus?: 'paid' | 'unpaid'; paymentMethod?: PaymentMethod; discount?: number;
+      preorder?: boolean; dueSlot?: string; notes?: string; advance?: { amount: number; method: PaymentMethod };
+    },
+    lineItems: { menuItemId: string; quantity: number; unitPrice?: number }[]
   ) => Promise<void>;
 
   summaryRefDate: string;
@@ -453,7 +479,14 @@ export interface AppViewProps {
   deleteProductionRunSession: (sessionId: string) => void;
   handleDiscardBatch: (b: any) => void;
   updateOrder: (id: string, f: string, v: any) => void;
-  fulfillOrder: (order: Order) => void;
+  /** Opens the Orders tab on its Upcoming list (pre-orders due after today). */
+  openUpcomingOrders: () => void;
+  /** When set, the Orders tab opens on this status filter (used by openUpcomingOrders). */
+  ordersFilterOnOpen?: 'upcoming';
+  /** Hands an order over. A pre-order claims its stock now (all items, or none); resolves to whether it was handed over. */
+  fulfillOrder: (order: Order) => Promise<boolean>;
+  /** Cancels a pre-order not yet handed over; `advanceOutcome` is required when an advance was paid. Resolves to whether it was cancelled. */
+  cancelPreorder: (order: Order, advanceOutcome?: 'refunded' | 'kept') => Promise<boolean>;
   /** Marks orders paid or unpaid (every id given, in one write). */
   markOrdersPaid: (ids: string[], paid: boolean, method?: PaymentMethod) => void;
   /** Records how already-paid orders were paid. */
