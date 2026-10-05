@@ -238,6 +238,17 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
       if (f.method) setMethod(f.method);
       if (f.discountAmount !== undefined) setDiscountText(String(f.discountAmount));
       if (f.deliveryAddress !== undefined) setDeliveryAddress(f.deliveryAddress);
+      if (f.notes !== undefined) setNotes(f.notes);
+      if (f.advanceAmount !== undefined) {
+        setAdvanceText(String(f.advanceAmount));
+        if (f.advanceMethod) setAdvanceMethod(f.advanceMethod);
+      }
+      // Notes and an advance belong to a pre-order, unless the owner has already chosen the type.
+      if ((f.notes !== undefined || f.advanceAmount !== undefined) && !modeChosen.current) {
+        setMode('preorder');
+        if (!payChosen.current) setPayLater(true);
+        if (f.advanceAmount !== undefined) notes.push('Set as a pre-order because the message mentions an advance.');
+      }
       setNotFound(f.notFound);
       setReadNotes(notes);
       setFilled(true);

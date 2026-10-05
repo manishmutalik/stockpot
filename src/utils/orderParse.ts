@@ -56,8 +56,10 @@ export const ORDER_SCHEMA = {
     paymentMethod: nullable({ type: 'string', enum: [...PAYMENT_IDS] }),
     discountAmount: nullable({ type: 'number' }),
     discountPercent: nullable({ type: 'number' }),
+    notes: nullable({ type: 'string' }),
+    advanceAmount: nullable({ type: 'number' }),
   },
-  required: ['lineItems', 'customerLabel', 'customerName', 'when', 'deliveryAddress', 'paymentStatus', 'paymentMethod', 'discountAmount', 'discountPercent'],
+  required: ['lineItems', 'customerLabel', 'customerName', 'when', 'deliveryAddress', 'paymentStatus', 'paymentMethod', 'discountAmount', 'discountPercent', 'notes', 'advanceAmount'],
   additionalProperties: false,
 } as const;
 
@@ -79,6 +81,10 @@ export interface ParsedOrder {
   paymentMethod?: PaymentMethod;
   discountAmount?: number;
   discountPercent?: number;
+  /** What the customer asks for the order itself, as written: a cake message, eggless, instructions. */
+  notes?: string;
+  /** Money the message says is paid in advance (a number written in it); the method is `paymentMethod`. */
+  advanceAmount?: number;
 }
 
 // ── Preparing the text ──────────────────────────────────────────────────────
@@ -219,6 +225,17 @@ export function validateParsedOrder(raw: unknown, input: { text: string; menuIds
     else parsed.discountPercent = percent;
   }
 
+  const notes = orNull(raw.notes);
+  if (notes !== null) {
+    if (typeof notes !== 'string' || notes.length > 300 || !inText(notes)) problems.push('notes is not text written in the message');
+    else parsed.notes = notes.trim();
+  }
+  const advanceAmount = orNull(raw.advanceAmount);
+  if (advanceAmount !== null) {
+    if (typeof advanceAmount !== 'number' || !(advanceAmount > 0) || !numberAppears(advanceAmount, input.text)) problems.push('advanceAmount is not a number written in the message');
+    else parsed.advanceAmount = advanceAmount;
+  }
+
   return problems.length ? { ok: false, problems } : { ok: true, parsed };
 }
 
@@ -353,6 +370,11 @@ export interface OrderFormFill {
   method?: PaymentMethod;
   discountAmount?: number;
   deliveryAddress?: string;
+  /** What the customer asked for the order itself (a cake message, eggless). */
+  notes?: string;
+  /** Money the message says was paid in advance; `advanceMethod` is how, when it said. */
+  advanceAmount?: number;
+  advanceMethod?: PaymentMethod;
 }
 
 /**
@@ -399,6 +421,11 @@ export function buildOrderForm(input: {
   else if (parsed.paymentStatus === 'paid') fill.payLater = false;
   if (parsed.paymentMethod && parsed.paymentStatus !== 'unpaid') fill.method = parsed.paymentMethod;
   if (parsed.deliveryAddress) fill.deliveryAddress = parsed.deliveryAddress;
+  if (parsed.notes) fill.notes = parsed.notes;
+  if (parsed.advanceAmount) {
+    fill.advanceAmount = parsed.advanceAmount;
+    if (parsed.paymentMethod) fill.advanceMethod = parsed.paymentMethod;
+  }
 
   const subtotal = fill.lineItems.reduce((sum, li) => sum + (menu.find(m => m.id === li.menuItemId)?.sellingPrice ?? 0) * li.quantity, 0);
   if (parsed.discountAmount) fill.discountAmount = Math.min(parsed.discountAmount, subtotal || parsed.discountAmount);

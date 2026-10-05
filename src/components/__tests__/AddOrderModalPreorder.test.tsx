@@ -326,6 +326,34 @@ describe('confirming a booked pre-order on WhatsApp', () => {
 });
 
 describe('with the message filler', () => {
+  const fillWith = async (form: Record<string, any>) => {
+    const parse = vi.fn().mockResolvedValue({ ok: true, form: { lineItems: [{ menuItemId: 'cake', quantity: 1 }], notFound: [], knownCustomer: false, ...form } });
+    renderModal({ orderParser: { parse } });
+    fireEvent.change(screen.getByLabelText(/Fill from a message/), { target: { value: 'message' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Fill the form' }));
+    await waitFor(() => expect(screen.queryByText('Reading…')).toBeNull());
+  };
+
+  it('notes and an advance read from the message fill their fields and make it a pre-order', async () => {
+    await fillWith({ notes: 'Happy birthday Asha', advanceAmount: 40, advanceMethod: 'cash' });
+    expect(isMode('Pre-order')).toBe(true);
+    expect((screen.getByLabelText(/Notes/) as HTMLTextAreaElement).value).toBe('Happy birthday Asha');
+    expect((screen.getByLabelText('Advance amount') as HTMLInputElement).value).toBe('40');
+    expect((screen.getByLabelText('Advance paid by') as HTMLSelectElement).value).toBe('cash');
+    expect(screen.getByText(/because the message mentions an advance/)).toBeTruthy();
+  });
+
+  it('keeps the owner\'s choice of From stock when the message mentions an advance', async () => {
+    const parse = vi.fn().mockResolvedValue({ ok: true, form: { lineItems: [{ menuItemId: 'cookie', quantity: 1 }], notFound: [], knownCustomer: false, advanceAmount: 5 } });
+    renderModal({ orderParser: { parse } });
+    fireEvent.click(mode('Pre-order'));
+    fireEvent.click(mode('From stock'));
+    fireEvent.change(screen.getByLabelText(/Fill from a message/), { target: { value: 'message' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Fill the form' }));
+    await waitFor(() => expect(screen.queryByText('Reading…')).toBeNull());
+    expect(isMode('From stock')).toBe(true);
+  });
+
   it('a future date read from the message makes it a pre-order', async () => {
     const parse = vi.fn().mockResolvedValue({ ok: true, form: { lineItems: [{ menuItemId: 'cake', quantity: 1 }], notFound: [], knownCustomer: false, date: DUE } });
     renderModal({ orderParser: { parse } });

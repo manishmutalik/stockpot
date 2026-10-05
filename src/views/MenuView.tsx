@@ -11,6 +11,7 @@ import { convertAmount } from '../utils/conversions';
 import { calculateRecipeNutrition } from '../utils/nutritionCalculations';
 import { getMarginInfo, MarginTier, recipeCost, SALES_PERIODS, SalesPeriod, salesPeriodRange, suggestedPrice, summarizeMenu } from '../utils/menuStats';
 import { productProfits } from '../utils/profit';
+import { todayInZone } from '../utils/localDate';
 import { ProductPerformance } from '../components/ProductPerformance';
 
 type MarginFilter = 'all' | MarginTier;
@@ -166,7 +167,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
 
   // What each product sold and made over the chosen period, from the same sums as the Orders and Summary screens.
   const productSales = useMemo(() => {
-    const { start, end } = salesPeriodRange(salesPeriod, new Date().toISOString().split('T')[0]);
+    const { start, end } = salesPeriodRange(salesPeriod, todayInZone(settings.timezone));
     const inPeriod = (orders ?? []).filter(o => o.date <= end && (start === null || o.date >= start));
     return productProfits(inPeriod, menu, materials, settings);
   }, [orders, menu, materials, settings.gstApplicable, settings.gstRate, settings.gstPricingMode, salesPeriod]);

@@ -256,6 +256,15 @@ describe('validateSnapshotShape', () => {
     expect(validateSnapshotShape(older)).toBe(true);
   });
 
+  it('accepts pre-orders, and a snapshot from an older client without them', () => {
+    const withPre = clone();
+    withPre.preorders = { dueToday: null, dueTomorrow: { orders: 'pre_tomorrow_orders', items: [{ name: 'item_cake', quantity: 'pre_tomorrow_cake_qty' }] }, advancesHeld: 'advances_held' };
+    expect(validateSnapshotShape(withPre)).toBe(true);
+    const older = clone();
+    delete older.preorders;
+    expect(validateSnapshotShape(older)).toBe(true);
+  });
+
   it('refuses oversized or malformed parts', () => {
     const cases: [string, (s: any) => void][] = [
       ['a huge name', s => { s.names.item_x = 'x'.repeat(500); }],
@@ -267,6 +276,11 @@ describe('validateSnapshotShape', () => {
       ['too many customers', s => { s.customers.dueList = Array.from({ length: 11 }, () => ({ label: 'C-1' })); }],
       ['a long customer label', s => { s.customers.dueList = [{ label: 'C-' + 'x'.repeat(40) }]; }],
       ['notes that are not text', s => { s.notes = [1]; }],
+      ['pre-orders that are not an object', s => { s.preorders = 'x'; }],
+      ['a pre-order day without a count', s => { s.preorders = { dueToday: { items: [] }, dueTomorrow: null }; }],
+      ['too many pre-order items', s => { s.preorders = { dueToday: { orders: 'a', items: Array.from({ length: 6 }, () => ({ name: 'n', quantity: 'q' })) }, dueTomorrow: null }; }],
+      ['a pre-order item that is malformed', s => { s.preorders = { dueToday: { orders: 'a', items: [{ name: 'n' }] }, dueTomorrow: null }; }],
+      ['advances that are not text', s => { s.preorders = { dueToday: null, dueTomorrow: null, advancesHeld: 5 }; }],
       ['reorder suggestions that are not a list', s => { s.inventory.reorderSoon = 'x'; }],
       ['too many reorder suggestions', s => { s.inventory.reorderSoon = Array.from({ length: 6 }, () => ({ name: 'a', daysOfCover: 'b', runOutDate: 'c', suggestedQty: 'd', flag: 'before_threshold', confidence: 'low' })); }],
       ['a reorder suggestion with a wrong flag', s => { s.inventory.reorderSoon = [{ name: 'a', daysOfCover: 'b', runOutDate: 'c', suggestedQty: 'd', flag: 'maybe', confidence: 'low' }]; }],

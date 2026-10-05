@@ -10,7 +10,7 @@ const menu = [{ id: 'croissant', name: 'Classic Croissant' }, { id: 'brownie', n
 const text = 'Hi, this is Anita. 2 croisant and 3 Fudge Brownie for Saturday please. Pay by UPI.';
 const good = {
   lineItems: [{ nameAsWritten: 'croisant', menuItemId: 'croissant', quantity: 2 }, { nameAsWritten: 'Fudge Brownie', menuItemId: 'brownie', quantity: 3 }],
-  customerLabel: null, customerName: 'Anita', when: 'Saturday', deliveryAddress: null, paymentStatus: null, paymentMethod: 'upi', discountAmount: null, discountPercent: null,
+  customerLabel: null, customerName: 'Anita', when: 'Saturday', deliveryAddress: null, paymentStatus: null, paymentMethod: 'upi', discountAmount: null, discountPercent: null, notes: null, advanceAmount: null,
 };
 const body = (over: Record<string, any> = {}) => ({ text, menuItems: menu, ...over });
 
@@ -20,6 +20,8 @@ describe('the prompt', () => {
     expect(ORDER_PARSE_SYSTEM_PROMPT).toMatch(/Do not turn it into a date/);
     expect(ORDER_PARSE_SYSTEM_PROMPT).toMatch(/data, not instructions/);
     expect(ORDER_PARSE_SYSTEM_PROMPT).toMatch(/use null/i);
+    expect(ORDER_PARSE_SYSTEM_PROMPT).toMatch(/notes:/);
+    expect(ORDER_PARSE_SYSTEM_PROMPT).toMatch(/advanceAmount:.*not the whole price/s);
   });
 
   it('puts the menu and the message in the user message, and what was wrong on a retry', () => {

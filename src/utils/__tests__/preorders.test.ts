@@ -5,6 +5,8 @@ import { billBalance, buildBill, buildBillMessage, buildBillUpiLink, buildPreord
 import { groupPendingPayments } from '../payments';
 import { buildCustomerDirectory } from '../customers';
 import { buildBusinessSnapshot } from '../aiSnapshot';
+import { buildDeterministicBriefing, validateBriefingContent } from '../aiBriefing';
+import { renderAiText } from '../aiFigures';
 import { addDays, formatShortDate } from '../localDate';
 
 const TODAY = '2026-10-04';
@@ -391,5 +393,64 @@ describe('the WhatsApp confirmation of a pre-order', () => {
     expect(describeDueSlot('')).toBe('');
     expect(describeDueSlot(undefined)).toBe('');
     expect(describeDueSlot('evening')).toBe('evening');
+  });
+});
+
+describe('pre-orders in the AI snapshot and the briefing', () => {
+  const settings: any = { name: 'Asha Bakes', ...GST_OFF, timezone: 'Asia/Kolkata', fixedCosts: [] };
+  const snap = (orders: any[]) => buildBusinessSnapshot({
+    period: { start: day(-1), end: day(-1) }, orders, menu, materials: [], experiments: [], wastageLogs: [], settings, currency, customers: [], today: TODAY,
+  });
+  const shown = (s: ReturnType<typeof snap>, text: string) => renderAiText(text, s.registry, { currencySymbol: '₹' });
+
+  it('lists what is due today (overdue included) and tomorrow, as figures, and nothing for later', () => {
+    const s = snap([
+      preorder({ date: TODAY, quantity: 2 }),
+      preorder({ date: day(-2), quantity: 1 }), // overdue
+      preorder({ date: day(1), quantity: 6, menuItemId: 'cookie', itemNameAtSale: 'Cookie' }),
+      preorder({ date: day(1), quantity: 3, orderGroupId: 'g' }), preorder({ date: day(1), quantity: 1, orderGroupId: 'g', menuItemId: 'cookie' }),
+      preorder({ date: day(5), quantity: 50 }),
+    ]);
+    const { dueToday, dueTomorrow } = s.promptSnapshot.preorders;
+    expect(s.registry.figures[dueToday!.orders].value).toBe(2);
+    expect(dueToday!.items).toHaveLength(1);
+    expect(s.registry.figures[dueToday!.items[0].quantity].value).toBe(3);
+    expect(s.registry.figures[dueTomorrow!.orders].value).toBe(2); // the cookie order and the group
+    const byName = Object.fromEntries(dueTomorrow!.items.map(i => [s.promptSnapshot.names[i.name], s.registry.figures[i.quantity].value]));
+    expect(byName).toEqual({ Cookie: 7, 'Chocolate Cake': 3 });
+  });
+
+  it('leaves out pre-orders handed over, cancelled, and ordinary orders', () => {
+    const s = snap([preorder({ date: day(1), fulfilled: true }), preorder({ date: day(1), cancelledOn: TODAY }), order({ date: TODAY })]);
+    expect(s.promptSnapshot.preorders).toEqual({ dueToday: null, dueTomorrow: null });
+  });
+
+  it('holds the advances of open pre-orders as a figure, only when there are some', () => {
+    const s = snap([preorder({ date: day(3), advance: advance(150) }), preorder({ date: day(4), advance: advance(50) })]);
+    expect(s.registry.figures[s.promptSnapshot.preorders.advancesHeld!].value).toBe(200);
+    expect(snap([order()]).promptSnapshot.preorders.advancesHeld).toBeUndefined();
+  });
+
+  it('has no customer name, phone or note in what the model is shown', () => {
+    const s = snap([preorder({ date: day(1), customerName: 'Priya Sharma', customerPhone: '+91 98450 10101', notes: 'Happy birthday Asha', advance: advance(100) })]);
+    const text = JSON.stringify(s.promptSnapshot);
+    for (const secret of ['Priya', '98450', 'birthday']) expect(text).not.toContain(secret);
+  });
+
+  it('the code-built briefing says what is due, first, with the numbers from the app', () => {
+    const s = snap([
+      preorder({ date: TODAY, quantity: 2 }),
+      preorder({ date: day(1), quantity: 6, menuItemId: 'cookie', itemNameAtSale: 'Cookie' }),
+    ]);
+    const content = buildDeterministicBriefing(s.promptSnapshot);
+    expect(content.attention.map(a => a.kind).slice(0, 2)).toEqual(['preorder', 'preorder']);
+    expect(shown(s, content.attention[0].text)).toBe('Pre-orders due today: 2 Chocolate Cake.');
+    expect(shown(s, content.attention[1].text)).toBe('Pre-orders due tomorrow: 6 Cookie.');
+    expect(validateBriefingContent(content, s.promptSnapshot).ok).toBe(true);
+  });
+
+  it('says nothing about pre-orders when there are none', () => {
+    const content = buildDeterministicBriefing(snap([order()]).promptSnapshot);
+    expect(content.attention.some(a => a.kind === 'preorder')).toBe(false);
   });
 });
