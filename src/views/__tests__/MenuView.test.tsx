@@ -65,13 +65,15 @@ describe('MenuView', () => {
     render(<MenuView {...props} />);
     const c = card('Cake');
     fireEvent.change(within(c).getByLabelText('Sale price'), { target: { value: '12.5' } });
+    expect(props.updateMenuItemField).not.toHaveBeenCalled(); // saved when typing is done, not per keystroke
+    fireEvent.blur(within(c).getByLabelText('Sale price'));
     expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'sellingPrice', 12.5);
     fireEvent.change(within(c).getByLabelText('Shelf life in days'), { target: { value: '3' } });
     expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'shelfLifeDays', 3);
     fireEvent.change(within(c).getByLabelText('Servings'), { target: { value: '6' } });
     expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'servings', 6);
-    fireEvent.click(within(c).getByTitle('Apply 3.5x markup suggestion'));
-    expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'sellingPrice', 15.75); // 4.5 x 3.5
+    fireEvent.click(within(c).getByTitle(/Apply the price that earns a 71\.4% margin/));
+    expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'sellingPrice', 20); // 4.5 x 3.5 = 15.75, rounded up to the next 5
     fireEvent.change(within(c).getByLabelText('Item name'), { target: { value: 'Big Cake' } });
     expect(props.updateMenuItem).toHaveBeenCalledWith('cake', 'Big Cake');
   });
@@ -205,5 +207,80 @@ describe('MenuView', () => {
       render(<MenuView {...makeProps()} />);
       expect(within(card('Cake')).getByText('No sales in the last 30 days.')).toBeTruthy();
     });
+  });
+});
+
+describe('MenuView pricing', () => {
+  const butter = (cost: number): any[] => [
+    { id: 'butter', name: 'Butter', unit: 'kg', costPerUnit: cost, category: 'Raw Materials' },
+    { id: 'flour', name: 'Flour', unit: 'kg', costPerUnit: 40, category: 'Raw Materials' },
+  ];
+  const recipe = [{ materialId: 'butter', amount: 200, unit: 'g' }, { materialId: 'flour', amount: 500, unit: 'g' }]; // 120 at butter 500
+  const stamped = (id: string, name: string, over: Record<string, any> = {}): any => ({
+    id, name, sellingPrice: 400, recipe, pricedAt: '2026-06-01', costAtPricing: 120, materialCostsAtPricing: { butter: 500, flour: 40 }, ...over,
+  });
+
+  it('flags an item whose margin slipped with the ingredient that moved, and filters to those items', () => {
+    const items = [stamped('a', 'Truffle Cake'), { id: 'b', name: 'Plain Bread', sellingPrice: 100, recipe: [{ materialId: 'flour', amount: 500, unit: 'g' }] }];
+    render(<MenuView {...makeProps({ menu: items, materials: butter(640), settings: { name: 'T', timezone: 'UTC' } })} />);
+    const badge = within(card('Truffle Cake')).getByRole('button', { expanded: false });
+    expect(badge.textContent).toMatch(/Margin 70% → 63%/);
+    expect(badge.textContent).toMatch(/Butter \+28%/);
+    expect(within(card('Plain Bread')).queryByText(/Margin \d+% →/)).toBeNull();
+
+    expect((screen.getByLabelText('Filter by margin') as HTMLSelectElement).textContent).toContain('Needs repricing (1)');
+    fireEvent.change(screen.getByLabelText('Filter by margin'), { target: { value: 'repricing' } });
+    expect(screen.getByDisplayValue('Truffle Cake')).toBeTruthy();
+    expect(screen.queryByDisplayValue('Plain Bread')).toBeNull();
+  });
+
+  it('opens already filtered to the items needing repricing from the Dashboard card', () => {
+    const items = [stamped('a', 'Truffle Cake'), stamped('b', 'Fine Cake', { sellingPrice: 900 })];
+    render(<MenuView {...makeProps({ menu: items, materials: butter(640), menuFilterOnOpen: 'repricing', settings: { name: 'T', timezone: 'UTC' } })} />);
+    expect(screen.getByDisplayValue('Truffle Cake')).toBeTruthy();
+    expect(screen.queryByDisplayValue('Fine Cake')).toBeNull();
+  });
+
+  it('applies a restoring price from the badge, through the same price update that stamps a new baseline', () => {
+    const props = makeProps({ menu: [stamped('a', 'Truffle Cake')], materials: butter(640), settings: { name: 'T', timezone: 'UTC' } });
+    render(<MenuView {...props} />);
+    fireEvent.click(within(card('Truffle Cake')).getByRole('button', { expanded: false }));
+    fireEvent.click(within(card('Truffle Cake')).getByLabelText(/to restore your margin/));
+    expect(props.updateMenuItemField).toHaveBeenCalledWith('a', 'sellingPrice', 495);
+  });
+
+  it('sets a target margin per item (saved when done typing), with the default as the placeholder', () => {
+    const props = makeProps({ settings: { name: 'T', defaultTargetMargin: 65 } });
+    render(<MenuView {...props} />);
+    const field = within(card('Cake')).getByLabelText('Target margin') as HTMLInputElement;
+    expect(field.placeholder).toBe('65.0');
+    fireEvent.change(field, { target: { value: '70' } });
+    expect(props.updateMenuItemField).not.toHaveBeenCalled();
+    fireEvent.blur(field);
+    expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'targetMargin', 70);
+    fireEvent.change(field, { target: { value: '' } });
+    fireEvent.blur(field);
+    expect(props.updateMenuItemField).not.toHaveBeenCalledWith('cake', 'targetMargin', 0);
+  });
+
+  it('suggests the price for the item\'s own target, GST-aware', () => {
+    const items = [{ id: 'c', name: 'Cake', sellingPrice: 100, targetMargin: 60, recipe: [{ materialId: 'flour', amount: 250, unit: 'g' }, { materialId: 'box', amount: 1, unit: 'pcs' }] }]; // cost 4.50
+    const props = makeProps({ menu: items, settings: { name: 'T', gstApplicable: true, gstRate: 18, gstPricingMode: 'inclusive' } });
+    render(<MenuView {...props} />);
+    // 4.5 / 0.4 = 11.25, plus 18% GST = 13.275, rounded up to 15
+    fireEvent.click(within(card('Cake')).getByTitle(/earns a 60% margin/));
+    expect(props.updateMenuItemField).toHaveBeenCalledWith('c', 'sellingPrice', 15);
+  });
+
+  it('works the margin out on the pre-GST price when prices include GST', () => {
+    const items = [{ id: 'c', name: 'Cake', sellingPrice: 118, recipe: [{ materialId: 'flour', amount: 1000, unit: 'g' }] }]; // cost 10
+    render(<MenuView {...makeProps({ menu: items, settings: { name: 'T', gstApplicable: true, gstRate: 18, gstPricingMode: 'inclusive' } })} />);
+    expect(within(card('Cake')).getByText('90% Margin')).toBeTruthy(); // (100 - 10) / 100, not (118 - 10) / 118
+  });
+
+  it('opens the What if… modal', () => {
+    render(<MenuView {...makeProps({ settings: { name: 'T', timezone: 'UTC' } })} />);
+    fireEvent.click(screen.getByRole('button', { name: /What if/ }));
+    expect(screen.getByRole('dialog', { name: /What if I change prices/ })).toBeTruthy();
   });
 });

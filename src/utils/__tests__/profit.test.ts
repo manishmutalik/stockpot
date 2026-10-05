@@ -395,8 +395,17 @@ describe('product profit', () => {
     expect(p.revenue).toBe(300);
   });
 
+  it('reports a product\'s billed sales before discount and its share of payment fees, for what-if pricing', () => {
+    const orders = [stamped('a', { quantity: 4, discount: 40, paymentMethod: 'card', paymentFeeRate: 2, paymentStatus: 'paid' })];
+    const p = productProfit('cake', orders, [cake(100)], materials, NO_GST);
+    expect(p.grossRevenue).toBe(400);
+    expect(p.revenue).toBe(360);
+    expect(p.paymentFees).toBeCloseTo(360 * 0.02, 9);
+    expect(p.costOfGoods).toBe(4 * 30); // 20 of ingredients and 10 of packaging a unit
+  });
+
   it('is zero for a product with no orders', () => {
-    expect(productProfit('cake', [], menu, materials, NO_GST)).toEqual({ menuItemId: 'cake', unitsSold: 0, orderCount: 0, revenue: 0, contribution: 0, avgContributionPerUnit: 0, estimated: false });
+    expect(productProfit('cake', [], menu, materials, NO_GST)).toEqual({ menuItemId: 'cake', unitsSold: 0, orderCount: 0, revenue: 0, grossRevenue: 0, paymentFees: 0, costOfGoods: 0, contribution: 0, avgContributionPerUnit: 0, estimated: false });
   });
 
   it('shows a well-priced product that is made poor by discounts, card fees and courier costs', () => {

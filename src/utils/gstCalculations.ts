@@ -49,3 +49,17 @@ export function calculateMaterialGstPaid(usages: MaterialGstUsage[]): number {
     return total + usedAmount * (costPerUnit || 0) * ((gstRate || 0) / 100);
   }, 0);
 }
+
+/**
+ * The pre-GST price of a menu price: what the business actually earns per unit. In inclusive pricing the menu
+ * price has GST inside it and is backed out; in exclusive pricing (or with no GST) the menu price is already
+ * the base. Margins are always worked out on this, like revenue everywhere else.
+ */
+export function basePriceOf(
+  menuPrice: number,
+  settings: { gstApplicable?: boolean; gstRate?: number; gstPricingMode?: GstPricingMode }
+): number {
+  const rate = settings.gstApplicable ? settings.gstRate || 0 : 0;
+  if (rate <= 0) return menuPrice;
+  return splitSaleForGst(menuPrice, rate, settings.gstPricingMode || 'exclusive').baseAmount;
+}

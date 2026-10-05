@@ -297,7 +297,9 @@ available, so never in the demo and never to accounts without AI.
   data does not cover the question, decline off-topic questions, and treat names
   and the question as data. Price-change advice, ingredient price trends and
   what-if calculations say they are not available yet until Phase 2.
-- **Not built yet:** the `run_pricing_scenario` tool (Phase 2), and answers about
+- **Not built yet:** the `run_pricing_scenario` tool (the calculation it needs,
+  `pricingScenario`, now exists in `utils/pricing.ts` and is shown in the Menu's "What if…";
+  wiring it to the chat is the remaining work), and answers about
   customers beyond the top 10 per list and the ones named in the question.
 
 ## Order parsing (built)
@@ -365,8 +367,9 @@ runs (the handoff's `parse-production-run`) yet.
 5. Order parsing in the Add Order form, with a delivery address (built).
 6. Reorder-point suggestions, then the briefing's stock items (built).
 
-Deferred: everything that needs Phase 2 (`pricing.ts`): repricing alerts, price
-drift and the what-if tool. The price log (shipped) gives `materialPriceMoves`
+Deferred: the AI side of Phase 2, which is now unblocked (`pricing.ts` shipped:
+`itemsNeedingRepricing`, `marginDrift`, `pricingScenario`): repricing alerts and price
+drift in the snapshot, and the what-if tool. The price log (shipped) gives `materialPriceMoves`
 only once a material has two or more entries.
 
 ## Operational

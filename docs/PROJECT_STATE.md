@@ -215,9 +215,52 @@ Handoff: `pre-orders-handoff.md`. The rules live in `src/utils/preorders.ts`
 - **Not done.** `bakery-mobile` is unused (a native app is planned) and was left alone.
   The "Accountant Pack" mentioned in the handoff is not in the repo (still unlocated).
 
-After that, in the owner's queue: the Phase 2 pricing handoff
-(`price-margin-intelligence-handoff.md`: `pricing.ts`, margin drift, target-margin prices,
-what-if; it also unlocks the chat's `run_pricing_scenario` tool) and the still-open
+## Price & margin intelligence (Phase 2, built)
+
+Handoff: `price-margin-intelligence-handoff.md`. All of it is `src/utils/pricing.ts`
+(pure, tested) over data that already existed; it reads `profit.ts` (`productProfits`,
+now also returning `grossRevenue`, `paymentFees` and `costOfGoods`) and `priceLog.ts`.
+
+- **Stamp.** `MenuItem` gained `pricedAt`, `costAtPricing`, `materialCostsAtPricing`,
+  `pricingIsBaseline`, `targetMargin`. `useMenuActions.updateMenuItemField` writes the
+  stamp whenever `sellingPrice` is set to a positive number, and the Menu price input
+  (`PriceInput`) commits on blur or Enter, so the stamp describes the final price.
+  `stampPricingBaselines()` runs once per session after the data has loaded (an effect in
+  `App.tsx`) and gives priced, unstamped items a baseline stamp at today's costs, marked
+  `pricingIsBaseline`. Past costs are never reconstructed.
+- **Drift** (`marginDrift`). Price drift per material = today's recipe amount × (today's
+  cost − stamped cost). The remainder of the cost change is `recipeChangeImpact`, so the
+  two add up and an edited recipe is never blamed on an ingredient. Alert `below_target`
+  only when the owner has set a target (item or Settings default): with none, the
+  implicit 71.4% (the 3.5× markup) is used for suggestions only, so no existing item is
+  flagged by surprise. `slipped` at `marginAlertPoints` (default 5).
+- **Suggested price** (`suggestedPriceForTarget`, `suggestedPriceFor`) replaces
+  `menuStats.suggestedPrice` everywhere. `DEFAULT_TARGET_MARGIN = 100 × (1 − 1/3.5)`
+  reproduces 3.5× exactly before rounding; rounding is up to `priceRounding` (default ₹5).
+  `repriceOptions` offers "back to the margin it had" and "your target", only ever higher
+  than the current price.
+- **What-if** (`pricingScenario`). Units, discounts and payment fees come from the actual
+  sales in the window (30 or 90 days, or fewer if the business is newer; scaled to 30
+  days). "Now" and "after" are both at *today's* menu price and costs, so a price or cost
+  that moved since those sales is not folded into "+8%". Delivery charged and courier
+  fees are carried over unchanged. Break-even is `can_lose` (1 − c/c′), `must_gain` for a
+  cut, `unchanged`, or `not_applicable` when there is no profit to defend.
+- **Price stats** (`materialPriceStats`, `recipesAffectedBy`): purchases only (`restock`,
+  `goods_receipt`); a change is `null` ("not enough history yet"), never 0, without an
+  entry old enough to compare with; entries in a unit that does not convert are skipped.
+- **UI.** Menu: drift badge and panel (`MarginDriftPanel`), target field, "Needs
+  repricing" filter, "What if…" (`PricingScenarioModal`). Inventory: stats and "Used in"
+  in `PriceHistoryModal`. Settings: a Pricing section (target, alert points, rounding;
+  cleared values are saved as `null` because Firestore rejects `undefined`). Dashboard:
+  `RepricingCard`.
+- **Menu margins are now on the pre-GST price** (`basePriceOf` in `gstCalculations.ts`),
+  as the handoff requires; `summarizeMenu` takes the settings for this.
+- **Not done.** The AI side: the snapshot's `repricingAlerts` / drift, and the chat's
+  `run_pricing_scenario` tool (see `docs/AI_CFO_DESIGN.md`). Per-category targets were
+  skipped (the handoff made them optional). The Menu "Suggest" tile shows the suggestion
+  but there is no bulk "apply all". The what-if is read-only: it does not change prices.
+
+Next in the owner's queue: the AI side of the above, and the still-open
 `parse-production-run` from the AI handoff.
 
 ## Open items for the user (none blocking)

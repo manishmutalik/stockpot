@@ -132,6 +132,19 @@ export interface MenuItem {
   /** Groups the item into a section on the shared menu PDF (Cakes, Cookies,
    * ...). Optional: ungrouped items fall under a single "Menu" heading. */
   category?: string;
+  /** When sellingPrice was last set (YYYY-MM-DD, business time zone). Written with the other pricing stamp
+   * fields by `useMenuActions`; absent on items that have never been priced since stamping began. */
+  pricedAt?: string;
+  /** Total unit cost (ingredients + packaging, at the material costs of the day) when sellingPrice was set. */
+  costAtPricing?: number;
+  /** Each recipe material's costPerUnit when sellingPrice was set. Lets cost drift be pinned on the
+   * ingredient whose price moved, separately from recipe edits. */
+  materialCostsAtPricing?: Record<string, number>;
+  /** True when the stamp is a baseline written at current costs for an item priced before stamping
+   * existed (the real pricing cost is not knowable). Cleared the next time the owner sets the price. */
+  pricingIsBaseline?: boolean;
+  /** Target gross margin % for this item. Absent or null (how clearing it is saved: Firestore rejects undefined) = the settings default. */
+  targetMargin?: number | null;
 }
 
 /**
@@ -342,6 +355,13 @@ export interface BakerySettings {
   /** Recurring monthly costs not tied to any order, prorated by day for the
    * period being looked at. */
   fixedCosts?: FixedCost[];
+  /** Default target gross margin %, used when a menu item has none. Absent means "no target set": suggested
+   * prices then use the old 3.5x markup (71.43%), and no item is flagged as below target. */
+  defaultTargetMargin?: number | null;
+  /** Flag an item when its margin has fallen this many percentage points since it was priced. Default 5. */
+  marginAlertPoints?: number | null;
+  /** Round suggested prices up to the nearest multiple of this (default 5, so ₹183.42 becomes ₹185). */
+  priceRounding?: number | null;
 }
 
 /**
@@ -483,6 +503,9 @@ export interface AppViewProps {
   openUpcomingOrders: () => void;
   /** When set, the Orders tab opens on this status filter (used by openUpcomingOrders). */
   ordersFilterOnOpen?: 'upcoming';
+  /** Sets the Menu tab's margin filter when it opens from the Dashboard's "needs repricing" card. */
+  menuFilterOnOpen?: 'repricing';
+  openRepricing: () => void;
   /** Hands an order over. A pre-order claims its stock now (all items, or none); resolves to whether it was handed over. */
   fulfillOrder: (order: Order) => Promise<boolean>;
   /** Cancels a pre-order not yet handed over; `advanceOutcome` is required when an advance was paid. Resolves to whether it was cancelled. */

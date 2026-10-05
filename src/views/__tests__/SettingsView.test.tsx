@@ -158,6 +158,38 @@ describe('SettingsView', () => {
     });
   });
 
+  describe('pricing', () => {
+    it('shows the pricing settings with their defaults as placeholders', () => {
+      render(<SettingsView {...makeProps()} />);
+      expect((screen.getByLabelText('Target margin (%)') as HTMLInputElement).placeholder).toBe('71.4');
+      expect((screen.getByLabelText('Flag a slip of (points)') as HTMLInputElement).placeholder).toBe('5');
+      expect((screen.getByLabelText(/Round suggested prices up to/) as HTMLInputElement).placeholder).toBe('5');
+      expect(screen.getByText(/old 3.5× markup/)).toBeTruthy();
+    });
+
+    it('saves a target margin, and clears it with null (Firestore rejects undefined) when emptied or out of range', () => {
+      const props = makeProps({ settings: { ...makeProps().settings, defaultTargetMargin: 60 } });
+      render(<SettingsView {...props} />);
+      fireEvent.change(screen.getByLabelText('Target margin (%)'), { target: { value: '65' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('defaultTargetMargin', 65);
+      fireEvent.change(screen.getByLabelText('Target margin (%)'), { target: { value: '' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('defaultTargetMargin', null);
+      fireEvent.change(screen.getByLabelText('Target margin (%)'), { target: { value: '100' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('defaultTargetMargin', null);
+    });
+
+    it('saves the alert threshold and the rounding, never negative', () => {
+      const props = makeProps({ settings: { ...makeProps().settings, priceRounding: 5 } });
+      render(<SettingsView {...props} />);
+      fireEvent.change(screen.getByLabelText('Flag a slip of (points)'), { target: { value: '3' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('marginAlertPoints', 3);
+      fireEvent.change(screen.getByLabelText(/Round suggested prices up to/), { target: { value: '-2' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('priceRounding', 0);
+      fireEvent.change(screen.getByLabelText(/Round suggested prices up to/), { target: { value: '' } });
+      expect(props.updateSettingsField).toHaveBeenLastCalledWith('priceRounding', null);
+    });
+  });
+
   describe('payment fees', () => {
     it('shows each method\'s fee and saves an edit with the other rates kept', () => {
       const props = makeProps({ settings: { ...makeProps().settings, paymentFeeRates: { card: 2, upi: 0.5 } } });

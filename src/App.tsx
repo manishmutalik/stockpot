@@ -1,7 +1,7 @@
 // ─── Imports ──────────────────────────────────────────────────────────────────
 // React core, UI icon library, Firebase auth/Firestore, animation, AI, charting
 import * as React from 'react';
-import { useState, useEffect, useMemo, Component } from 'react';
+import { useState, useEffect, useMemo, useRef, Component } from 'react';
 import { 
   Plus, 
   Trash2, 
@@ -748,10 +748,20 @@ function BakeryApp() {
   // ── Menu / Recipe Actions ────────────────────────────────────────────────────
   // Extracted to src/hooks/useMenuActions.ts as part of the Phase 4 breakup.
   const {
-    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock,
+    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, deleteMenuItem, clearFinishedGoodsStock,
     copyMenuItem, addIngredientToRecipe, addQuickIngredientsToRecipe,
     updateRecipeIngredient, removeIngredientFromRecipe,
-  } = useMenuActions(menu, materials, orders, showAlert);
+  } = useMenuActions(menu, materials, orders, showAlert, { today: () => todayInZone(settings.timezone) });
+
+  // Items priced before pricing stamps existed get a baseline stamp once, when the business's data has arrived,
+  // so margin drift is tracked from that day on (and labelled "tracking since", not guessed at).
+  const baselinesStamped = useRef(false);
+  useEffect(() => {
+    if (!user) { baselinesStamped.current = false; return; }
+    if (!dataReady || baselinesStamped.current) return;
+    baselinesStamped.current = true;
+    void stampPricingBaselines();
+  }, [dataReady, user]);
 
   // ── Order Actions ────────────────────────────────────────────────────────────
   // Extracted to src/hooks/useOrderActions.ts as part of the Phase 4 breakup.
@@ -834,6 +844,9 @@ function BakeryApp() {
   const [ordersFilterOnOpen, setOrdersFilterOnOpen] = useState<'upcoming' | undefined>(undefined);
   useEffect(() => { if (activeTab !== 'orders') setOrdersFilterOnOpen(undefined); }, [activeTab]);
   const openUpcomingOrders = () => { setOrdersFilterOnOpen('upcoming'); setActiveTab('orders'); };
+  const [menuFilterOnOpen, setMenuFilterOnOpen] = useState<'repricing' | undefined>(undefined);
+  useEffect(() => { if (activeTab !== 'menu') setMenuFilterOnOpen(undefined); }, [activeTab]);
+  const openRepricing = () => { setMenuFilterOnOpen('repricing'); setActiveTab('menu'); };
 
   // Past customers, suggested while typing in the Add Order form (the same grouping as the Customers panel).
   const customerDirectory = useMemo(() => buildCustomerDirectory(orders, menu, todayInZone(settings.timezone)), [orders, menu, settings.timezone]);
@@ -1241,7 +1254,7 @@ function BakeryApp() {
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
-    openAddOrderModalFor, openUpcomingOrders, ordersFilterOnOpen,
+    openAddOrderModalFor, openUpcomingOrders, ordersFilterOnOpen, openRepricing, menuFilterOnOpen,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,

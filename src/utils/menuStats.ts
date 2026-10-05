@@ -1,5 +1,6 @@
 import { IngredientRequirement, MenuItem, RawMaterial } from '../types';
 import { convertAmount } from './conversions';
+import { basePriceOf, type GstPricingMode } from './gstCalculations';
 
 /** Material cost of one unit of a recipe at current material prices. */
 export function recipeCost(recipe: IngredientRequirement[], materials: RawMaterial[]): number {
@@ -22,9 +23,6 @@ export function getMarginInfo(sellingPrice: number, cost: number): { margin: num
   };
 }
 
-/** The "3.5x markup" price suggestion, rounded to cents. */
-export const suggestedPrice = (cost: number) => parseFloat((cost * 3.5).toFixed(2));
-
 export interface MenuSummary {
   itemCount: number;
   /** Average of cost / price across items that have both, as a percent; null if none do. */
@@ -34,13 +32,21 @@ export interface MenuSummary {
   needsReview: MenuItem[];
 }
 
-export function summarizeMenu(menu: MenuItem[], materials: RawMaterial[]): MenuSummary {
+/**
+ * `settings` makes the margins GST-aware: in inclusive pricing the price has GST inside it, and a margin is
+ * worked out on what the business keeps (the pre-GST price), like revenue everywhere else.
+ */
+export function summarizeMenu(
+  menu: MenuItem[],
+  materials: RawMaterial[],
+  settings: { gstApplicable?: boolean; gstRate?: number; gstPricingMode?: GstPricingMode } = {}
+): MenuSummary {
   const costPercents: number[] = [];
   let best: MenuSummary['best'] = null;
   const needsReview: MenuItem[] = [];
   for (const item of menu) {
     const cost = recipeCost(item.recipe, materials);
-    const price = item.sellingPrice || 0;
+    const price = basePriceOf(item.sellingPrice || 0, settings);
     if (price <= 0) { needsReview.push(item); continue; }
     if (cost > 0) costPercents.push((cost / price) * 100);
     const { margin, tier } = getMarginInfo(price, cost);

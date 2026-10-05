@@ -165,6 +165,12 @@ export interface ProductProfit {
   revenue: number;
   /** What the product made: its revenue, plus its share of delivery charged, minus its own ingredients and packaging and its share of courier and payment fees. */
   contribution: number;
+  /** Item sales before any discount, pre-GST base: what the units were billed at. */
+  grossRevenue: number;
+  /** This product's share of the payment fees on its orders. */
+  paymentFees: number;
+  /** Ingredients and packaging of the units sold, at the costs stamped on each order. */
+  costOfGoods: number;
   /** contribution / unitsSold. */
   avgContributionPerUnit: number;
   /** True if any order of it used today's price or cost because it predates stamping. */
@@ -210,10 +216,13 @@ export function productProfits(
         units += qty;
         estimated ||= price.estimated || costs.estimated;
       }
-      const entry = result.get(menuItemId) ?? { menuItemId, unitsSold: 0, orderCount: 0, revenue: 0, contribution: 0, avgContributionPerUnit: 0, estimated: false };
+      const entry = result.get(menuItemId) ?? { menuItemId, unitsSold: 0, orderCount: 0, revenue: 0, grossRevenue: 0, paymentFees: 0, costOfGoods: 0, contribution: 0, avgContributionPerUnit: 0, estimated: false };
       entry.unitsSold += units;
       entry.orderCount += 1;
       entry.revenue += gross - whole.discount * share;
+      entry.grossRevenue += gross;
+      entry.paymentFees += whole.paymentFee * share;
+      entry.costOfGoods += ingredients + packaging;
       entry.contribution += gross + shared * share - ingredients - packaging;
       entry.estimated ||= estimated;
       result.set(menuItemId, entry);
@@ -232,7 +241,7 @@ export function productProfit(
   settings: GstSettings
 ): ProductProfit {
   return productProfits(orders, menu, materials, settings).get(menuItemId)
-    ?? { menuItemId, unitsSold: 0, orderCount: 0, revenue: 0, contribution: 0, avgContributionPerUnit: 0, estimated: false };
+    ?? { menuItemId, unitsSold: 0, orderCount: 0, revenue: 0, grossRevenue: 0, paymentFees: 0, costOfGoods: 0, contribution: 0, avgContributionPerUnit: 0, estimated: false };
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');

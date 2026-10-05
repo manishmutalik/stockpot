@@ -2,6 +2,7 @@ import React from 'react';
 import { History } from 'lucide-react';
 import type { PriceLogEntry, RawMaterial } from '../types';
 import { priceHistory, PRICE_SOURCE_LABELS } from '../utils/priceLog';
+import type { MaterialPriceStats, RecipeAffected } from '../utils/pricing';
 import { ModalShell } from './ModalShell';
 
 /** A price per unit with enough decimals for per-gram and per-ml costs (0.045), and cents for the rest. */
@@ -29,10 +30,17 @@ const TH = 'px-3 py-2 font-mono text-[10px] font-semibold uppercase tracking-wid
 export const PriceHistoryModal: React.FC<{
   material: Pick<RawMaterial, 'id' | 'name' | 'unit'>;
   entries: PriceLogEntry[];
+  /** Last price, 90-day average and 30/90-day change, from `materialPriceStats`. */
+  stats?: MaterialPriceStats;
+  /** The recipes that use this material, from `recipesAffectedBy`, with the item's name. */
+  usedIn?: (RecipeAffected & { name: string })[];
   currencySymbol: string;
   onClose: () => void;
-}> = ({ material, entries, currencySymbol, onClose }) => {
+}> = ({ material, entries, stats, usedIn = [], currencySymbol, onClose }) => {
   const rows = priceHistory(entries, material);
+  const change = (value: number | null, has: boolean) =>
+    !has || value === null ? <span className="text-muted font-normal">not enough history yet</span>
+      : <span className={value > 0 ? 'text-coral' : value < 0 ? 'text-[#006143]' : 'text-ink'}>{value > 0 ? '+' : value < 0 ? '−' : ''}{Math.abs(value).toFixed(1)}%</span>;
   return (
     <ModalShell
       title={`Price history: ${material.name}`}
@@ -53,6 +61,14 @@ export const PriceHistoryModal: React.FC<{
         </p>
       ) : (
         <>
+          {stats && stats.lastPrice !== null && (
+            <dl className="grid grid-cols-2 gap-3 text-sm" aria-label="Price summary">
+              <div className="rounded-xl bg-stone-50 px-3 py-2"><dt className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted">Last paid</dt><dd className="font-mono font-semibold text-ink">{formatUnitCost(stats.lastPrice, currencySymbol)} / {material.unit}</dd></div>
+              <div className="rounded-xl bg-stone-50 px-3 py-2"><dt className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted">90-day average</dt><dd className="font-mono font-semibold text-ink">{stats.avgPrice90d !== null ? formatUnitCost(stats.avgPrice90d, currencySymbol) : '–'}</dd></div>
+              <div className="rounded-xl bg-stone-50 px-3 py-2"><dt className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted">30-day change</dt><dd className="font-mono font-semibold">{change(stats.change30d, stats.hasEnoughHistory.d30)}</dd></div>
+              <div className="rounded-xl bg-stone-50 px-3 py-2"><dt className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted">90-day change</dt><dd className="font-mono font-semibold">{change(stats.change90d, stats.hasEnoughHistory.d90)}</dd></div>
+            </dl>
+          )}
           <div className="overflow-x-auto -mx-2">
             <table className="w-full text-sm">
               <thead>
@@ -83,8 +99,21 @@ export const PriceHistoryModal: React.FC<{
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-muted">Costs are before any GST. History starts from when price logging began, so earlier purchases are not shown.</p>
+          <p className="text-xs text-muted">Costs are before any GST. History starts from when price logging began, so earlier purchases are not shown. Changes and the average count purchases only (restocks and goods receipts).</p>
         </>
+      )}
+      {usedIn.length > 0 && (
+        <div>
+          <h4 className="font-mono text-[10px] font-semibold uppercase tracking-wider text-muted mb-2">Used in</h4>
+          <ul className="space-y-1.5 text-sm" aria-label="Used in">
+            {usedIn.map(r => (
+              <li key={r.menuItemId} className="flex justify-between gap-3">
+                <span className="text-ink">{r.name} <span className="text-muted">({Math.round(r.costShare * 100)}% of its cost)</span></span>
+                <span className="font-mono text-ink whitespace-nowrap">+{currencySymbol}{r.unitCostImpactOf10pct.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} a unit if the price rises 10%</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </ModalShell>
   );

@@ -10,6 +10,7 @@ import {
 import { AppViewProps } from '../types';
 import { MetricCard } from '../components/MetricCard';
 import { DailyBriefing } from '../components/DailyBriefing';
+import { RepricingCard } from '../components/RepricingCard';
 import { DueTomorrowCard } from '../components/DueTomorrowCard';
 import { todayInZone } from '../utils/localDate';
 import { actualOrders } from '../utils/preorders';
@@ -22,7 +23,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     materials, menu, orders, productionRuns, wastageLogs,
     summaryRange, summaryDateStart, summaryDateEnd, setSummaryDateStart, setSummaryDateEnd, summaryRefDate,
     handleRangeChange, financials, chartData, currency, settings, lowStockItems, lastSynced,
-    setActiveTab, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders,
+    setActiveTab, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders, openRepricing,
   } = props;
 
   const fmt = (n: number) =>
@@ -205,6 +206,9 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
 
       {/* Pre-orders due today and tomorrow, as what to make (no AI) */}
       <DueTomorrowCard orders={orders ?? []} menu={menu} today={todayInZone(settings.timezone)} onOpen={() => openUpcomingOrders?.()} />
+
+      {/* Menu items whose margin has slipped since they were priced (no AI) */}
+      <RepricingCard menu={menu} materials={materials} settings={settings} onOpen={() => openRepricing?.()} />
 
       {/* Yesterday in a few lines: figures from the app, an explanation from AI where it is offered */}
       <DailyBriefing
