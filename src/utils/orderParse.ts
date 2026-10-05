@@ -107,7 +107,7 @@ const WORD_NUMBERS: Record<string, number> = {
 };
 
 /** Lower case, one space between words, no punctuation that varies: for "is this text in that text". */
-const squash = (s: string) => s.toLowerCase().replace(/[\s,.;:!?'"()’-]+/g, ' ').trim();
+export const squash = (s: string) => s.toLowerCase().replace(/[\s,.;:!?'"()’-]+/g, ' ').trim();
 
 /** Every number written in the text, in digits ("2", "1,200", "12.5") or in words ("two", "dozen"). */
 function numbersIn(text: string): Set<number> {
@@ -126,7 +126,11 @@ function numbersIn(text: string): Set<number> {
  * multiple of a dozen ("2 dozen" is 24).
  */
 export function quantityAppears(quantity: number, text: string): boolean {
-  if (quantity === 1) return true;
+  return quantity === 1 || quantityWritten(quantity, text);
+}
+
+/** Whether a quantity is actually written in the text: in digits or words, "half a dozen", or a multiple of a dozen. One is not free here. */
+export function quantityWritten(quantity: number, text: string): boolean {
   const written = numbersIn(text);
   if (written.has(quantity)) return true;
   const lower = text.toLowerCase();

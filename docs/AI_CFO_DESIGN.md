@@ -354,8 +354,8 @@ customer's WhatsApp message and presses "Fill the form"; the form is pre-filled 
 **nothing is saved until the owner checks it and presses Add Order**. There is no
 separate "Quick Log" screen in the app, so the Add Order form is where it lives. It
 also gained an optional delivery address, which is saved on every item of the order
-(`addOrderGroup`'s `deliveryAddress`). The same box does not exist for production
-runs (the handoff's `parse-production-run`) yet.
+(`addOrderGroup`'s `deliveryAddress`). The Log Production Run form has the same
+thing ("Production runs" below).
 
 - **Privacy** (`utils/aiPrivacy.ts`, `utils/orderParse.ts`). In the browser, before
   anything is sent: phone numbers become `[phone]` (and the first one is kept to
@@ -400,6 +400,41 @@ runs (the handoff's `parse-production-run`) yet.
   both must appear in the message. A future date switches the form to Pre-order; the
   browser resolves the date. Nothing is saved until the owner presses the button.
 
+## Production-run parsing (built)
+
+The Log Production Run form has a "Fill from a note" box, shown only when AI is
+available (never in the demo): the owner types or pastes "Made 40 croissants and 24
+muffins this morning, 3 croissants burnt" and presses "Fill the form". **Nothing is
+saved until the owner checks it and presses Log Run.** It is order parsing's
+counterpart (`POST /api/ai/parse-production-run`, `utils/productionParse.ts`,
+`lib/productionParse{Prompt,Model,Routes}.ts`, `hooks/useProductionParser.ts`) and
+counts as one `parse` use (30 a day, `AI_PARSE_DAILY_LIMIT`).
+
+- **What the model returns** (`PRODUCTION_SCHEMA`): the items made (as written, the
+  menu id it means or null, a quantity, and the waste written for that item or null), the
+  phrase for when it was made, and notes. Every field is present; "not said" is null.
+- **It never invents, and never assumes a quantity.** `validateParsedProduction`
+  rejects the answer (the model is asked once more with the problems listed) if: a
+  quantity is not written in the note (digits, words, "half a dozen", "2 dozen" is 24;
+  unlike an order, a bare "croissants" is not one: one needs "a croissant", "one" or
+  "1"); a waste figure is not written or is more than was made; a name, date phrase or
+  note is not text from the note; an id is not on the menu. If it still fails nothing
+  is returned and the owner fills the form by hand.
+- **Financial truth.** The model does no sums. Waste is only the number the note
+  states; the sellable yield is **worked out in the browser** as made minus waste, and
+  only for a single item (the form's yield section is single-item only). With several
+  items, per-item waste cannot be entered, so it is listed by name with "record it with
+  Discard in the Production Log". The date is not worked out by the model:
+  `resolveProductionDate` reads the phrase as a past date (today, "this morning",
+  yesterday, "last night", the most recent weekday, "3 Oct"); a future date ("tomorrow")
+  is "couldn't tell the date", never guessed. Material cost is the form's own live
+  calculation as always.
+- **Matching.** An item the model could not match shows as "Couldn't find 'croisant' on
+  the menu", with the closest menu item as a suggestion (`suggestMenuItem`) that is
+  applied only if the owner clicks it; until then the row is left empty to choose from.
+- **Privacy.** Phone numbers are removed in the browser before sending; no customer
+  data is involved.
+
 ## Delivery plan
 
 1. Customer insights, time zone setting, design doc (built).
@@ -414,7 +449,9 @@ runs (the handoff's `parse-production-run`) yet.
 7. Pricing in the AI: repricing alerts and ingredient price moves in the snapshot,
    the briefing's `reprice` and `price_move` items, and the chat's what-if (built).
 
-Still open: `parse-production-run` (the production-run counterpart of order parsing).
+8. Production-run parsing (`parse-production-run`) (built).
+
+The AI list in the handoff is now complete.
 
 ## Operational
 

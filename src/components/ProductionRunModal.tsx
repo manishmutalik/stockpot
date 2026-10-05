@@ -1,7 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Calendar, Check, ChevronDown, ChevronUp, CirclePlus, Factory, Hourglass, Package, Trash2 } from 'lucide-react';
+import { Calendar, Check, ChevronDown, ChevronUp, CirclePlus, Factory, Hourglass, Loader2, Package, Sparkles, Trash2 } from 'lucide-react';
 import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
 import { convertAmount } from '../utils/conversions';
+import type { ProductionParser } from '../hooks/useProductionParser';
+import type { NotFoundItem } from '../utils/orderParse';
+import type { UnplacedWaste } from '../utils/productionParse';
 
 /**
  * Describes why a production batch was made. Currently determines whether
@@ -76,6 +79,8 @@ interface ProductionRunModalProps {
     existingSessionId?: string
   ) => Promise<{ succeededCount: number; failedIndex: number | null; sessionId?: string }>;
   currency: { symbol: string };
+  /** Reads a typed or pasted note into the form. Present only when AI is available to the account. */
+  productionParser?: ProductionParser | null;
 }
 
 interface ProductionRow {
@@ -98,7 +103,7 @@ const EMPTY_ROW = (menu: MenuItem[]): ProductionRow => ({ recipeId: menu[0]?.id 
  * @param onSave    - Async callback that persists all rows; see ProductionRunModalProps.
  * @param currency  - Locale currency config; only `symbol` is used for display.
  */
-export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, currency }: ProductionRunModalProps) {
+export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, currency, productionParser }: ProductionRunModalProps) {
   // ─── Local State ────────────────────────────────────────────────────────────
   const today = new Date().toISOString().split('T')[0]; // default date = today (YYYY-MM-DD)
   const [rows,       setRows]       = useState<ProductionRow[]>([EMPTY_ROW(menu)]);
@@ -109,6 +114,15 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   const [isSaving,   setIsSaving]   = useState(false);
   const [error,      setError]      = useState('');
   const [invalidRowIndex, setInvalidRowIndex] = useState<number | null>(null);
+
+  // Filling the form from a note (only when AI is available): nothing is saved, the owner checks the form.
+  const [message,    setMessage]    = useState('');
+  const [isReading,  setIsReading]  = useState(false);
+  const [readError,  setReadError]  = useState('');
+  const [filled,     setFilled]     = useState(false);
+  const [readNotes,  setReadNotes]  = useState<string[]>([]);
+  const [notFound,   setNotFound]   = useState<NotFoundItem[]>([]);
+  const [unplaced,   setUnplaced]   = useState<UnplacedWaste[]>([]);
 
   // Preserves the session grouping across a partial-failure retry (see
   // handleSave): once a multi-row submission starts, every row saved in
@@ -167,6 +181,56 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     setRows(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
   };
 
+  // Pre-fills the form from the note. Nothing is saved: the owner checks it and presses Log Run.
+  const readMessage = async () => {
+    if (!productionParser || isReading) return;
+    setIsReading(true);
+    setReadError('');
+    setFilled(false);
+    setReadNotes([]);
+    setNotFound([]);
+    setUnplaced([]);
+    try {
+      const outcome = await productionParser.parse(message);
+      if (outcome.ok === false) { setReadError(outcome.message); return; }
+      const f = outcome.form;
+      const notes: string[] = [];
+      if (f.rows.length > 0) {
+        setRows(f.rows);
+      } else {
+        // Nothing matched: leave an empty row to choose from, not the first menu item standing in for what was made.
+        setRows([{ recipeId: '', quantity: 1 }]);
+        if (f.notFound.length === 0) notes.push('No items were found in the note.');
+      }
+      if (f.date) setDate(f.date);
+      if (f.dateNotUnderstood) notes.push(`Couldn't tell the date from "${f.dateNotUnderstood}". Please check the production date.`);
+      if (f.notes !== undefined) setNotes(f.notes);
+      // Waste worked out as the sellable yield, for a single item; otherwise the yield section is left alone, hidden.
+      if (f.yieldQty !== undefined) { setShowYield(true); setYieldQty(f.yieldQty); } else { setShowYield(false); setYieldQty(''); }
+      setNotFound(f.notFound);
+      setUnplaced(f.unplacedWaste);
+      setReadNotes(notes);
+      setFilled(true);
+      setError('');
+      setInvalidRowIndex(null);
+    } finally {
+      setIsReading(false);
+    }
+  };
+  const applySuggestion = (missing: NotFoundItem) => {
+    if (!missing.suggestion) return;
+    const id = missing.suggestion.id;
+    setRows(prev => {
+      if (prev.some(r => r.recipeId === id)) return prev.map(r => (r.recipeId === id ? { ...r, quantity: r.quantity + missing.quantity } : r));
+      // The empty row left when nothing matched is replaced rather than kept beside it.
+      if (prev.length === 1 && prev[0].recipeId === '') return [{ recipeId: id, quantity: missing.quantity }];
+      return [...prev, { recipeId: id, quantity: missing.quantity }];
+    });
+    setShowYield(false);
+    setYieldQty('');
+    setNotFound(prev => prev.filter(n => n !== missing));
+  };
+
   // Clears the in-progress session link before closing, so an abandoned
   // multi-item attempt (cancelled mid-retry) can never leak its session id
   // into a later, unrelated submission.
@@ -176,6 +240,13 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   };
 
   const resetForm = () => {
+    setMessage('');
+    setIsReading(false);
+    setReadError('');
+    setFilled(false);
+    setReadNotes([]);
+    setNotFound([]);
+    setUnplaced([]);
     setRows([EMPTY_ROW(menu)]);
     setDate(today);
     setShowYield(false);
@@ -291,6 +362,60 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
         </>
       }
     >
+      {/* Fill the form from a note (only when AI is available) */}
+      {productionParser && (
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+          <label htmlFor="production-message" className={`${MODAL_LABEL} flex items-center gap-1.5 !mb-0 text-primary`}>
+            <Sparkles size={12} /> Fill from a note
+          </label>
+          <textarea
+            id="production-message"
+            value={message}
+            onChange={e => setMessage(e.target.value)}
+            rows={3}
+            maxLength={1500}
+            placeholder="e.g. Made 40 croissants and 24 muffins this morning, 3 croissants burnt"
+            className={`${modalField()} resize-none bg-white`}
+          />
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={readMessage}
+              disabled={isReading || message.trim() === ''}
+              className="h-10 px-4 shrink-0 whitespace-nowrap rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            >
+              {isReading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {isReading ? 'Reading…' : 'Fill the form'}
+            </button>
+            <p className="text-[11px] text-muted leading-snug">Phone numbers are not sent. You check everything before the run is logged.</p>
+          </div>
+          {readError && <p role="alert" className="text-xs font-semibold text-coral">{readError}</p>}
+          {filled && (
+            <div className="space-y-1.5 text-xs text-ink">
+              <p className="font-semibold">Filled from your note. Please check it.</p>
+              {readNotes.map(n => <p key={n} className="text-muted">{n}</p>)}
+              {unplaced.map((w, i) => (
+                <p key={`${w.name}-${i}`} className="text-muted">
+                  {w.units} {w.name} {w.units === 1 ? 'was' : 'were'} wasted. Waste is entered here only for a single item, so record it with Discard in the Production Log once this is logged.
+                </p>
+              ))}
+              {notFound.map((n, i) => (
+                <div key={`${n.nameAsWritten}-${i}`} className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-amber-800">
+                  <span>Couldn&apos;t find &ldquo;{n.nameAsWritten}&rdquo; on the menu (×{n.quantity}).</span>
+                  {n.suggestion ? (
+                    <button type="button" onClick={() => applySuggestion(n)} className="font-semibold text-primary hover:text-primary-dark underline">
+                      Use {n.suggestion.name}?
+                    </button>
+                  ) : (
+                    <span>Pick it from the list below.</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Items */}
       <div>
         <label className={MODAL_LABEL}>
