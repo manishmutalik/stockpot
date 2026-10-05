@@ -1,5 +1,21 @@
 # Changelog
 
+## Log a production run from a note
+
+In the Log Production Run form, type or paste what you made ("Made 40 croissants and 24
+muffins this morning, 3 croissants burnt") and press **Fill the form**. The items,
+quantities, date and notes are filled in for you to check; nothing is logged until you
+press Log Run.
+
+- It only fills in what you wrote. A quantity you did not write is never assumed, an item
+  that is not on your menu is shown as "Couldn't find 'croisant'" with the closest menu
+  item to choose, and a time it cannot place ("tomorrow") leaves the date for you to set.
+- Waste you mention is turned into the sellable yield for a single item (made minus
+  waste, worked out by the app). With several items it tells you which waste to record
+  with Discard in the Production Log.
+- Shown only when AI is on for your account (not in the demo); phone numbers are not
+  sent. It uses one of your daily "read a message" requests.
+
 ## Pricing in the AI
 
 The briefing and "Ask your business" now know about prices.

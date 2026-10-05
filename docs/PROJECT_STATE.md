@@ -143,11 +143,11 @@ shared plumbing (server-side gate and daily caps, figure registry and text
 guard, business snapshot, rules) and the daily briefing on the Dashboard
 (`POST /api/ai/briefing`, cached per day, validated with a code-built fallback;
 the demo shows a sample) and Ask Your Business (`POST /api/ai/chat`, a slide-over
-chat; no what-if tool until Phase 2) and order parsing (the Add Order form can be
-filled from a pasted message; `POST /api/ai/parse-order`) and reorder
+chat with a what-if tool) and order parsing (the Add Order form can be
+filled from a pasted message; `POST /api/ai/parse-order`) and production-run parsing (the
+Log Production Run form, likewise; `POST /api/ai/parse-production-run`) and reorder
 suggestions (`utils/reorder.ts`, a card on the Inventory tab, no AI needed). The AI list
-in the handoff is complete except `parse-production-run` (the Phase 2 items, repricing
-alerts, price drift and the what-if tool, are built). Rule for every AI feature: no model-generated figures
+in the handoff is complete. Rule for every AI feature: no model-generated figures
 (see the design doc).
 
 ## Firestore security rules
@@ -262,7 +262,7 @@ now also returning `grossRevenue`, `paymentFees` and `costOfGoods`) and `priceLo
   Menu "Suggest" tile shows the suggestion but there is no bulk "apply all". The
   what-if is read-only: it does not change prices.
 
-Next in the owner's queue: the still-open `parse-production-run` from the AI handoff.
+Nothing is queued. The AI list in the handoff is complete.
 
 ## Open items for the user (none blocking)
 

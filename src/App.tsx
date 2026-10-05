@@ -325,6 +325,7 @@ import { getBatchesNeedingAttention } from './utils/stockAging';
 import { withShelfStock } from './utils/batchStock';
 import { AskBusiness } from './components/AskBusiness';
 import { useOrderParser } from './hooks/useOrderParser';
+import { useProductionParser } from './hooks/useProductionParser';
 import { buildCustomerDirectory } from './utils/customers';
 import { actualOrders } from './utils/preorders';
 import { todayInZone } from './utils/localDate';
@@ -853,6 +854,7 @@ function BakeryApp() {
 
   // Reading a pasted order message into the Add Order form (offered only where AI is available).
   const orderParser = useOrderParser({ orders, menu, materials: remainingInventory, settings, signedIn: !!user, dataReady });
+  const productionParser = useProductionParser({ menu, settings, signedIn: !!user, dataReady });
 
   // `remainingInventory` sorted by the user's chosen column and direction.
   const sortedRemainingInventory = useMemo(() => {
@@ -1584,6 +1586,7 @@ function BakeryApp() {
           materials={materials}
           onSave={logProductionRunSession}
           currency={currency}
+          productionParser={productionParser}
         />
         <AddOrderModal
           isOpen={isAddOrderModalOpen}

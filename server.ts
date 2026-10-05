@@ -16,6 +16,8 @@ import { createChatHandler } from "./lib/chatRoutes";
 import { createChatModel } from "./lib/chatModel";
 import { createOrderParseHandler } from "./lib/orderParseRoutes";
 import { createOrderParseModel } from "./lib/orderParseModel";
+import { createProductionParseHandler } from "./lib/productionParseRoutes";
+import { createProductionParseModel } from "./lib/productionParseModel";
 import { createBriefingModel } from "./lib/briefingModel";
 import { beginGeneration, clearGeneration, getBriefing, saveBriefing } from "./lib/briefingStore";
 import { globalDay, peekAiUsage, reserveAiUse, usageDayFor } from "./lib/aiUsage";
@@ -184,6 +186,7 @@ async function startServer() {
   }));
   api.post("/ai/chat", requireCsrf, createChatHandler({ ...aiGuardDeps, model: createChatModel() }));
   api.post("/ai/parse-order", requireCsrf, createOrderParseHandler({ ...aiGuardDeps, model: createOrderParseModel() }));
+  api.post("/ai/parse-production-run", requireCsrf, createProductionParseHandler({ ...aiGuardDeps, model: createProductionParseModel() }));
 
   api.get("/billing/status", async (req: AuthedRequest, res) => {
     if (isBillingDisabled()) {
