@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
-  Calendar, CheckCircle2, ClipboardList, Clock, Database, Globe, MapPin, Plus, Receipt, Search,
+  Ban, Calendar, CheckCircle2, ClipboardList, Clock, Database, Globe, MapPin, Plus, Receipt, Search,
   ShoppingBag, Trash2, Truck, Utensils, Wallet
 } from 'lucide-react';
 import { AppViewProps, Order, MenuItem, PAYMENT_METHODS, type PaymentMethod } from '../types';
@@ -13,14 +13,16 @@ import { BillModal } from '../components/BillModal';
 import { PendingPayments } from '../components/PendingPayments';
 import { CustomersPanel } from '../components/CustomersPanel';
 import { buildCustomerProfiles } from '../utils/customers';
-import { todayInZone } from '../utils/localDate';
+import { addDays, formatShortDate, todayInZone } from '../utils/localDate';
+import { actualOrders, advanceOf, countsAsSale, holdsStock, isOpenPreorder } from '../utils/preorders';
+import { CancelPreorderModal, PreorderInfo } from '../components/PreorderParts';
 import { MenuShareModal } from '../components/MenuShareModal';
 import { groupPendingPayments, isUnpaid } from '../utils/payments';
 import { MarkPaidModal } from '../components/MarkPaidModal';
 import { ContributionBreakdown, MadeBadge } from '../components/ContributionBreakdown';
-import { orderContribution, type OrderContribution } from '../utils/profit';
+import { bookedAhead, orderContribution, type OrderContribution } from '../utils/profit';
 
-type StatusFilter = 'all' | 'pending' | 'fulfilled';
+type StatusFilter = 'all' | 'pending' | 'fulfilled' | 'upcoming' | 'cancelled';
 
 const TH = 'font-mono text-[10px] font-semibold uppercase tracking-wider text-muted';
 
@@ -187,8 +189,13 @@ const OrderRow: React.FC<{
   order: Order;
   menu: MenuItem[];
   updateOrder: (id: string, field: keyof Order, value: any) => void;
+  /** Hands the order over (a pre-order takes its stock and then asks for the balance). */
   fulfillOrder: (order: Order) => void;
   deleteOrder: (id: string) => void;
+  /** Cancels this pre-order's whole purchase; absent for orders that cannot be cancelled. */
+  onCancel?: () => void;
+  /** What a standalone pre-order shows under its row: due date, slot, notes, advance and balance. Omitted inside a multi-item order, whose header shows it. */
+  preorderTotal?: number;
   expandedOrderIds: Set<string>;
   toggleDeliveryDetails: (orderId: string) => void;
   currencySymbol: string;
@@ -212,18 +219,21 @@ const OrderRow: React.FC<{
   breakdownOpen?: boolean;
   onToggleBreakdown?: () => void;
   gstOn: boolean;
-}> = ({ order, menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol, money, onBill, onShareMenu, setPaid, showPaymentTag, onUnpaidClick, setMethod, discountEditable, contribution, breakdownOpen, onToggleBreakdown, gstOn }) => {
+}> = ({ order, menu, updateOrder, fulfillOrder, deleteOrder, onCancel, preorderTotal, expandedOrderIds, toggleDeliveryDetails, currencySymbol, money, onBill, onShareMenu, setPaid, showPaymentTag, onUnpaidClick, setMethod, discountEditable, contribution, breakdownOpen, onToggleBreakdown, gstOn }) => {
   // Stock available for a given menu item, from this order's point of view:
   // its own current item gets its already-claimed quantity added back in,
   // since that's this same order's claim being resized, not new stock.
-  const availableFor = (item: MenuItem) => (item.finishedGoodsStock ?? 0) + (item.id === order.menuItemId ? order.quantity : 0);
+  // An order that holds no stock (a pre-order not yet handed over, or a cancelled order) has no claim to add back and no cap.
+  const holds = holdsStock(order);
+  const availableFor = (item: MenuItem) => (item.finishedGoodsStock ?? 0) + (holds && item.id === order.menuItemId ? order.quantity : 0);
   const currentItem = menu.find(m => m.id === order.menuItemId);
-  const maxQty = currentItem ? availableFor(currentItem) : undefined;
+  const maxQty = currentItem && holds ? availableFor(currentItem) : undefined;
+  const cancelled = !!order.cancelledOn;
   const hasDelivery = !!order.deliveryMethod && order.deliveryMethod !== 'pickup';
   const method = order.deliveryMethod || 'pickup';
 
   return (
-    <div className="p-3 bg-stone-50/60 rounded-xl hover:bg-primary/[0.04] transition-colors">
+    <div className={`p-3 bg-stone-50/60 rounded-xl hover:bg-primary/[0.04] transition-colors ${cancelled ? 'opacity-60' : ''}`}>
       <div className="grid grid-cols-6 gap-2 items-center xl:grid-cols-[minmax(0,3fr)_4rem_minmax(0,2fr)_minmax(0,2fr)_8rem_6rem_9.5rem] xl:gap-2">
         <select
           aria-label="Item"
@@ -244,10 +254,10 @@ const OrderRow: React.FC<{
         <div className="col-span-2 xl:col-span-1 xl:order-5 flex flex-wrap items-center gap-1">
           <span
             className={`inline-flex items-center px-2.5 py-1 rounded-full font-mono text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap ${
-              order.fulfilled ? 'bg-margin/10 text-[#006143]' : 'bg-primary/10 text-primary'
+              cancelled ? 'bg-stone-200 text-muted' : order.fulfilled ? 'bg-margin/10 text-[#006143]' : 'bg-primary/10 text-primary'
             }`}
           >
-            {order.fulfilled ? 'Fulfilled' : 'Pending'}
+            {cancelled ? 'Cancelled' : order.fulfilled ? 'Fulfilled' : 'Pending'}
           </span>
           <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-stone-100 text-muted font-mono text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">
             {DELIVERY_LABEL[method]}
@@ -265,7 +275,7 @@ const OrderRow: React.FC<{
           )}
         </div>
         <div className="col-span-2 xl:col-span-1 xl:order-6 text-right">
-          <div className="font-mono text-sm font-semibold text-ink whitespace-nowrap">{money(orderLineTotal(order, menu))}</div>
+          <div className={`font-mono text-sm font-semibold text-ink whitespace-nowrap ${cancelled ? 'line-through' : ''}`}>{money(orderLineTotal(order, menu))}</div>
           {contribution && onToggleBreakdown && (
             <div className="mt-0.5"><MadeBadge contribution={contribution} money={money} open={!!breakdownOpen} onToggle={onToggleBreakdown} /></div>
           )}
@@ -316,12 +326,22 @@ const OrderRow: React.FC<{
           >
             <MapPin size={18} fill={hasDelivery ? 'currentColor' : 'none'} />
           </button>
-          {!order.fulfilled ? (
+          {onCancel && (
+            <button
+              onClick={onCancel}
+              className="p-1.5 xl:p-1 rounded-lg text-muted hover:text-coral hover:bg-coral/10 transition-colors"
+              title="Cancel pre-order"
+              aria-label="Cancel pre-order"
+            >
+              <Ban size={18} />
+            </button>
+          )}
+          {cancelled ? null : !order.fulfilled ? (
             <button
               onClick={() => fulfillOrder(order)}
               className="p-1.5 xl:p-1 rounded-lg text-margin hover:bg-margin/10 transition-colors"
-              title="Mark Fulfilled"
-              aria-label="Mark Fulfilled"
+              title={order.preorder ? 'Hand over (the whole order)' : 'Mark Fulfilled'}
+              aria-label={order.preorder ? 'Hand over' : 'Mark Fulfilled'}
             >
               <CheckCircle2 size={18} />
             </button>
@@ -340,6 +360,7 @@ const OrderRow: React.FC<{
           </button>
         </div>
       </div>
+      {preorderTotal !== undefined && <PreorderInfo members={[order]} total={preorderTotal} money={money} />}
       {breakdownOpen && contribution && <ContributionBreakdown contribution={contribution} money={money} gstOn={gstOn} />}
       {expandedOrderIds.has(order.id) && (
         <DeliveryDetailsSection order={order} updateOrder={updateOrder} currencySymbol={currencySymbol} setPaid={setPaid} setMethod={setMethod} discountEditable={discountEditable} />
@@ -352,7 +373,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
   const {
     orders, menu, currency, settings, orderFilterStart, setOrderFilterStart, orderFilterEnd, setOrderFilterEnd,
     setIsAddOrderModalOpen, shopifyStatus, importShopifyOrders, isImportingShopify, odooStatus,
-    importOdooOrders, isImportingOdoo, fulfillOrder, markOrdersPaid, setOrdersPaymentMethod, updateOrder, deleteOrder, materials
+    importOdooOrders, isImportingOdoo, fulfillOrder, cancelPreorder, markOrdersPaid, setOrdersPaymentMethod, updateOrder, deleteOrder, materials
   } = props;
 
   // Which orders currently have their "Delivery Details" section expanded.
@@ -387,6 +408,10 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
     return next;
   });
 
+  // A pre-order about to be cancelled (asks what happens to any advance first), or null.
+  const [cancelling, setCancelling] = useState<Order[] | null>(null);
+  const today = todayInZone(settings.timezone);
+
   // Orders about to be marked paid (asks how they were paid first), or null.
   const [markPaid, setMarkPaid] = useState<{ ids: string[]; title: string; summary: string; amount: number } | null>(null);
 
@@ -400,29 +425,51 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
     () => orders.filter(o => o.date >= orderFilterStart && o.date <= orderFilterEnd),
     [orders, orderFilterStart, orderFilterEnd]
   );
-  const stats = useMemo(() => summarizeOrders(rangeOrders, menu), [rangeOrders, menu]);
+  // The headline figures count what has happened: not cancelled, and not due later. What is booked for later is
+  // shown on its own, with the advances held against open pre-orders.
+  const stats = useMemo(() => summarizeOrders(actualOrders(rangeOrders, today), menu), [rangeOrders, menu, today]);
+  const ahead = useMemo(
+    () => bookedAhead({ orders, menu, materials: materials ?? [], settings, today }),
+    [orders, menu, materials, settings, today]
+  );
 
   // Newest day first; each day's orders clustered into multi-item orders, then
   // narrowed by search and status. A multi-item order stays whole: it shows
-  // (with all its items) when any one of its items matches.
+  // (with all its items) when any one of its items matches. "Upcoming" ignores the date range
+  // and lists open pre-orders due after today, soonest first.
   const q = search.trim().toLowerCase();
   const { days, counts } = useMemo(() => {
-    const byDate: Record<string, Order[]> = {};
-    rangeOrders.forEach(o => { (byDate[o.date] ||= []).push(o); });
-    const counts = { all: 0, pending: 0, fulfilled: 0 };
-    const days = Object.keys(byDate).sort((a, b) => b.localeCompare(a)).map(date => {
-      const searched = clusterOrdersByGroup(byDate[date]).filter(c => !q || clusterMatchesSearch(c, menu, q));
+    const byDay = (list: Order[]) => {
+      const byDate: Record<string, Order[]> = {};
+      list.forEach(o => { (byDate[o.date] ||= []).push(o); });
+      return byDate;
+    };
+    const clustersOf = (list: Order[]) => clusterOrdersByGroup(list).filter(c => !q || clusterMatchesSearch(c, menu, q));
+    const isCancelled = (c: OrderCluster) => membersOf(c).every(o => !!o.cancelledOn);
+    const counts = { all: 0, pending: 0, fulfilled: 0, upcoming: 0, cancelled: 0 };
+
+    const rangeByDate = byDay(rangeOrders);
+    const matches = (c: OrderCluster) =>
+      statusFilter === 'all' ? true
+        : statusFilter === 'cancelled' ? isCancelled(c)
+        : statusFilter === 'pending' ? !isCancelled(c) && membersOf(c).some(o => !o.fulfilled)
+        : !isCancelled(c) && membersOf(c).every(o => o.fulfilled);
+    const rangeDays = Object.keys(rangeByDate).sort((a, b) => b.localeCompare(a)).map(date => {
+      const searched = clustersOf(rangeByDate[date]);
       counts.all += searched.length;
-      counts.pending += searched.filter(c => membersOf(c).some(o => !o.fulfilled)).length;
-      counts.fulfilled += searched.filter(c => membersOf(c).every(o => o.fulfilled)).length;
-      const clusters = searched.filter(c =>
-        statusFilter === 'all' ? true
-          : statusFilter === 'pending' ? membersOf(c).some(o => !o.fulfilled)
-          : membersOf(c).every(o => o.fulfilled));
-      return { date, clusters };
-    }).filter(d => d.clusters.length > 0);
+      counts.cancelled += searched.filter(isCancelled).length;
+      counts.pending += searched.filter(c => !isCancelled(c) && membersOf(c).some(o => !o.fulfilled)).length;
+      counts.fulfilled += searched.filter(c => !isCancelled(c) && membersOf(c).every(o => o.fulfilled)).length;
+      return { date, clusters: searched.filter(matches) };
+    });
+
+    const upcomingByDate = byDay(orders.filter(o => isOpenPreorder(o) && o.date > today));
+    const upcomingDays = Object.keys(upcomingByDate).sort().map(date => ({ date, clusters: clustersOf(upcomingByDate[date]) }));
+    counts.upcoming = upcomingDays.reduce((n, d) => n + d.clusters.length, 0);
+
+    const days = (statusFilter === 'upcoming' ? upcomingDays : rangeDays).filter(d => d.clusters.length > 0);
     return { days, counts };
-  }, [rangeOrders, menu, q, statusFilter]);
+  }, [rangeOrders, orders, menu, q, statusFilter, today]);
 
   const setRange = (daysBack: number) => {
     const end = new Date();
@@ -442,14 +489,14 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
   const deliveryNet = stats.deliveryCharged - stats.courierCost;
 
   const pendingCustomers = useMemo(
-    () => groupPendingPayments({ orders, menu, settings, currency }),
-    [orders, menu, settings, currency]
+    () => groupPendingPayments({ orders, menu, settings, currency, today }),
+    [orders, menu, settings, currency, today]
   );
 
   // Customers come from every order, not just the range shown, and "today" is the business's own date.
   const customerProfiles = useMemo(
-    () => buildCustomerProfiles({ orders, menu, materials: materials ?? [], settings, today: todayInZone(settings.timezone) }),
-    [orders, menu, materials, settings]
+    () => buildCustomerProfiles({ orders, menu, materials: materials ?? [], settings, today }),
+    [orders, menu, materials, settings, today]
   );
 
   const gstOn = !!settings.gstApplicable && (settings.gstRate || 0) > 0;
@@ -458,7 +505,28 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
   const discountOwnerId = (members: Order[]) =>
     ([...members].sort((a, b) => a.id.localeCompare(b.id)).find(o => (o.discount || 0) > 0) ?? members[0]).id;
 
-  const rowProps = { menu, updateOrder, fulfillOrder, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol: currency.symbol, money, gstOn };
+  /** The items of an order in words, for a dialog: "2 Sourdough, 1 Chocolate Cake". */
+  const describe = (members: Order[]) => members.map(o => `${o.quantity} ${menu.find(m => m.id === o.menuItemId)?.name ?? o.itemNameAtSale ?? 'item'}`).join(', ');
+  const membersFor = (order: Order) => (order.orderGroupId ? orders.filter(o => o.orderGroupId === order.orderGroupId) : [order]);
+
+  /**
+   * Hands an order over. A pre-order takes its stock now (the whole order, or nothing); if that works and
+   * a balance is still owed, the payment step opens straight away so it can be collected.
+   */
+  const handOver = async (order: Order) => {
+    const ok = await fulfillOrder(order);
+    if (ok !== true || !order.preorder) return;
+    const members = membersFor(order);
+    if (!members.some(isUnpaid)) return;
+    const balance = Math.max(contributionOf(members).customerPays - (advanceOf(members)?.amount ?? 0), 0);
+    setMarkPaid({
+      ids: members.map(o => o.id), title: 'Collect the balance',
+      summary: `${describe(members)}${members[0].customerName ? ` for ${members[0].customerName}` : ''}`, amount: balance,
+    });
+  };
+  const askCancel = (order: Order) => setCancelling(membersFor(order));
+
+  const rowProps = { menu, updateOrder, fulfillOrder: handOver, deleteOrder, expandedOrderIds, toggleDeliveryDetails, currencySymbol: currency.symbol, money, gstOn };
 
   return (
     <motion.div
@@ -512,6 +580,21 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
           </button>
         </div>
       </div>
+
+      {/* Orders booked for later and the advances held against them: not sales yet, so not in the figures below */}
+      {(ahead.orderCount > 0 || ahead.advancesHeld > 0) && (
+        <div role="note" aria-label="Booked ahead" className="surface-card px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+          {ahead.orderCount > 0 && (
+            <span className="text-muted">
+              Booked for later <b className="font-mono text-ink">{money(ahead.revenue)}</b> in {ahead.orderCount} order{ahead.orderCount === 1 ? '' : 's'}
+              <span className="text-xs"> (counted as sales on their due dates)</span>
+            </span>
+          )}
+          {ahead.advancesHeld > 0 && (
+            <span className="text-muted">Advances held <b className="font-mono text-ink">{money(ahead.advancesHeld)}</b> <span className="text-xs">(customers&apos; money against open pre-orders)</span></span>
+          )}
+        </div>
+      )}
 
       {/* Headline figures for the selected range */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -605,6 +688,8 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
             ['all', 'All Orders', counts.all],
             ['pending', 'Pending', counts.pending],
             ['fulfilled', 'Fulfilled', counts.fulfilled],
+            ['upcoming', 'Upcoming', counts.upcoming],
+            ['cancelled', 'Cancelled', counts.cancelled],
           ] as [StatusFilter, string, number][]).map(([key, label, count]) => (
             <button
               key={key}
@@ -643,7 +728,12 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
           <div className="w-16 h-16 bg-stone-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-stone-300">
             <ClipboardList size={32} />
           </div>
-          {rangeOrders.length === 0 ? (
+          {statusFilter === 'upcoming' && !q ? (
+            <>
+              <h3 className="text-xl font-bold text-ink mb-2">No upcoming pre-orders</h3>
+              <p className="text-muted text-sm">Pre-orders due after today, from any date, show here. Book one with Add Order and a later date.</p>
+            </>
+          ) : rangeOrders.length === 0 && statusFilter !== 'upcoming' ? (
             <>
               <h3 className="text-xl font-bold text-ink mb-2">No orders in this range</h3>
               <p className="text-muted text-sm mb-6">Try changing the date range or add a new order.</p>
@@ -667,18 +757,22 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
         <div className="space-y-6">
           {days.map(({ date, clusters }) => {
             const dayOrders = clusters.flatMap(membersOf);
-            const day = summarizeOrders(dayOrders, menu);
+            const allCancelled = dayOrders.every(o => !!o.cancelledOn);
+            const day = summarizeOrders(dayOrders.filter(countsAsSale), menu);
+            const dayName = date === today ? 'Today · ' : date === addDays(today, 1) ? 'Tomorrow · ' : '';
             return (
               <div key={date} className="surface-card overflow-hidden">
                 <div className="px-4 sm:px-6 py-3 bg-primary/5 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Calendar size={14} className="text-primary" />
                     <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-ink">
-                      {new Date(date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
+                      {dayName}{new Date(date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })}
                     </span>
                   </div>
                   <span className="font-mono text-[11px] text-muted">
-                    {day.orderCount} order{day.orderCount !== 1 ? 's' : ''} · {day.itemsSold} item{day.itemsSold !== 1 ? 's' : ''} · <b className="text-ink">{money(day.revenue)}</b>
+                    {allCancelled
+                      ? `${clusters.length} cancelled`
+                      : <>{day.orderCount} order{day.orderCount !== 1 ? 's' : ''} · {day.itemsSold} item{day.itemsSold !== 1 ? 's' : ''} · <b className="text-ink">{money(day.revenue)}</b></>}
                   </span>
                 </div>
                 <div className="p-3 sm:p-4 space-y-2">
@@ -695,6 +789,8 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                   {clusters.map(cluster => cluster.type === 'single' ? (
                     <OrderRow
                       key={cluster.order.id} order={cluster.order} {...rowProps}
+                      onCancel={isOpenPreorder(cluster.order) ? () => askCancel(cluster.order) : undefined}
+                      preorderTotal={cluster.order.preorder ? contributionOf([cluster.order]).customerPays : undefined}
                       onBill={() => openBill([cluster.order])} onShareMenu={() => shareMenuFor([cluster.order])}
                       setPaid={paid => markOrdersPaid([cluster.order.id], paid)} showPaymentTag
                       onUnpaidClick={() => setMarkPaid({
@@ -721,7 +817,10 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                             contribution={contributionOf(cluster.orders)} money={money}
                             open={openBreakdowns.has(`g:${cluster.groupId}`)} onToggle={() => toggleBreakdown(`g:${cluster.groupId}`)}
                           />
-                          {cluster.orders.some(isUnpaid) && (
+                          {cluster.orders.every(o => o.cancelledOn) && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-stone-200 text-muted font-mono text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap">Cancelled</span>
+                          )}
+                          {!cluster.orders.every(o => o.cancelledOn) && cluster.orders.some(isUnpaid) && (
                             <button
                               type="button"
                               onClick={() => setMarkPaid({
@@ -752,13 +851,25 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                           >
                             <Receipt size={13} /> Generate Bill
                           </button>
-                          {cluster.orders.some(o => !o.fulfilled) && (
+                          {cluster.orders.every(isOpenPreorder) && (
                             <button
-                              onClick={() => cluster.orders.forEach(o => { if (!o.fulfilled) fulfillOrder(o); })}
-                              title="Fulfill every item in this order"
+                              onClick={() => askCancel(cluster.orders[0])}
+                              title="Cancel this pre-order"
+                              className="flex items-center gap-1 px-2 py-1 rounded-lg font-mono text-[10px] font-semibold uppercase tracking-wider text-muted hover:text-coral hover:bg-coral/10 transition-colors"
+                            >
+                              <Ban size={13} /> Cancel
+                            </button>
+                          )}
+                          {!cluster.orders.some(o => o.cancelledOn) && cluster.orders.some(o => !o.fulfilled) && (
+                            <button
+                              // A pre-order is handed over whole, in one step, so its stock is checked and taken once.
+                              onClick={() => (cluster.orders.some(o => o.preorder)
+                                ? handOver(cluster.orders.find(o => !o.fulfilled)!)
+                                : cluster.orders.forEach(o => { if (!o.fulfilled) fulfillOrder(o); }))}
+                              title={cluster.orders.some(o => o.preorder) ? 'Hand over the whole order' : 'Fulfill every item in this order'}
                               className="flex items-center gap-1 px-2 py-1 rounded-lg font-mono text-[10px] font-semibold uppercase tracking-wider text-[#006143] hover:bg-margin/10 transition-colors"
                             >
-                              <CheckCircle2 size={13} /> Fulfill All
+                              <CheckCircle2 size={13} /> {cluster.orders.some(o => o.preorder) ? 'Hand Over' : 'Fulfill All'}
                             </button>
                           )}
                           <button
@@ -774,6 +885,11 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                           </button>
                         </div>
                       </div>
+                      {cluster.orders.some(o => o.preorder) && (
+                        <div className="px-3 pb-2 bg-primary/5">
+                          <PreorderInfo members={cluster.orders} total={contributionOf(cluster.orders).customerPays} money={money} />
+                        </div>
+                      )}
                       {openBreakdowns.has(`g:${cluster.groupId}`) && (
                         <div className="px-2 bg-white">
                           <ContributionBreakdown contribution={contributionOf(cluster.orders)} money={money} gstOn={gstOn} />
@@ -804,6 +920,16 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
           feeRates={settings.paymentFeeRates}
           onConfirm={method => { markOrdersPaid(markPaid.ids, true, method); setMarkPaid(null); }}
           onClose={() => setMarkPaid(null)}
+        />,
+        document.body
+      )}
+      {cancelling && createPortal(
+        <CancelPreorderModal
+          summary={`${describe(cancelling)}${cancelling[0].customerName ? ` for ${cancelling[0].customerName}` : ''}`}
+          advance={advanceOf(cancelling)?.amount}
+          money={money}
+          onConfirm={outcome => { const first = cancelling[0]; setCancelling(null); cancelPreorder(first, outcome); }}
+          onClose={() => setCancelling(null)}
         />,
         document.body
       )}
