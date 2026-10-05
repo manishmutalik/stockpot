@@ -220,12 +220,14 @@ const LandingPage: React.FC = () => {
                 Explore Kitchen Tour <ArrowRight size={16} />
               </a>
             </motion.div>
-            <p className={`${MONO} mt-4 mb-10 sm:mb-12 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs md:text-sm text-muted`}>
+            <p className={`${MONO} mt-4 mb-10 sm:mb-12 flex flex-col sm:flex-row items-center justify-center gap-x-2 gap-y-1 text-xs md:text-sm text-muted`}>
               <span><span className="font-semibold text-ink">{PRICE.symbol}{PRICE.amount}</span> /{PRICE.period} after trial</span>
               <span className="hidden sm:inline text-[#D0E4E2]" aria-hidden="true">•</span>
-              <span>Card required to start</span>
-              <span className="hidden sm:inline text-[#D0E4E2]" aria-hidden="true">•</span>
-              <span>Cancel anytime</span>
+              <span className="inline-flex items-center gap-2">
+                Card required to start
+                <span className="text-[#D0E4E2]" aria-hidden="true">•</span>
+                Cancel anytime
+              </span>
             </p>
 
             {/* The bakery counter, with the tablet that runs the kitchen */}
@@ -238,11 +240,11 @@ const LandingPage: React.FC = () => {
               <img
                 src="/landing/hero-kitchen.webp"
                 alt="An artisan bakery counter with fresh sourdough, a layered cake, cookies on a rack and the Stockpot dashboard open on a tablet"
-                width={1118}
-                height={622}
+                width={1376}
+                height={768}
                 decoding="async"
                 fetchPriority="high"
-                className="w-full h-auto block aspect-[4/3] sm:aspect-[16/9] object-cover object-[28%_50%] sm:object-center"
+                className="w-full h-auto block aspect-[4/3] sm:aspect-[16/9] object-cover object-center"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none" aria-hidden="true" />
               <div className="absolute top-3 left-3 sm:top-6 sm:left-6 flex items-center gap-3 sm:gap-3.5 max-w-[calc(100%-1.5rem)] bg-white/95 backdrop-blur-md p-3 sm:p-4 rounded-2xl shadow-lg border border-[#D0E4E2]/80 text-left">
