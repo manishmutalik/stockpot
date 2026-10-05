@@ -1,5 +1,14 @@
 # Changelog
 
+## Fixes
+
+- **Target margin, alert threshold and price rounding now stay set.** They were saved but not
+  read back when the app loaded, so they went back to the defaults after a reload.
+- **Advance amount on a phone.** In Add Order's pre-order form the amount box was squeezed
+  to nothing and the payment-method list ran off the screen; the amount now has the room.
+- A margin alert no longer offers the same price twice (back to the old margin and your target
+  can come to the same price).
+
 ## Log a production run from a note
 
 In the Log Production Run form, type or paste what you made ("Made 40 croissants and 24

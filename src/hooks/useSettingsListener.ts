@@ -70,6 +70,10 @@ export function useSettingsListener(authReady: boolean, user: AppUser | null) {
             timezone: resolveTimeZone(data.timezone),
             paymentFeeRates: data.paymentFeeRates ?? DEFAULT_SETTINGS.paymentFeeRates,
             fixedCosts: data.fixedCosts ?? DEFAULT_SETTINGS.fixedCosts,
+            // Pricing choices: absent (or cleared, which is saved as null) means "not set", so only a number is kept.
+            ...(typeof data.defaultTargetMargin === 'number' && { defaultTargetMargin: data.defaultTargetMargin }),
+            ...(typeof data.marginAlertPoints === 'number' && { marginAlertPoints: data.marginAlertPoints }),
+            ...(typeof data.priceRounding === 'number' && { priceRounding: data.priceRounding }),
           });
           if (data.categories) setCategories(data.categories);
           if (data.currency) setCurrency(data.currency);

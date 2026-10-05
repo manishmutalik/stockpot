@@ -73,4 +73,12 @@ describe('MarginDriftPanel', () => {
     fireEvent.click(screen.getByLabelText(/to reach your target/));
     expect(onUsePrice).toHaveBeenCalledWith(480); // 120 / 0.25
   });
+
+  it('offers the same price once when restoring the margin and reaching the target come to the same price', () => {
+    // priced at a 70% margin (cost 120 at 400), butter now dearer; a 70% target gives the same price as restoring 70%
+    const item = priced({ targetMargin: 70 });
+    show(item, 640);
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.getAllByRole('button', { name: /^Use / })).toHaveLength(1);
+  });
 });
