@@ -706,9 +706,9 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
               value={advanceText}
               onChange={e => setAdvanceText(e.target.value)}
               placeholder="0"
-              className={`${modalField()} font-mono`}
+              className={`${modalField()} font-mono !w-auto min-w-0 flex-1`}
             />
-            <select aria-label="Advance paid by" value={advanceMethod} onChange={e => setAdvanceMethod(e.target.value as PaymentMethod)} className={`${modalField()} w-32 shrink-0`}>
+            <select aria-label="Advance paid by" value={advanceMethod} onChange={e => setAdvanceMethod(e.target.value as PaymentMethod)} className={`${modalField()} !w-32 shrink-0`}>
               {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
           </div>

@@ -33,6 +33,22 @@ describe('useSettingsListener', () => {
     expect(result.current.settings).toMatchObject({ name: 'Asha Bakes', phone: '+91 98450 10101', upiId: 'asha@upi' });
   });
 
+  it('reads the pricing settings back, so a target margin survives a reload', () => {
+    const { result } = renderHook(() => useSettingsListener(true, user));
+    act(() => onNext(snap({ name: 'Asha Bakes', defaultTargetMargin: 62, marginAlertPoints: 3, priceRounding: 10 })));
+    expect(result.current.settings).toMatchObject({ defaultTargetMargin: 62, marginAlertPoints: 3, priceRounding: 10 });
+  });
+
+  it('leaves the pricing settings unset when they are absent or were cleared', () => {
+    const { result } = renderHook(() => useSettingsListener(true, user));
+    act(() => onNext(snap({ name: 'Asha Bakes', defaultTargetMargin: null, marginAlertPoints: null, priceRounding: null })));
+    expect(result.current.settings.defaultTargetMargin).toBeUndefined();
+    expect(result.current.settings.marginAlertPoints).toBeUndefined();
+    expect(result.current.settings.priceRounding).toBeUndefined();
+    act(() => onNext(snap({ name: 'Asha Bakes' })));
+    expect(result.current.settings.defaultTargetMargin).toBeUndefined();
+  });
+
   it('is loaded, still on the defaults, for an account with no settings yet', () => {
     const { result } = renderHook(() => useSettingsListener(true, user));
     act(() => onNext(snap(null)));

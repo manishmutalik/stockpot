@@ -85,7 +85,8 @@ export const MarginDriftPanel: React.FC<{
                 Use {money(options.restore.price)} <span className="font-normal opacity-90">· back to {options.restore.margin.toFixed(0)}%</span>
               </button>
             )}
-            {options.target && (
+            {/* The same price for both reasons is offered once. */}
+            {options.target && options.target.price !== options.restore?.price && (
               <button
                 type="button"
                 onClick={() => onUsePrice(options.target!.price)}
