@@ -1,5 +1,18 @@
 # Changelog
 
+## Landing page hero
+
+The top of the home page now follows the updated design: a "STOCKPOT / Kitchen Intelligence"
+header with Sign In / Demo, the headline and trial terms, a full-width bakery-counter photo
+with the tablet on it, the "Made ₹743.04 on this order" callout and a "Stockpot Demo Kitchen"
+badge, and a row of four quick facts (Per-dish, UPI + QR, Auto-fill, Live Alerts).
+
+- The callout keeps the real order it came from (Butter Croissant × 8, demo kitchen) instead
+  of an invented "Order #1042".
+- The photo was cropped from the design preview (the original file could not be fetched), so
+  it is 1118 px wide; swap `public/landing/hero-kitchen.webp` for a larger copy if you have one.
+- The old tablet-frame Dashboard capture was removed from the hero and from `public/landing/`.
+
 ## New landing page
 
 The home page is rebuilt from the new Stitch design, using the copy from the website content
