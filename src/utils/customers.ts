@@ -27,6 +27,7 @@ import { daysBetween } from './localDate';
 import { clusterOrdersByGroup } from './orderClustering';
 import { resolveItemName } from './orderPricing';
 import { customerKey } from './payments';
+import { actualOrders, countsAsSale } from './preorders';
 import { orderContribution } from './profit';
 
 export type CustomerStatus = 'new' | 'active' | 'due' | 'lapsed';
@@ -167,7 +168,10 @@ export function buildCustomerProfiles(input: {
   settings: Pick<BakerySettings, 'gstApplicable' | 'gstRate' | 'gstPricingMode'>;
   today: string;
 }): CustomerProfile[] {
-  const { orders, menu, materials, settings, today } = input;
+  const { menu, materials, settings, today } = input;
+  // Only orders that have happened count: a cancelled one never, and a pre-order due later is not yet an order
+  // they placed with us (booking something for next week must not make a customer look active).
+  const orders = actualOrders(input.orders, today);
 
   const byCustomer = groupOrdersByCustomer(orders);
   const labels = customerLabels([...byCustomer.keys()]);
@@ -281,7 +285,9 @@ export interface CustomerSuggestion {
 }
 
 /** One entry per customer, most recent last order first. Grouped exactly as the Customers panel groups them. */
-export function buildCustomerDirectory(orders: Order[], menu: Pick<MenuItem, 'id' | 'name'>[]): CustomerSuggestion[] {
+export function buildCustomerDirectory(allOrders: Order[], menu: Pick<MenuItem, 'id' | 'name'>[], today?: string): CustomerSuggestion[] {
+  // The same orders the Customers panel counts: not cancelled and, when `today` is given, not due later.
+  const orders = today ? actualOrders(allOrders, today) : allOrders.filter(countsAsSale);
   const directory: CustomerSuggestion[] = [];
   for (const [key, list] of groupOrdersByCustomer(orders)) {
     const newestFirst = [...list].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));

@@ -6,7 +6,7 @@ import { BillCard, type OnlineLink } from './BillCard';
 import { apiFetch } from '../utils/apiClient';
 import { saveFile, shareFileViaSystem } from '../utils/shareFile';
 import {
-  buildBill, buildBillMessage, buildUpiLink, buildWhatsAppUrl, normalizeWhatsAppNumber
+  billBalance, buildBill, buildBillMessage, buildBillUpiLink, buildWhatsAppUrl, normalizeWhatsAppNumber
 } from '../utils/billing';
 import type { BakerySettings, MenuItem, Order } from '../types';
 
@@ -57,9 +57,8 @@ export const BillModal: React.FC<{
   }, [idsKey, statement]);
 
   const onlineUrl = online.status === 'ready' ? online.url : undefined;
-  const upiLink = bill.upiId
-    ? buildUpiLink({ upiId: bill.upiId, payeeName: bill.business.name, amount: bill.total, reference: bill.reference })
-    : null;
+  // The QR asks for the balance (what is left after any advance), never the total.
+  const upiLink = buildBillUpiLink(bill);
 
   const renderImage = async (): Promise<File | null> => {
     if (!billRef.current) return null;
@@ -142,7 +141,12 @@ export const BillModal: React.FC<{
         <BillCard bill={bill} upiLink={upiLink} online={online} />
       </div>
       {/* Not part of the image: why there is no payment QR, so it never looks like a bug. */}
-      {!upiLink && (
+      {!upiLink && billBalance(bill) <= 0 && bill.upiId && (
+        <p role="note" className="text-xs text-muted bg-stone-50 rounded-lg px-3 py-2">
+          No UPI payment QR: nothing is left to pay on this bill, the advance covers it.
+        </p>
+      )}
+      {!upiLink && !(billBalance(bill) <= 0 && bill.upiId) && (
         <p role="note" className="text-xs text-muted bg-stone-50 rounded-lg px-3 py-2">
           {currency.code !== 'INR'
             ? `No UPI payment QR: UPI works only for bills in INR, and this bill is in ${currency.code}. You can switch the currency in the top bar.`

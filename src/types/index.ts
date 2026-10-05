@@ -230,6 +230,29 @@ export interface Order {
    * recorded, so changing the rates in Settings later never changes past
    * profit. */
   paymentFeeRate?: number;
+
+  // ── Pre-orders (docs/PROJECT_STATE.md). All optional: an order without them behaves as it always has. ──
+
+  /** True for an order booked ahead of time. `date` is then its due date. */
+  preorder?: boolean;
+  /** When the order was taken (YYYY-MM-DD, business time zone). Set on every new order; absent on older ones. */
+  bookedOn?: string;
+  /** When on the due date: 'morning', 'afternoon', 'evening' or a time such as '16:30'. Shared by a multi-item order. */
+  dueSlot?: string;
+  /** Free text (cake message, eggless, pick-up instructions). Shared by a multi-item order. */
+  notes?: string;
+  /** Whether this order's quantity has been taken out of finishedGoodsStock. Absent means the old rule: a
+   * non-pre-order has always taken its stock when it was created. A pre-order starts false and becomes true
+   * at handover (see utils/preorders.holdsStock). */
+  stockClaimed?: boolean;
+  /** Money received before handover. It belongs to the whole order, so it is stored on the first item only,
+   * like `discount`. `feeRate` is the payment fee rate in force when it was received. */
+  advance?: { amount: number; method: PaymentMethod; feeRate: number; date: string };
+  /** Set (YYYY-MM-DD) when a pre-order is cancelled, on every item. A cancelled order is never a sale. */
+  cancelledOn?: string;
+  /** What happened to the advance when the order was cancelled: 'kept' counts as income on the cancellation
+   * date, 'refunded' does not. Stored on the item that holds the advance. */
+  advanceOutcome?: 'refunded' | 'kept';
 }
 
 export type PaymentMethod = 'upi' | 'cash' | 'card' | 'other';

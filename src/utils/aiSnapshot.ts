@@ -24,6 +24,7 @@ import { countByStatus, customersForTab, type CustomerProfile } from './customer
 import { EXPIRING_SOON_DAYS, getStockStatus } from './inventoryStatus';
 import { addDays, daysBetween } from './localDate';
 import { financialsForRange, productProfits, type Financials } from './profit';
+import { actualOrders } from './preorders';
 import { reorderSuggestions, type ReorderConfidence, type ReorderFlag } from './reorder';
 
 export const SNAPSHOT_LIMITS = { products: 30, customersPerList: 10, stockItems: 10, trendDays: 7, unsoldItems: 15, mentionedCustomers: 5, reorderSoon: 5 } as const;
@@ -50,6 +51,7 @@ const DRIVERS: { id: string; label: string; sign: 1 | -1; pick: (f: Financials) 
   { id: 'payment_fees', label: 'Payment fees', sign: -1, pick: f => f.paymentFees },
   { id: 'wastage', label: 'Wastage', sign: -1, pick: f => f.wastageExpenses },
   { id: 'fixed_costs', label: 'Fixed costs', sign: -1, pick: f => f.fixedCosts },
+  { id: 'forfeited_advances', label: 'Advances kept from cancelled pre-orders', sign: 1, pick: f => f.forfeitedAdvances },
 ];
 
 export interface SnapshotDriver {
@@ -132,7 +134,7 @@ export function buildBusinessSnapshot(input: {
   const nameId = (prefix: string, key: string, text: string) => { const id = `${prefix}_${key}`; names[id] = text; return id; };
 
   const financials = (range: { start: string; end: string }) =>
-    financialsForRange({ orders, menu, materials, experiments: input.experiments, wastageLogs: input.wastageLogs, settings, start: range.start, end: range.end });
+    financialsForRange({ orders, menu, materials, experiments: input.experiments, wastageLogs: input.wastageLogs, settings, start: range.start, end: range.end, today: input.today });
   const now = financials(period);
   const before = financials(comparison);
 
@@ -163,7 +165,7 @@ export function buildBusinessSnapshot(input: {
     }));
 
   // Products: the biggest sellers, from the same per-product sums as the Menu screen.
-  const perProduct = productProfits(orders.filter(o => o.date >= period.start && o.date <= period.end), menu, materials, settings);
+  const perProduct = productProfits(actualOrders(orders, input.today).filter(o => o.date >= period.start && o.date <= period.end), menu, materials, settings);
   const products = [...perProduct.values()]
     .filter(p => menu.some(m => m.id === p.menuItemId))
     .sort((a, b) => b.revenue - a.revenue || a.menuItemId.localeCompare(b.menuItemId))

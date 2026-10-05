@@ -11,6 +11,7 @@
  */
 import type { BakerySettings, MenuItem, Order } from '../types';
 import { buildBill } from './billing';
+import { countsAsSale } from './preorders';
 
 export const isUnpaid = (order: Pick<Order, 'paymentStatus'>): boolean => order.paymentStatus === 'unpaid';
 
@@ -37,7 +38,7 @@ export interface PendingCustomer {
   /** How many orders (a multi-item order counts once). */
   orderCount: number;
   oldestDate: string;
-  /** What they owe: items, delivery and GST, the same sum a statement shows. */
+  /** What they owe: items, delivery and GST less any advance already received, the same sum a statement asks for. */
   dueTotal: number;
 }
 
@@ -47,10 +48,15 @@ export function groupPendingPayments(input: {
   menu: MenuItem[];
   settings: Parameters<typeof buildBill>[0]['settings'];
   currency: { code: string; symbol: string };
+  /**
+   * Today in the business's time zone. When given, a pre-order due after today is not listed: nothing is owed on
+   * it yet, and its balance is shown with the pre-order. A cancelled order never is.
+   */
+  today?: string;
 }): PendingCustomer[] {
   const byCustomer = new Map<string, Order[]>();
   for (const o of input.orders) {
-    if (!isUnpaid(o)) continue;
+    if (!isUnpaid(o) || !countsAsSale(o) || (input.today && o.date > input.today)) continue;
     const key = customerKey(o);
     byCustomer.set(key, [...(byCustomer.get(key) ?? []), o]);
   }
@@ -67,7 +73,7 @@ export function groupPendingPayments(input: {
       orders,
       orderCount: new Set(orders.map(o => o.orderGroupId || o.id)).size,
       oldestDate: orders[0].date,
-      dueTotal: bill.total,
+      dueTotal: bill.balanceDue,
     });
   }
   return result.sort((a, b) => b.dueTotal - a.dueTotal || a.oldestDate.localeCompare(b.oldestDate));

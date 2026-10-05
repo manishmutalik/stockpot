@@ -5,7 +5,7 @@
  * CSS, no scripts, no external requests) rendered from a stored Bill. Every
  * value is HTML-escaped, since business and customer names are free text.
  */
-import { buildUpiLink, formatMoney, type Bill } from '../src/utils/billing';
+import { billBalance, buildBillUpiLink, formatMoney, type Bill } from '../src/utils/billing';
 
 export const escapeHtml = (value: unknown): string =>
   String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -31,9 +31,10 @@ export function renderBillHtml(bill: Bill): string {
   const rows = bill.lines.map(l => `
         <tr><td>${statement && l.date ? `<span class="muted">${escapeHtml(shortDate(l.date))}</span><br>` : ''}${escapeHtml(l.name)}</td><td class="num">${escapeHtml(l.quantity)}</td><td class="num">${money(l.unitPrice)}</td><td class="num">${money(l.lineTotal)}</td></tr>`).join('');
   const logo = bill.business.logo ? `<img class="logo" src="${escapeHtml(bill.business.logo)}" alt="">` : '';
-  const upi = bill.upiId
-    ? `<a class="pay" href="${escapeHtml(buildUpiLink({ upiId: bill.upiId, payeeName: bill.business.name, amount: bill.total, reference: bill.reference }))}">Pay ${money(bill.total)} with UPI</a>`
-    : '';
+  // The payment link asks for the balance, never the total, so an advance is not charged twice. Bills saved before advances existed have no balance and use the total.
+  const balance = billBalance(bill);
+  const upiLink = buildBillUpiLink(bill);
+  const upi = upiLink ? `<a class="pay" href="${escapeHtml(upiLink)}">Pay ${money(balance)} with UPI</a>` : '';
   const gstLabel = bill.gst
     ? `GST (${escapeHtml(bill.gst.rate)}%${bill.gst.mode === 'inclusive' ? ', included' : ''})`
     : '';
@@ -64,7 +65,9 @@ export function renderBillHtml(bill: Bill): string {
     ${bill.deliveryCharge > 0 ? `<div class="row"><span>Delivery</span><span>${money(bill.deliveryCharge)}</span></div>` : ''}
     ${bill.discount > 0 ? `<div class="row"><span>Discount</span><span>-${money(bill.discount)}</span></div>` : ''}
     ${bill.gst ? `<div class="row"><span>${gstLabel}</span><span>${money(bill.gst.amount)}</span></div>` : ''}
-    <div class="row total"><span>${statement ? 'Total due' : 'Total'}</span><span>${money(bill.total)}</span></div>
+    <div class="row total"><span>${statement && !bill.advance ? 'Total due' : 'Total'}</span><span>${money(bill.total)}</span></div>
+    ${bill.advance ? `<div class="row"><span>Advance received${bill.advance.date ? ` (${escapeHtml(shortDate(bill.advance.date))})` : ''}</span><span>-${money(bill.advance.amount)}</span></div>
+    <div class="row total"><span>Balance due</span><span>${money(balance)}</span></div>` : ''}
     ${upi}
   </div>
   <footer>Thank you for your order.</footer>

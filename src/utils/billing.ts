@@ -15,6 +15,8 @@
 import type { BakerySettings, MenuItem, Order } from '../types';
 import type { GstPricingMode } from './gstCalculations';
 import { saleAmounts } from './profit';
+import { clusterOrdersByGroup } from './orderClustering';
+import { advanceOf } from './preorders';
 import { resolveItemName, resolveUnitPrice } from './orderPricing';
 
 export interface BillLine {
@@ -41,6 +43,10 @@ export interface Bill {
   gst: { rate: number; mode: GstPricingMode; amount: number } | null;
   /** What the customer pays. */
   total: number;
+  /** Money received in advance (pre-orders). `date` is when, for a single bill; a statement covering several orders has none. */
+  advance?: { amount: number; date?: string };
+  /** What is still to be paid: the total less any advance. The payment QR and link ask for this, never the total. Absent on bills saved before advances existed: then it is the total. */
+  balanceDue: number;
   currency: { code: string; symbol: string };
   /** Present only when the business set a UPI ID and bills in rupees. */
   upiId?: string;
@@ -102,6 +108,10 @@ export function buildBill(input: {
   const deliveryCharge = round2(sale.deliveryGross);
   const discount = round2(sale.discount);
   const total = round2(sale.customerPays);
+  // An advance is stored on one item of each order. Together they can never be more than what is owed.
+  const advances = clusterOrdersByGroup(orders).map(c => advanceOf(c.type === 'single' ? [c.order] : c.orders)).filter((a): a is NonNullable<typeof a> => !!a);
+  const advanceAmount = round2(Math.min(advances.reduce((sum, a) => sum + a.amount, 0), total));
+  const balanceDue = round2(Math.max(total - advanceAmount, 0));
 
   return {
     reference: statement ? `ST-${byId.id.slice(0, 6).toUpperCase()}` : byId.id.slice(0, 8).toUpperCase(),
@@ -114,15 +124,34 @@ export function buildBill(input: {
     discount,
     gst,
     total,
+    ...(advanceAmount > 0 && { advance: { amount: advanceAmount, ...(!statement && advances.length === 1 && { date: advances[0].date }) } }),
+    balanceDue,
     currency,
     upiId: canPayByUpi(settings.upiId, currency.code) ? settings.upiId!.trim() : undefined,
     ...(statement && { kind: 'statement' as const, orderCount: new Set(orders.map(o => o.orderGroupId || o.id)).size }),
   };
 }
 
+/**
+ * What is still to pay on a bill: the total less any advance. A bill saved before advances existed has no
+ * `balanceDue`, and its balance is its total. The payment QR and link always ask for this.
+ */
+export const billBalance = (bill: Pick<Bill, 'total' | 'balanceDue'>): number => bill.balanceDue ?? bill.total;
+
 /** UPI is India-only: a payment QR needs a UPI ID and a bill in rupees. */
 export function canPayByUpi(upiId: string | undefined, currencyCode: string): boolean {
   return !!upiId && upiId.trim().length > 0 && currencyCode === 'INR';
+}
+
+/**
+ * The payment link for a bill: it asks for the balance, never the total, so a customer who paid an advance is
+ * not charged twice. Null when there is no UPI ID or nothing is left to pay.
+ */
+export function buildBillUpiLink(bill: Pick<Bill, 'upiId' | 'total' | 'balanceDue' | 'business' | 'reference'>): string | null {
+  const balance = billBalance(bill);
+  return bill.upiId && balance > 0
+    ? buildUpiLink({ upiId: bill.upiId, payeeName: bill.business.name, amount: balance, reference: bill.reference })
+    : null;
 }
 
 /**
@@ -162,9 +191,12 @@ export function formatMoney(amount: number, currency: { symbol: string }): strin
 /** The short message pre-filled in WhatsApp (it can't carry rich formatting). */
 export function buildBillMessage(bill: Bill, link?: string): string {
   const greeting = bill.customerName ? `Hi ${bill.customerName}, here's` : "Here's";
+  const balance = billBalance(bill);
   const base = bill.kind === 'statement'
-    ? `${greeting} your statement from ${bill.business.name}: ${formatMoney(bill.total, bill.currency)} due for ${bill.orderCount} order${bill.orderCount === 1 ? '' : 's'}.`
-    : `${greeting} your bill from ${bill.business.name} — ${formatMoney(bill.total, bill.currency)}.`;
+    ? `${greeting} your statement from ${bill.business.name}: ${formatMoney(balance, bill.currency)} due for ${bill.orderCount} order${bill.orderCount === 1 ? '' : 's'}.`
+    : bill.advance
+      ? `${greeting} your bill from ${bill.business.name} — ${formatMoney(bill.total, bill.currency)}. Advance received: ${formatMoney(bill.advance.amount, bill.currency)}. Balance due: ${formatMoney(balance, bill.currency)}.`
+      : `${greeting} your bill from ${bill.business.name} — ${formatMoney(bill.total, bill.currency)}.`;
   return link ? `${base} View/pay: ${link}` : base;
 }
 

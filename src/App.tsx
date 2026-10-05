@@ -826,7 +826,7 @@ function BakeryApp() {
   }, [materials, inventoryUsage]);
 
   // Past customers, suggested while typing in the Add Order form (the same grouping as the Customers panel).
-  const customerDirectory = useMemo(() => buildCustomerDirectory(orders, menu), [orders, menu]);
+  const customerDirectory = useMemo(() => buildCustomerDirectory(orders, menu, todayInZone(settings.timezone)), [orders, menu, settings.timezone]);
 
   // Reading a pasted order message into the Add Order form (offered only where AI is available).
   const orderParser = useOrderParser({ orders, menu, materials: remainingInventory, settings, signedIn: !!user, dataReady });
@@ -896,7 +896,7 @@ function BakeryApp() {
    * past figures. Called for the summary period and once per chart point.
    */
   const getFinancialsForRange = (start: string, end: string) =>
-    financialsForRange({ orders, menu, materials, experiments, wastageLogs, settings, start, end });
+    financialsForRange({ orders, menu, materials, experiments, wastageLogs, settings, start, end, today: todayInZone(settings.timezone) });
 
   // Round-to-2-decimal wrapper around `getFinancialsForRange` for the summary period.
   // Re-computed when date bounds, orders, experiments, menu prices, or material costs change.

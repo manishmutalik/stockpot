@@ -188,10 +188,23 @@ describe('buildCustomerProfiles status', () => {
     expect(at(addDays(TODAY, 5)).status).toBe('lapsed'); // 15 days
   });
 
-  it('does not go negative for an order dated in the future', () => {
-    const p = one([order({ date: addDays(TODAY, 3) })]);
-    expect(p.daysSinceLastOrder).toBe(0);
-    expect(p.status).toBe('new');
+  it('does not count an order due in the future: it has not happened yet', () => {
+    expect(profiles([order({ date: addDays(TODAY, 3) })])).toEqual([]);
+    // ...and does not make a lapsed customer look active.
+    const lapsed = one([order({ date: daysAgo(90) }), order({ date: addDays(TODAY, 3), preorder: true })]);
+    expect(lapsed.status).toBe('lapsed');
+    expect(lapsed.orderCount).toBe(1);
+    expect(lapsed.daysSinceLastOrder).toBe(90);
+  });
+
+  it('does not count a cancelled order', () => {
+    expect(profiles([order({ date: daysAgo(2), cancelledOn: daysAgo(1) })])).toEqual([]);
+    const p = one([order({ date: daysAgo(40) }), order({ date: daysAgo(2), cancelledOn: daysAgo(1) })]);
+    expect(p).toMatchObject({ orderCount: 1, daysSinceLastOrder: 40 });
+  });
+
+  it('counts a pre-order once it is due', () => {
+    expect(one([order({ date: TODAY, preorder: true })])).toMatchObject({ orderCount: 1, status: 'new' });
   });
 
   it('a first order today makes a new customer', () => {

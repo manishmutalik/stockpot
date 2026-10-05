@@ -26,6 +26,7 @@ import { convertAmount } from './conversions';
 import { splitSaleForGst } from './gstCalculations';
 import { attributeDeliveryFieldByGroup, clusterOrdersByGroup } from './orderClustering';
 import { resolveUnitCosts, resolveUnitPrice } from './orderPricing';
+import { advanceOf, countsAsSale, isOpenPreorder } from './preorders';
 
 export { resolveItemName, resolveUnitCosts, resolveUnitPrice, stampFor } from './orderPricing';
 
@@ -131,10 +132,15 @@ export function orderContribution(
   const courierFee = sumValues(attributeDeliveryFieldByGroup(members, 'deliveryFee'));
 
   // The payment fee is charged on what the customer paid, at the rate stamped when the method was recorded.
-  // An unpaid order has paid nothing yet, so it has no fee.
+  // An advance is a payment of its own: its fee uses the rate copied when it was received. The balance, the
+  // rest of what the customer pays, is charged once the order is paid (an unpaid order has paid no balance yet).
+  const advance = advanceOf(members);
+  const advanceAmount = advance ? Math.min(advance.amount, sale.customerPays) : 0;
+  const advanceFee = advance ? advanceAmount * ((advance.feeRate || 0) / 100) : 0;
   const payer = [...members].sort((a, b) => a.id.localeCompare(b.id)).find(o => o.paymentMethod);
   const paid = !members.some(isUnpaidOrder);
-  const paymentFee = payer && paid ? sale.customerPays * ((payer.paymentFeeRate || 0) / 100) : 0;
+  const balanceFee = payer && paid ? (sale.customerPays - advanceAmount) * ((payer.paymentFeeRate || 0) / 100) : 0;
+  const paymentFee = advanceFee + balanceFee;
 
   const itemsRevenue = sale.itemsGross * sale.baseScale;
   const deliveryCharged = sale.deliveryGross * sale.baseScale;
@@ -179,7 +185,7 @@ export function productProfits(
   settings: GstSettings
 ): Map<string, ProductProfit> {
   const result = new Map<string, ProductProfit>();
-  for (const cluster of clusterOrdersByGroup(orders)) {
+  for (const cluster of clusterOrdersByGroup(orders.filter(countsAsSale))) {
     const members = cluster.type === 'single' ? [cluster.order] : cluster.orders;
     const whole = orderContribution(members, menu, materials, settings);
     const sale = saleAmounts(members, menu, settings);
@@ -281,10 +287,12 @@ export interface Financials {
   profit: number;
   /** Discounts given in the range (already out of `income`). */
   discounts: number;
-  /** Fees paid on payments received. */
+  /** Fees paid on payments received (including on advances that were kept). */
   paymentFees: number;
   /** Fixed monthly costs prorated to the range. */
   fixedCosts: number;
+  /** Advances kept from pre-orders cancelled in the range: income on the day they were cancelled. */
+  forfeitedAdvances: number;
   /** Sum of every order's contribution (income minus order costs, courier and payment fees). */
   totalContribution: number;
   /** Contribution minus wastage minus fixed costs: what the business really made. */
@@ -314,9 +322,15 @@ export function financialsForRange(input: {
   settings: GstSettings & Pick<BakerySettings, 'fixedCosts'>;
   start: string;
   end: string;
+  /**
+   * Today in the business's time zone. When given, nothing after it is counted: an order due later is booked
+   * for later, not yet a sale (see utils/preorders). Cancelled orders are never counted.
+   */
+  today?: string;
 }): Financials {
   const { menu, materials, settings, start, end } = input;
-  const rangeOrders = input.orders.filter(o => o.date >= start && o.date <= end);
+  const last = input.today && input.today < end ? input.today : end;
+  const rangeOrders = input.orders.filter(o => countsAsSale(o) && o.date >= start && o.date <= last);
 
   let income = 0, ingredients = 0, packaging = 0, courierFees = 0, gstCollected = 0, gstPaid = 0;
   let discounts = 0, paymentFees = 0, unpaidIncome = 0;
@@ -339,9 +353,20 @@ export function financialsForRange(input: {
     estimated ||= c.estimated;
   }
 
+  // An advance kept from a pre-order that was cancelled is income on the day it was cancelled. It was paid by a
+  // method, so its fee is real too.
+  let forfeitedAdvances = 0, forfeitedFees = 0;
+  for (const o of input.orders) {
+    if (!o.cancelledOn || o.advanceOutcome !== 'kept' || !o.advance || !(o.advance.amount > 0)) continue;
+    if (o.cancelledOn < start || o.cancelledOn > last) continue;
+    forfeitedAdvances += o.advance.amount;
+    forfeitedFees += o.advance.amount * ((o.advance.feeRate || 0) / 100);
+  }
+  paymentFees += forfeitedFees;
+
   // R&D experiments draw on materials at today's cost (they have no sale to stamp) and stay out of profit.
   const experimentExpenses = input.experiments
-    .filter(e => e.date >= start && e.date <= end)
+    .filter(e => e.date >= start && e.date <= last)
     .reduce((total, exp) => total + exp.materials.reduce((sum, req) => {
       const mat = materials.find(m => m.id === req.materialId);
       return mat ? sum + convertAmount(req.amount, req.unit || 'g', mat.unit) * (mat.costPerUnit || 0) : sum;
@@ -349,7 +374,7 @@ export function financialsForRange(input: {
 
   // Wastage is subtracted once, here. It is never split across orders.
   const wastageExpenses = input.wastageLogs
-    .filter(w => w.date >= start && w.date <= end)
+    .filter(w => w.date >= start && w.date <= last)
     .reduce((total, w) => total + (w.cost || 0), 0);
 
   const fixedCosts = fixedCostsForRange(settings.fixedCosts, start, end);
@@ -364,15 +389,52 @@ export function financialsForRange(input: {
     wastageExpenses,
     gstCollected,
     gstPaid,
-    profit: income - orderExpenses - courierFees - wastageExpenses,
+    profit: income + forfeitedAdvances - orderExpenses - courierFees - wastageExpenses,
     discounts,
     paymentFees,
     fixedCosts,
+    forfeitedAdvances,
     totalContribution,
-    trueProfit: totalContribution - wastageExpenses - fixedCosts,
+    trueProfit: totalContribution + forfeitedAdvances - forfeitedFees - wastageExpenses - fixedCosts,
     orderCount,
     avgOrderContribution: orderCount > 0 ? totalContribution / orderCount : 0,
     unpaidIncome,
     estimated,
   };
+}
+
+export interface BookedAhead {
+  /** Orders (a multi-item order counts once) due after today. */
+  orderCount: number;
+  /** What they will be worth when they are due: pre-GST, after discounts, the same measure as `income`. Not yet a sale. */
+  revenue: number;
+  /** Money received in advance on pre-orders not yet handed over or cancelled, due today or later: the customers' money held against future orders. */
+  advancesHeld: number;
+}
+
+/**
+ * What is booked for later, and the advances held against open pre-orders. These
+ * are kept out of every actual figure until the orders fall due (see
+ * utils/preorders), and shown on their own so they are not lost sight of.
+ */
+export function bookedAhead(input: {
+  orders: Order[];
+  menu: MenuItem[];
+  materials: RawMaterial[];
+  settings: GstSettings;
+  /** Today in the business's time zone. */
+  today: string;
+}): BookedAhead {
+  const { menu, materials, settings, today } = input;
+  let orderCount = 0, revenue = 0, advancesHeld = 0;
+  for (const cluster of clusterOrdersByGroup(input.orders.filter(countsAsSale))) {
+    const members = cluster.type === 'single' ? [cluster.order] : cluster.orders;
+    if (members.every(o => o.date > today)) {
+      const c = orderContribution(members, menu, materials, settings);
+      revenue += c.itemsRevenue + c.deliveryCharged - c.discount;
+      orderCount += 1;
+    }
+    if (members.some(isOpenPreorder)) advancesHeld += advanceOf(members)?.amount ?? 0;
+  }
+  return { orderCount, revenue, advancesHeld };
 }
