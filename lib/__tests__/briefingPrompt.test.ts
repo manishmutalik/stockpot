@@ -8,8 +8,9 @@ describe('the briefing prompt', () => {
   });
 
   it('asks only for kinds the app understands', () => {
-    for (const kind of ['profit_driver', 'wastage', 'low_stock', 'expiring', 'reorder_customer', 'unpaid']) expect(BRIEFING_SYSTEM_PROMPT).toContain(kind);
-    expect(BRIEFING_SYSTEM_PROMPT).not.toMatch(/reprice|price_move/);
+    for (const kind of ['profit_driver', 'wastage', 'low_stock', 'expiring', 'reorder_customer', 'unpaid', 'reprice', 'price_move']) expect(BRIEFING_SYSTEM_PROMPT).toContain(kind);
+    expect(BRIEFING_SYSTEM_PROMPT).toContain('pricing.repricing');
+    expect(BRIEFING_SYSTEM_PROMPT).toContain('pricing.materialMoves');
   });
 
   it('sends the snapshot as it is, and nothing about the owner', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildBusinessSnapshot, comparisonPeriod, SNAPSHOT_LIMITS } from '../aiSnapshot';
+import { buildBusinessSnapshot, buildScenarioSection, comparisonPeriod, SNAPSHOT_LIMITS } from '../aiSnapshot';
 import { buildCustomerProfiles } from '../customers';
 import { financialsForRange } from '../profit';
 import { renderAiText, validateAiText } from '../aiFigures';
@@ -255,9 +255,10 @@ describe('the snapshot as a whole', () => {
     expect(chars).toBeLessThan(12000); // about 3,000 tokens at 4 characters a token
   });
 
-  it('says honestly what data is missing', () => {
+  it('no longer claims pricing data is missing', () => {
     const { promptSnapshot } = build([order(1)]);
-    expect(promptSnapshot.notes).toContain('Price-change and repricing data are not available yet.');
+    expect(promptSnapshot.notes.join(' ')).not.toMatch(/repricing data/);
+    expect(promptSnapshot.pricing).toEqual({ repricing: [], materialMoves: [] });
   });
 
   it('flags orders valued at today\'s prices', () => {
@@ -268,5 +269,122 @@ describe('the snapshot as a whole', () => {
 
   it('carries the business context and time zone', () => {
     expect(build([order(1)]).promptSnapshot.business).toEqual({ name: 'Asha Bakes', currency: 'INR', gstApplicable: false, timezone: 'Asia/Kolkata' });
+  });
+});
+
+describe('the pricing section', () => {
+  const butterCake: any = {
+    id: 'bc', name: 'Butter Cake', sellingPrice: 400,
+    recipe: [{ materialId: 'butter', amount: 200, unit: 'g' }, { materialId: 'flour', amount: 500, unit: 'g' }], // 100 + 20 = 120 at butter 500
+    pricedAt: '2026-06-01', costAtPricing: 70, materialCostsAtPricing: { butter: 300, flour: 40 }, // priced when butter was 300: cost 60 + 20 = 80... stamped 70 for round margins
+  };
+  const settings: any = { name: 'Asha Bakes', ...NO_GST, timezone: 'Asia/Kolkata' };
+  const log = (date: string, unitCost: number, id = 'butter'): any => ({ id: `${id}-${date}`, materialId: id, date, unitCost, unit: 'kg', source: 'restock', createdAt: 1 });
+  const buildPricing = (over: Record<string, any> = {}) => buildBusinessSnapshot({
+    period: { start: '2026-06-29', end: '2026-06-29' }, orders: [], menu: [butterCake], materials, experiments: [], wastageLogs: [],
+    settings, currency: { code: 'INR', symbol: '₹' }, customers: [], today: TODAY, ...over,
+  });
+
+  it('lists an item whose margin slipped, with the ingredient that moved and a price that restores the margin', () => {
+    const { promptSnapshot, registry } = buildPricing();
+    const r = promptSnapshot.pricing!.repricing;
+    expect(r).toHaveLength(1);
+    expect(r[0].reason).toBe('slipped');
+    expect(promptSnapshot.names[r[0].name]).toBe('Butter Cake');
+    // margin was (400 - 70) / 400 = 82.5%, now (400 - 120) / 400 = 70%
+    expect(registry.figures[r[0].marginThen].value).toBe(82.5);
+    expect(registry.figures[r[0].marginNow].value).toBe(70);
+    expect(promptSnapshot.names[r[0].driver!.name]).toBe('Butter');
+    expect(registry.figures[r[0].driver!.change].value).toBe(66.7); // 300 -> 500
+    expect(Number(registry.figures[r[0].suggestedPrice!].value)).toBeGreaterThan(400);
+  });
+
+  it('only ever refers to numbers through figures, with text for the prompt', () => {
+    const { promptSnapshot } = buildPricing();
+    const r = promptSnapshot.pricing!.repricing[0];
+    expect(promptSnapshot.figures[r.marginNow].text).toBe('70%');
+    expect(promptSnapshot.figures[r.driver!.change].text).toBe('+67%');
+    expect(promptSnapshot.figures[r.marginThen].label).toMatch(/when its price was set/);
+  });
+
+  it('is empty while margins hold, or for an item that was never stamped', () => {
+    expect(buildPricing({ menu: [{ ...butterCake, costAtPricing: 120, materialCostsAtPricing: { butter: 500, flour: 40 } }] }).promptSnapshot.pricing!.repricing).toEqual([]);
+    const { pricedAt, costAtPricing, materialCostsAtPricing, ...bare } = butterCake;
+    expect(buildPricing({ menu: [bare] }).promptSnapshot.pricing!.repricing).toEqual([]);
+  });
+
+  it('lists ingredients whose purchase price moved, biggest first, only where there is history to compare with', () => {
+    const priceLog = [
+      log('2026-04-01', 400), log('2026-06-20', 500), // butter +25% over 30 days (the 1 April price is the comparison)
+      log('2026-04-01', 40, 'flour'), log('2026-06-20', 40.4, 'flour'), // flour +1%: too small to mention
+      log('2026-06-25', 9, 'box'), // too recent to compare with: no move at all
+    ];
+    const { promptSnapshot, registry } = buildPricing({ priceLog });
+    const moves = promptSnapshot.pricing!.materialMoves;
+    expect(moves).toHaveLength(1);
+    expect(promptSnapshot.names[moves[0].name]).toBe('Butter');
+    expect(registry.figures[moves[0].change].value).toBe(25);
+    expect(moves[0].window).toBe('30 days');
+  });
+
+  it('has no moves without a price log', () => {
+    expect(buildPricing().promptSnapshot.pricing!.materialMoves).toEqual([]);
+  });
+
+  it('keeps the section small', () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ ...butterCake, id: `bc${i}`, name: `Cake ${i}` }));
+    expect(buildPricing({ menu: many }).promptSnapshot.pricing!.repricing).toHaveLength(SNAPSHOT_LIMITS.repricing);
+  });
+});
+
+describe('buildScenarioSection', () => {
+  const scenario: any = {
+    perItem: [
+      { menuItemId: 'a', unitsInPeriod: 40, contributionNow: 4000, contributionAfter: 4800, newPrice: 108, noRecentSales: false },
+      { menuItemId: 'b', unitsInPeriod: 10, contributionNow: 500, contributionAfter: 540, newPrice: 54, noRecentSales: false },
+      { menuItemId: 'c', unitsInPeriod: 0, contributionNow: 0, contributionAfter: 0, newPrice: 10, noRecentSales: true },
+    ],
+    daysUsed: 30, monthlyContributionNow: 4500, monthlyContributionAfter: 5340, breakEven: { type: 'can_lose', pct: 15.7 },
+  };
+  const m: any[] = [{ id: 'a', name: 'Cake', sellingPrice: 100 }, { id: 'b', name: 'Rusk', sellingPrice: 50 }, { id: 'c', name: 'Pie', sellingPrice: 9 }];
+  const build = (over: Record<string, any> = {}) => buildScenarioSection({ scenario, menu: m, assumed: { allItems: true, changePercent: 8 }, currency: { symbol: '₹' }, ...over });
+
+  it('turns the result into figures and names, in the order of effect', () => {
+    const { section, figures, names } = build();
+    expect(section.items.map(i => names[i.name])).toEqual(['Cake', 'Rusk']);
+    expect(figures[section.monthlyNow].value).toBe(4500);
+    expect(figures[section.monthlyAfter].value).toBe(5340);
+    expect(figures[section.monthlyChange]).toMatchObject({ value: 840, signed: true });
+    expect(figures[section.assumed.changePercent!]).toMatchObject({ kind: 'percent', value: 8, signed: true });
+    expect(section.assumed.products).toBe('all items');
+    expect(figures[section.assumed.basedOnDays].value).toBe(30);
+  });
+
+  it('says the break-even through a figure, and names items with no recent sales', () => {
+    const { section, figures, names } = build();
+    expect(section.breakEven.type).toBe('can_lose');
+    expect(figures[section.breakEven.percent!].value).toBe(15.7);
+    expect(section.noRecentSales.map(id => names[id])).toEqual(['Pie']);
+  });
+
+  it('has no break-even figure when there is none to give', () => {
+    const { section } = build({ scenario: { ...scenario, breakEven: { type: 'not_applicable' } } });
+    expect(section.breakEven).toEqual({ type: 'not_applicable' });
+  });
+
+  it('rolls items past the limit into one "others" figure', () => {
+    const per = Array.from({ length: 11 }, (_, i) => ({ menuItemId: `x${i}`, unitsInPeriod: 5, contributionNow: 100, contributionAfter: 100 + (11 - i), newPrice: 10, noRecentSales: false }));
+    const menu = per.map(p => ({ id: p.menuItemId, name: p.menuItemId, sellingPrice: 9 }));
+    const { section, figures } = build({ scenario: { ...scenario, perItem: per }, menu });
+    expect(section.items).toHaveLength(SNAPSHOT_LIMITS.scenarioItems);
+    expect(figures[section.othersChange!].value).toBe(3 + 2 + 1); // the three smallest effects
+  });
+
+  it('records a new-price and a sales-change assumption', () => {
+    const { section, figures } = build({ assumed: { allItems: false, newPrice: 180, salesChangePercent: -5 } });
+    expect(section.assumed.products).toBe('some items');
+    expect(figures[section.assumed.newPrice!].value).toBe(180);
+    expect(figures[section.assumed.salesChangePercent!]).toMatchObject({ value: -5, signed: true });
+    expect(section.assumed.changePercent).toBeUndefined();
   });
 });

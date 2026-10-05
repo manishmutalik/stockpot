@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CHAT_MAX_ANSWER_CHARS, CHAT_MAX_HISTORY_TURNS, CHAT_MAX_QUESTION_CHARS, CHAT_SCHEMA, chatPeriods, prepareQuestion, trimHistory, validateChatAnswer } from '../aiChat';
+import { CHAT_MAX_ANSWER_CHARS, CHAT_MAX_HISTORY_TURNS, CHAT_MAX_QUESTION_CHARS, CHAT_SCHEMA, chatPeriods, describeScenario, prepareQuestion, scenarioChanges, trimHistory, validateChatAnswer, validateScenarioRequest } from '../aiChat';
 import { buildBusinessSnapshot } from '../aiSnapshot';
 import { buildCustomerProfiles } from '../customers';
 import { daysBetween } from '../localDate';
@@ -62,9 +62,12 @@ describe('validateChatAnswer', () => {
     expect(r.ok === false && r.problems.join(' ')).toMatch(/digit/);
   });
 
-  it('asks for exactly one answer field', () => {
-    expect(CHAT_SCHEMA.required).toEqual(['answer']);
+  it('asks for an answer or a what-if request, every field present', () => {
+    expect(CHAT_SCHEMA.required).toEqual(['answer', 'scenario']);
     expect(CHAT_SCHEMA.additionalProperties).toBe(false);
+    const scenario = CHAT_SCHEMA.properties.scenario.anyOf[0] as any;
+    expect(scenario.required).toEqual(['products', 'changePercent', 'newPrice', 'salesChangePercent']);
+    expect(scenario.additionalProperties).toBe(false);
   });
 });
 
@@ -186,5 +189,108 @@ describe('trimHistory', () => {
     expect(kept).toHaveLength(CHAT_MAX_HISTORY_TURNS);
     expect(kept[kept.length - 1].question).toBe('q6');
     expect(trimHistory(turns.slice(0, 2))).toHaveLength(2);
+  });
+});
+
+describe('a what-if request', () => {
+  const { promptSnapshot } = snap();
+  const ask = (scenario: Record<string, unknown>, question: string, answer: unknown = null) =>
+    validateChatAnswer({ answer, scenario: { products: ['ALL'], changePercent: null, newPrice: null, salesChangePercent: null, ...scenario } }, promptSnapshot, question);
+
+  it('accepts a percentage the owner wrote, for all products or for named ones', () => {
+    const all = ask({ changePercent: 8 }, 'If I increase prices by 8%, what happens to monthly profit?');
+    expect(all).toEqual({ ok: true, scenario: { products: ['ALL'], changePercent: 8, newPrice: null, salesChangePercent: null } });
+    const some = ask({ products: ['item_cake'], changePercent: 10 }, 'What if I raise the cake by 10 percent?');
+    expect(some.ok).toBe(true);
+  });
+
+  it('accepts a number written in words, and a cut as a negative number', () => {
+    expect(ask({ changePercent: 5 }, 'What if I raised prices five percent?').ok).toBe(true);
+    expect(ask({ changePercent: -10 }, 'What if I cut all prices by 10%?').ok).toBe(true);
+    expect(ask({ changePercent: -10 }, 'What happens if I lower prices 10%?').ok).toBe(true);
+  });
+
+  it('refuses a number that is not in the question: the model does no arithmetic', () => {
+    const r = ask({ changePercent: 8 }, 'What if I put prices up a bit?');
+    expect(r.ok).toBe(false);
+    expect(ask({ changePercent: 8 }, 'What if I raise prices by 80%?').ok).toBe(false);
+    expect(ask({ changePercent: 7.5 }, 'What if I raise prices by 7%?').ok).toBe(false);
+  });
+
+  it('refuses the wrong sign for what the question says', () => {
+    expect(ask({ changePercent: -8 }, 'What if I raise prices by 8%?').ok).toBe(false);
+    expect(ask({ changePercent: 8 }, 'What if I cut prices by 8%?').ok).toBe(false);
+  });
+
+  it('reads the sign of each number from the words around it', () => {
+    const q = 'If I raise prices by 8% and sales drop 5%, what happens?';
+    expect(ask({ changePercent: 8, salesChangePercent: -5 }, q).ok).toBe(true);
+    expect(ask({ changePercent: 8, salesChangePercent: 5 }, q).ok).toBe(false);
+  });
+
+  it('takes a new price only for exactly one product, and only if written', () => {
+    expect(ask({ products: ['item_cake'], newPrice: 120 }, 'What if the cake cost 120?').ok).toBe(true);
+    expect(ask({ products: ['item_cake'], newPrice: 130 }, 'What if the cake cost 120?').ok).toBe(false);
+    expect(ask({ products: ['ALL'], newPrice: 120 }, 'What if everything cost 120?').ok).toBe(false);
+    expect(ask({ products: ['item_cake', 'item_pie'], newPrice: 120 }, 'What if they cost 120?').ok).toBe(false);
+  });
+
+  it('needs exactly one of a percentage and a new price', () => {
+    expect(ask({}, 'What if I raise prices by 8%?').ok).toBe(false);
+    expect(ask({ changePercent: 8, newPrice: 8 }, 'What if I raise prices by 8%?').ok).toBe(false);
+  });
+
+  it('refuses products the snapshot does not name, and ALL mixed with others', () => {
+    expect(ask({ products: ['item_unknown'], changePercent: 8 }, 'raise by 8%').ok).toBe(false);
+    expect(ask({ products: ['mat_flour'], changePercent: 8 }, 'raise by 8%').ok).toBe(false);
+    expect(ask({ products: ['ALL', 'item_cake'], changePercent: 8 }, 'raise by 8%').ok).toBe(false);
+    expect(ask({ products: [], changePercent: 8 }, 'raise by 8%').ok).toBe(false);
+  });
+
+  it('refuses a silly size, zero and non-numbers', () => {
+    expect(ask({ changePercent: 0 }, 'raise by 0%').ok).toBe(false);
+    expect(ask({ changePercent: 900 }, 'raise by 900%').ok).toBe(false);
+    expect(ask({ changePercent: '8' }, 'raise by 8%').ok).toBe(false);
+    expect(ask({ changePercent: 8, salesChangePercent: -150 }, 'raise by 8% and sales drop 150%').ok).toBe(false);
+  });
+
+  it('gives either an answer or a request, never both', () => {
+    expect(ask({ changePercent: 8 }, 'raise by 8%', 'Profit rises.').ok).toBe(false);
+  });
+
+  it('is refused when the calculation has already been run, so the model cannot ask forever', () => {
+    const done = { ...promptSnapshot, pricing: { repricing: [], materialMoves: [], scenario: { assumed: { products: 'all items', basedOnDays: 'scn_days' }, items: [], noRecentSales: [], monthlyNow: 'a', monthlyAfter: 'b', monthlyChange: 'c', breakEven: { type: 'unchanged' } } } } as any;
+    const r = validateScenarioRequest({ products: ['ALL'], changePercent: 8, newPrice: null, salesChangePercent: null }, 'raise by 8%', done);
+    expect(r.ok).toBe(false);
+  });
+
+  it('still checks an ordinary answer as before when scenario is null', () => {
+    expect(validateChatAnswer({ answer: 'Profit moved {{fig:true_profit_change}}.', scenario: null }, promptSnapshot, 'Why?').ok).toBe(true);
+    expect(validateChatAnswer({ answer: null, scenario: null }, promptSnapshot, 'Why?').ok).toBe(false);
+    expect(validateChatAnswer({ answer: 'Down 12%.', scenario: null }, promptSnapshot, 'Why?').ok).toBe(false);
+  });
+});
+
+describe('scenarioChanges', () => {
+  const m = [{ id: 'cake', sellingPrice: 100 }, { id: 'pie', sellingPrice: 80 }, { id: 'free', sellingPrice: 0 }];
+  const req = (over: Record<string, unknown>) => ({ products: ['ALL'], changePercent: null, newPrice: null, salesChangePercent: null, ...over }) as any;
+  it('moves every priced item by a percentage for ALL', () => {
+    expect(scenarioChanges(req({ changePercent: 10 }), m)).toEqual([{ menuItemId: 'cake', newPrice: 110 }, { menuItemId: 'pie', newPrice: 88 }]);
+  });
+  it('moves only the named items, by the menu id after item_', () => {
+    expect(scenarioChanges(req({ products: ['item_pie'], changePercent: -50 }), m)).toEqual([{ menuItemId: 'pie', newPrice: 40 }]);
+  });
+  it('sets a new price for the single named item', () => {
+    expect(scenarioChanges(req({ products: ['item_cake'], newPrice: 120 }), m)).toEqual([{ menuItemId: 'cake', newPrice: 120 }]);
+    expect(scenarioChanges(req({ products: ['item_gone'], newPrice: 120 }), m)).toEqual([]);
+  });
+});
+
+describe('describeScenario', () => {
+  const req = (over: Record<string, unknown>) => ({ products: ['ALL'], changePercent: null, newPrice: null, salesChangePercent: null, ...over }) as any;
+  it('says what was assumed, plainly', () => {
+    expect(describeScenario(req({ changePercent: 8 }), ['Cake'], 30)).toBe('Assumed: prices +8% on all items, sales unchanged, from 30 days of real sales.');
+    expect(describeScenario(req({ products: ['item_a', 'item_b'], changePercent: -10, salesChangePercent: -5 }), ['Cake', 'Pie'], 1)).toBe('Assumed: prices −10% on Cake, Pie, sales −5%, from 1 day of real sales.');
+    expect(describeScenario(req({ products: ['item_a'], newPrice: 120 }), ['Cake'], 12)).toBe('Assumed: price 120 on Cake, sales unchanged, from 12 days of real sales.');
   });
 });

@@ -7,12 +7,14 @@
  *
  * In order: check the request, check the account may use AI (this counts
  * nothing), count one use against the daily caps, ask the model, and validate
- * what it wrote. The model is asked again once if its answer fails validation;
+ * what it wrote. The reply is an answer or, for "what if I change prices", a
+ * request to run the calculation (`scenario`): the app runs it on the device,
+ * adds the result to the snapshot and asks again, so a what-if costs two uses. The model is asked again once if its answer fails validation;
  * if that fails too nothing is shown (`answer: null`), because an unchecked
  * answer must never reach the owner. A question that was counted stays counted.
  */
 import type { Response } from 'express';
-import { CHAT_MAX_ANSWER_CHARS, CHAT_MAX_HISTORY_TURNS, CHAT_MAX_QUESTION_CHARS, validateChatAnswer, type ChatTurn } from '../src/utils/aiChat';
+import { CHAT_MAX_ANSWER_CHARS, CHAT_MAX_HISTORY_TURNS, CHAT_MAX_QUESTION_CHARS, validateChatAnswer, type ChatTurn, type ScenarioRequest } from '../src/utils/aiChat';
 import type { AiSnapshot } from '../src/utils/aiSnapshot';
 import type { AuthedRequest } from './auth';
 import { aiErrorResponse } from './anthropic';
@@ -42,17 +44,20 @@ export function parseChatRequest(body: unknown): { question: string; snapshot: A
   return { question: question.trim(), snapshot: snapshot as AiSnapshot, history: (history ?? []) as ChatTurn[] };
 }
 
-/** The model's answer, validated; asked a second time with what was wrong if the first fails. Null if neither passes. */
+/** What the model came back with, once checked: an answer to show, or a what-if the app should calculate first. */
+export type ChatReply = { answer: string } | { scenario: ScenarioRequest };
+
+/** The model's reply, validated; asked a second time with what was wrong if the first fails. Null if neither passes. */
 export async function answerValidated(
   input: { snapshot: AiSnapshot; question: string; history: ChatTurn[] },
   model: ChatModel
-): Promise<string | null> {
+): Promise<ChatReply | null> {
   let problems: string[] | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
     const { raw } = await model({ ...input, problems });
     if (raw === undefined) { problems = ['the answer was not valid JSON in the required format']; continue; }
-    const checked = validateChatAnswer(raw, input.snapshot);
-    if (checked.ok === true) return checked.answer;
+    const checked = validateChatAnswer(raw, input.snapshot, input.question);
+    if (checked.ok === true) return checked.scenario ? { scenario: checked.scenario } : { answer: checked.answer! };
     problems = checked.problems;
   }
   return null;
@@ -74,11 +79,13 @@ export function createChatHandler(deps: ChatDeps) {
       const remaining = Math.max(access.limit - access.used, 0);
 
       try {
-        const answer = await answerValidated(parsed, deps.model);
-        if (answer === null) {
+        const reply = await answerValidated(parsed, deps.model);
+        if (reply === null) {
           return res.json({ answer: null, code: 'unverified', error: 'I could not give a checked answer to that. Try asking it a different way.', remaining });
         }
-        return res.json({ answer, remaining });
+        // A what-if: the app works it out on the owner's device and asks again with the result in the snapshot.
+        if ('scenario' in reply) return res.json({ scenario: reply.scenario, remaining });
+        return res.json({ answer: reply.answer, remaining });
       } catch (err: any) {
         console.error('Chat failed:', err?.message);
         const mapped = aiErrorResponse(err);

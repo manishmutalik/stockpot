@@ -1702,7 +1702,7 @@ function BakeryApp() {
       {/* "Ask your business": only for accounts AI is offered to; floats over every tab */}
       <AskBusiness
         orders={orders} menu={menu} materials={remainingInventory} experiments={experiments}
-        wastageLogs={wastageLogs} productionRuns={productionRuns} settings={settings} currency={currency} dataReady={dataReady} signedIn={!!user}
+        wastageLogs={wastageLogs} productionRuns={productionRuns} priceLog={priceLog} settings={settings} currency={currency} dataReady={dataReady} signedIn={!!user}
       />
 
       {/* Mobile Bottom Navigation & Floating Action */}

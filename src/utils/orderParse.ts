@@ -135,6 +135,9 @@ export function quantityAppears(quantity: number, text: string): boolean {
   return false;
 }
 
+/** Whether a number is written in the text, in digits ("8", "12.5") or in words ("eight"). Unlike `quantityAppears`, one is not free. */
+export const numberWritten = (value: number, text: string): boolean => numbersIn(text).has(value);
+
 /** Whether a number (a discount) is written in the message in digits. */
 export function numberAppears(value: number, text: string): boolean {
   for (const m of text.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {

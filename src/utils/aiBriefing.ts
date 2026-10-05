@@ -19,8 +19,8 @@
 import { formatFigure, validateAiText, type AiRegistry, type FormatContext } from './aiFigures';
 import type { AiSnapshot } from './aiSnapshot';
 
-/** What an attention item is about. Repricing and price-move kinds arrive with the pricing work. */
-export const AI_ATTENTION_KINDS = ['preorder', 'profit_driver', 'wastage', 'low_stock', 'expiring', 'reorder_customer', 'unpaid'] as const;
+/** What an attention item is about. */
+export const AI_ATTENTION_KINDS = ['preorder', 'reprice', 'price_move', 'profit_driver', 'wastage', 'low_stock', 'expiring', 'reorder_customer', 'unpaid'] as const;
 export type AttentionKind = (typeof AI_ATTENTION_KINDS)[number];
 
 export const MAX_ATTENTION_ITEMS = 4;
@@ -162,6 +162,18 @@ export function buildDeterministicBriefing(snapshot: AiSnapshot): BriefingConten
   const dueTomorrow = preorderLine('tomorrow', snapshot.preorders?.dueTomorrow ?? null);
   if (dueToday) attention.push({ kind: 'preorder', text: dueToday });
   if (dueTomorrow) attention.push({ kind: 'preorder', text: dueTomorrow });
+  // The item whose margin has slipped the most: what it was, what it is, which ingredient moved, and a price that restores it.
+  const worst = snapshot.pricing?.repricing?.[0];
+  if (worst) {
+    const cause = worst.driver ? `, with {{name:${worst.driver.name}}} up {{fig:${worst.driver.change}}}` : '';
+    const fix = worst.suggestedPrice ? ` A price of {{fig:${worst.suggestedPrice}}} would restore it.` : '';
+    attention.push({
+      kind: 'reprice',
+      text: worst.reason === 'below_target'
+        ? `{{name:${worst.name}}} earns a margin of {{fig:${worst.marginNow}}}, under your target.${fix}`
+        : `{{name:${worst.name}}} margin is down from {{fig:${worst.marginThen}}} to {{fig:${worst.marginNow}}}${cause}.${fix}`,
+    });
+  }
   const names = (ids: string[]) => ids.slice(0, 3).map(id => `{{name:${id}}}`).join(', ');
   if (snapshot.inventory.lowStock.length) attention.push({ kind: 'low_stock', text: `Running low: ${names(snapshot.inventory.lowStock)}.` });
   // A material that will run out soon at the current rate of use, and is not already in the low-stock line.
@@ -173,6 +185,11 @@ export function buildDeterministicBriefing(snapshot: AiSnapshot): BriefingConten
     });
   }
   if (snapshot.inventory.expiringSoon.length) attention.push({ kind: 'expiring', text: `Expiring soon or expired: ${names(snapshot.inventory.expiringSoon)}.` });
+  // The ingredient that has got dearest (a rise only; a price that fell is good news and not urgent).
+  const dearer = (snapshot.pricing?.materialMoves ?? []).find(m => snapshot.figures[m.change]?.text.startsWith('+'));
+  if (dearer && !worst?.driver?.name?.includes(dearer.name)) {
+    attention.push({ kind: 'price_move', text: `{{name:${dearer.name}}} costs {{fig:${dearer.change}}} more than it did in the last ${dearer.window === '30 days' ? 'month' : 'quarter'}.` });
+  }
   if (snapshot.figures.unpaid_now) attention.push({ kind: 'unpaid', text: `{{fig:unpaid_now}} of revenue is not paid yet.` });
   const due = snapshot.customers.dueList[0];
   if (due) {

@@ -23,7 +23,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     materials, menu, orders, productionRuns, wastageLogs,
     summaryRange, summaryDateStart, summaryDateEnd, setSummaryDateStart, setSummaryDateEnd, summaryRefDate,
     handleRangeChange, financials, chartData, currency, settings, lowStockItems, lastSynced,
-    setActiveTab, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders, openRepricing,
+    setActiveTab, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders, openRepricing, priceLog,
   } = props;
 
   const fmt = (n: number) =>
@@ -213,7 +213,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
       {/* Yesterday in a few lines: figures from the app, an explanation from AI where it is offered */}
       <DailyBriefing
         orders={orders} menu={menu} materials={remainingInventory ?? []} experiments={experiments ?? []}
-        wastageLogs={wastageLogs} productionRuns={productionRuns} settings={settings} currency={currency} dataReady={!!dataReady}
+        wastageLogs={wastageLogs} productionRuns={productionRuns} priceLog={priceLog} settings={settings} currency={currency} dataReady={!!dataReady}
       />
 
       {/* Headline figures */}

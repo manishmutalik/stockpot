@@ -265,6 +265,51 @@ describe('validateSnapshotShape', () => {
     expect(validateSnapshotShape(older)).toBe(true);
   });
 
+  it('accepts the pricing section, with or without a what-if result, and a snapshot without it', () => {
+    const withPricing = clone();
+    withPricing.pricing = {
+      repricing: [{ name: 'item_a', reason: 'slipped', marginThen: 'rp_a_then', marginNow: 'rp_a_now', driver: { name: 'mat_b', change: 'rp_a_driver' }, suggestedPrice: 'rp_a_price' }],
+      materialMoves: [{ name: 'mat_b', change: 'mm_b_change', window: '30 days' }],
+    };
+    expect(validateSnapshotShape(withPricing)).toBe(true);
+    withPricing.pricing.scenario = {
+      assumed: { products: 'all items', changePercent: 'scn_change_pct', basedOnDays: 'scn_days' },
+      items: [{ name: 'item_a', unitsSold: 'u', priceNow: 'p', priceNew: 'q', monthlyNow: 'n', monthlyAfter: 'a' }],
+      noRecentSales: ['item_c'], monthlyNow: 'scn_total_now', monthlyAfter: 'scn_total_after', monthlyChange: 'scn_total_change',
+      breakEven: { type: 'can_lose', percent: 'scn_break_even' },
+    };
+    expect(validateSnapshotShape(withPricing)).toBe(true);
+    const older = clone();
+    delete older.pricing;
+    expect(validateSnapshotShape(older)).toBe(true);
+  });
+
+  it('refuses a malformed pricing section', () => {
+    const ok = () => ({
+      repricing: [{ name: 'item_a', reason: 'slipped', marginThen: 'a', marginNow: 'b' }], materialMoves: [],
+      scenario: { assumed: { products: 'all items', basedOnDays: 'd' }, items: [], noRecentSales: [], monthlyNow: 'a', monthlyAfter: 'b', monthlyChange: 'c', breakEven: { type: 'unchanged' } },
+    });
+    const cases: [string, (p: any) => void][] = [
+      ['not an object', p => { p.self = 1; }],
+      ['too many repricing items', p => { p.repricing = Array.from({ length: 6 }, () => p.repricing[0]); }],
+      ['a bad reason', p => { p.repricing[0].reason = 'because'; }],
+      ['a repricing name that is not text', p => { p.repricing[0].name = 5; }],
+      ['a driver without a change', p => { p.repricing[0].driver = { name: 'x' }; }],
+      ['a bad move window', p => { p.materialMoves = [{ name: 'a', change: 'b', window: '7 days' }]; }],
+      ['too many moves', p => { p.materialMoves = Array.from({ length: 7 }, () => ({ name: 'a', change: 'b', window: '30 days' })); }],
+      ['a scenario without assumptions', p => { delete p.scenario.assumed; }],
+      ['a bad assumed scope', p => { p.scenario.assumed.products = 'everything'; }],
+      ['too many scenario items', p => { p.scenario.items = Array.from({ length: 9 }, () => ({ name: 'a', unitsSold: 'b', priceNow: 'c', priceNew: 'd', monthlyNow: 'e', monthlyAfter: 'f' })); }],
+      ['a scenario item missing a figure', p => { p.scenario.items = [{ name: 'a' }]; }],
+      ['a bad break-even', p => { p.scenario.breakEven = { type: 'maybe' }; }],
+      ['a long figure id', p => { p.scenario.monthlyNow = 'x'.repeat(200); }],
+    ];
+    for (const [name, mutate] of cases) {
+      const s = clone(); s.pricing = ok(); if (name === 'not an object') s.pricing = 'x'; else mutate(s.pricing);
+      expect(validateSnapshotShape(s), name).toBe(false);
+    }
+  });
+
   it('refuses oversized or malformed parts', () => {
     const cases: [string, (s: any) => void][] = [
       ['a huge name', s => { s.names.item_x = 'x'.repeat(500); }],

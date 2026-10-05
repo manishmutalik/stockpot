@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, MessageCircle, Send, Sparkles, X } from 'lucide-react';
-import type { BakerySettings, MenuItem, Order, RawMaterial, RecipeExperiment, WastageLog } from '../types';
+import type { BakerySettings, MenuItem, Order, PriceLogEntry, RawMaterial, RecipeExperiment, WastageLog } from '../types';
 import { apiFetch } from '../utils/apiClient';
-import { chatPeriods, prepareQuestion, STARTER_QUESTIONS, trimHistory, CHAT_MAX_QUESTION_CHARS, type ChatPeriodId, type ChatTurn } from '../utils/aiChat';
+import { chatPeriods, describeScenario, prepareQuestion, scenarioChanges, STARTER_QUESTIONS, trimHistory, CHAT_MAX_QUESTION_CHARS, type ChatPeriodId, type ChatTurn, type ScenarioRequest } from '../utils/aiChat';
 import { renderAiText, type AiRegistry, type FormatContext } from '../utils/aiFigures';
-import { buildBusinessSnapshot } from '../utils/aiSnapshot';
+import { buildBusinessSnapshot, buildScenarioSection, withScenario } from '../utils/aiSnapshot';
+import { pricingScenario } from '../utils/pricing';
 import { buildCustomerProfiles } from '../utils/customers';
 import { todayInZone } from '../utils/localDate';
 
@@ -18,6 +19,8 @@ type Data = {
   wastageLogs: WastageLog[];
   /** To work out which materials will run out soon. */
   productionRuns?: { recipeId: string; quantityProduced: number; date: string }[];
+  /** Ingredient purchase prices, for the price moves and what-ifs. */
+  priceLog?: PriceLogEntry[];
   settings: BakerySettings;
   currency: { code: string; symbol: string };
 };
@@ -35,6 +38,10 @@ interface Message {
   registry?: AiRegistry;
   customerNames?: Record<string, string>;
   periodLabel: string;
+  /** What a what-if assumed, built by code, shown under its answer. */
+  assumption?: string;
+  /** What is being done while waiting, once it is more than "looking". */
+  working?: string;
 }
 
 /**
@@ -47,7 +54,7 @@ interface Message {
  * offered to; never in the demo.
  */
 export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolean; now?: Date }> = ({
-  orders, menu, materials, experiments, wastageLogs, productionRuns, settings, currency, dataReady, signedIn, now,
+  orders, menu, materials, experiments, wastageLogs, productionRuns, priceLog, settings, currency, dataReady, signedIn, now,
 }) => {
   const [available, setAvailable] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
@@ -124,22 +131,53 @@ export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolea
     setInput('');
 
     const built = buildBusinessSnapshot({
-      period: choice.period, comparison: choice.comparison, orders, menu, materials, experiments, wastageLogs, productionRuns,
+      period: choice.period, comparison: choice.comparison, orders, menu, materials, experiments, wastageLogs, productionRuns, priceLog,
       settings, currency, customers, today, mentionedCustomers: mentioned,
     });
     const finish = (patch: Partial<Message>) => {
       if (alive.current) setMessages(prev => prev.map(m => (m.id === id ? { ...m, ...patch } : m)));
     };
+    const post = (snapshot: typeof built.promptSnapshot) => apiFetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: sent, snapshot, history }),
+    });
     try {
-      const res = await apiFetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: sent, snapshot: built.promptSnapshot, history }),
-      });
-      const body = await res.json().catch(() => ({}));
+      let res = await post(built.promptSnapshot);
+      let body = await res.json().catch(() => ({}));
       if (alive.current && typeof body.remaining === 'number') setRemaining(body.remaining);
+      let registry = built.registry;
+      let assumption: string | undefined;
+
+      // A what-if: the model asked for a calculation. It is worked out here, from this device's own data, and the
+      // result goes back as figures for the model to explain (it never does the sums).
+      if (res.ok && body.scenario && typeof body.answer !== 'string') {
+        const request = body.scenario as ScenarioRequest;
+        const changes = scenarioChanges(request, menu);
+        if (changes.length === 0) {
+          finish({ state: 'failed', error: 'I could not find those items on your menu, or they have no price yet.' });
+          return;
+        }
+        finish({ working: 'Working out the what-if…' });
+        const scenario = pricingScenario({
+          changes, lookbackDays: 30, expectedVolumeChangePct: request.salesChangePercent ?? undefined,
+          orders, menu, materials, settings, today,
+        });
+        const extra = buildScenarioSection({
+          scenario, menu,
+          assumed: { allItems: request.products.includes('ALL'), changePercent: request.changePercent ?? undefined, newPrice: request.newPrice ?? undefined, salesChangePercent: request.salesChangePercent ?? undefined },
+          currency,
+        });
+        const merged = withScenario(built, extra, currency.symbol);
+        registry = merged.registry;
+        assumption = describeScenario(request, changes.map(c => menu.find(m => m.id === c.menuItemId)?.name ?? 'an item'), scenario.daysUsed);
+        res = await post(merged.promptSnapshot);
+        body = await res.json().catch(() => ({}));
+        if (alive.current && typeof body.remaining === 'number') setRemaining(body.remaining);
+      }
+
       if (res.ok && typeof body.answer === 'string') {
-        finish({ state: 'answered', answer: body.answer, registry: built.registry, customerNames: built.customerNames });
+        finish({ state: 'answered', answer: body.answer, registry, customerNames: built.customerNames, assumption });
       } else {
         if (alive.current && res.status === 429) setRemaining(0);
         finish({ state: 'failed', error: typeof body.error === 'string' ? body.error : 'That could not be answered right now.' });
@@ -216,10 +254,11 @@ export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolea
                   </div>
                   <div className="flex justify-start">
                     <div className="max-w-[92%] bg-stone-50 rounded-2xl rounded-bl-md px-4 py-3 text-sm text-ink">
-                      {m.state === 'waiting' && <span className="flex items-center gap-2 text-muted"><Loader2 size={15} className="animate-spin" /> Looking at your numbers…</span>}
+                      {m.state === 'waiting' && <span className="flex items-center gap-2 text-muted"><Loader2 size={15} className="animate-spin" /> {m.working ?? 'Looking at your numbers…'}</span>}
                       {m.state === 'answered' && m.answer && m.registry && (
                         <>
                           <p className="whitespace-pre-wrap break-words">{renderAiText(m.answer, m.registry, fx, m.customerNames)}</p>
+                          {m.assumption && <p className="mt-2 font-mono text-[11px] text-ink/80">{m.assumption}</p>}
                           <p className="mt-2 font-mono text-[10px] text-muted">{m.periodLabel}</p>
                         </>
                       )}
