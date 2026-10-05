@@ -326,6 +326,7 @@ import { withShelfStock } from './utils/batchStock';
 import { AskBusiness } from './components/AskBusiness';
 import { useOrderParser } from './hooks/useOrderParser';
 import { buildCustomerDirectory } from './utils/customers';
+import { actualOrders } from './utils/preorders';
 import { todayInZone } from './utils/localDate';
 import { getExperimentMaterialUsage } from './utils/experimentMaterialUsage';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
@@ -829,6 +830,11 @@ function BakeryApp() {
     });
   }, [materials, inventoryUsage]);
 
+  // The Dashboard's pre-order card opens the Orders tab on its Upcoming list; the request is dropped when the tab is left.
+  const [ordersFilterOnOpen, setOrdersFilterOnOpen] = useState<'upcoming' | undefined>(undefined);
+  useEffect(() => { if (activeTab !== 'orders') setOrdersFilterOnOpen(undefined); }, [activeTab]);
+  const openUpcomingOrders = () => { setOrdersFilterOnOpen('upcoming'); setActiveTab('orders'); };
+
   // Past customers, suggested while typing in the Add Order form (the same grouping as the Customers panel).
   const customerDirectory = useMemo(() => buildCustomerDirectory(orders, menu, todayInZone(settings.timezone)), [orders, menu, settings.timezone]);
 
@@ -1131,7 +1137,7 @@ function BakeryApp() {
   // Re-computed whenever orders, menu prices, materials costs, or date bounds change.
   const summaryFinancials = useMemo(() => getFinancialsForRange(summaryDateStart, summaryDateEnd), [summaryDateStart, summaryDateEnd, orders, menu, materials, wastageLogs, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]);
   // Count and average value of orders within the selected period.
-  const activeOrdersCount = useMemo(() => orders.filter(o => o.date >= summaryDateStart && o.date <= summaryDateEnd).length, [orders, summaryDateStart, summaryDateEnd]);
+  const activeOrdersCount = useMemo(() => actualOrders(orders, todayInZone(settings.timezone)).filter(o => o.date >= summaryDateStart && o.date <= summaryDateEnd).length, [orders, summaryDateStart, summaryDateEnd, settings.timezone]);
   const averageOrderValue = useMemo(() => activeOrdersCount > 0 ? summaryFinancials.income / activeOrdersCount : 0, [summaryFinancials.income, activeOrdersCount]);
 
   /** Triggers a 2-second success animation without writing to Firestore. */
@@ -1235,7 +1241,7 @@ function BakeryApp() {
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
-    openAddOrderModalFor,
+    openAddOrderModalFor, openUpcomingOrders, ordersFilterOnOpen,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,

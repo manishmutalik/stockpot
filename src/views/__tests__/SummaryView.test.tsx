@@ -37,6 +37,25 @@ function makeProps(overrides: Record<string, any> = {}) {
   } as any;
 }
 
+describe('SummaryView pre-orders', () => {
+  const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split('T')[0]; })();
+  const pre = (over: Record<string, any> = {}) => ({ id: 'p1', menuItemId: 'cake', quantity: 3, date: tomorrow, preorder: true, stockClaimed: false, ...over });
+
+  it('shows what to prepare, and opens the Upcoming list in Orders', () => {
+    const openUpcomingOrders = vi.fn();
+    render(<SummaryView {...makeProps({ orders: [pre()], openUpcomingOrders, settings: { name: 'Test Bakery', gstApplicable: false, timezone: 'UTC' } })} />);
+    const card = screen.getByRole('region', { name: 'Pre-orders due' });
+    expect(card.textContent).toContain('Cake × 3');
+    fireEvent.click(screen.getByRole('button', { name: 'View in Orders' }));
+    expect(openUpcomingOrders).toHaveBeenCalled();
+  });
+
+  it('does not show the card with no pre-orders, and does not count a pre-order due later in the dashboard\'s orders', () => {
+    render(<SummaryView {...makeProps({ orders: [pre({ date: daysAgo(-9) })], settings: { name: 'Test Bakery', gstApplicable: false, timezone: 'UTC' } })} />);
+    expect(screen.queryByRole('region', { name: 'Pre-orders due' })).toBeNull();
+  });
+});
+
 describe('SummaryView (dashboard)', () => {
   it('shows the headline figures with thousands separators and cost-as-share-of-income footers', () => {
     render(<SummaryView {...makeProps({ financials: { income: 5171.19, orderExpenses: 1243.97, deliveryExpenses: 737, wastageExpenses: 66.7, experimentExpenses: 0, gstCollected: 0, gstPaid: 0, profit: 3123.52, trueProfit: 2900, avgOrderContribution: 312.35, orderCount: 10 } })} />);

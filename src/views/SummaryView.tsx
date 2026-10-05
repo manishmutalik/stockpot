@@ -10,6 +10,9 @@ import {
 import { AppViewProps } from '../types';
 import { MetricCard } from '../components/MetricCard';
 import { DailyBriefing } from '../components/DailyBriefing';
+import { DueTomorrowCard } from '../components/DueTomorrowCard';
+import { todayInZone } from '../utils/localDate';
+import { actualOrders } from '../utils/preorders';
 import { getRunStatus } from '../utils/productionStats';
 import { getBatchesNeedingAttention } from '../utils/stockAging';
 import type { ProductionRun } from '../components/ProductionRunModal';
@@ -19,7 +22,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     materials, menu, orders, productionRuns, wastageLogs,
     summaryRange, summaryDateStart, summaryDateEnd, setSummaryDateStart, setSummaryDateEnd, summaryRefDate,
     handleRangeChange, financials, chartData, currency, settings, lowStockItems, lastSynced,
-    setActiveTab, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady,
+    setActiveTab, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders,
   } = props;
 
   const fmt = (n: number) =>
@@ -28,9 +31,10 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
   const today = new Date().toISOString().split('T')[0];
 
   // Derived, date-range-filtered views used by the cards below.
+  // Only orders that have happened: not cancelled, and not a pre-order still due later.
   const filteredOrders = useMemo(
-    () => orders.filter(o => o.date >= summaryDateStart && o.date <= summaryDateEnd),
-    [orders, summaryDateStart, summaryDateEnd]
+    () => actualOrders(orders, todayInZone(settings.timezone)).filter(o => o.date >= summaryDateStart && o.date <= summaryDateEnd),
+    [orders, summaryDateStart, summaryDateEnd, settings.timezone]
   );
   const filteredProductionRuns = useMemo(
     () => productionRuns.filter(r => r.date >= summaryDateStart && r.date <= summaryDateEnd),
@@ -198,6 +202,9 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
           </div>
         </div>
       )}
+
+      {/* Pre-orders due today and tomorrow, as what to make (no AI) */}
+      <DueTomorrowCard orders={orders ?? []} menu={menu} today={todayInZone(settings.timezone)} onOpen={() => openUpcomingOrders?.()} />
 
       {/* Yesterday in a few lines: figures from the app, an explanation from AI where it is offered */}
       <DailyBriefing

@@ -17,7 +17,8 @@
  * Friday is not in this month's revenue today, because the weekly and monthly
  * ranges run to the end of the period. Orders due later are "booked for later".
  */
-import type { Order } from '../types';
+import type { MenuItem, Order } from '../types';
+import { clusterOrdersByGroup } from './orderClustering';
 
 /** Does this order currently hold units of finishedGoodsStock? */
 export const holdsStock = (o: Pick<Order, 'cancelledOn' | 'preorder' | 'stockClaimed'>): boolean =>
@@ -41,4 +42,31 @@ export const isOpenPreorder = (o: Pick<Order, 'cancelledOn' | 'preorder' | 'fulf
 /** The advance of a multi-item order (or a single one): it is stored on one member only, like a discount. */
 export function advanceOf(members: Pick<Order, 'advance'>[]): NonNullable<Order['advance']> | undefined {
   return members.map(m => m.advance).find(a => a && a.amount > 0);
+}
+
+export interface DueSummary {
+  /** Orders (a multi-item order counts once). */
+  orderCount: number;
+  /** What has to be made or handed over: units per item, most first. */
+  items: { menuItemId: string; name: string; quantity: number }[];
+}
+
+/**
+ * The open pre-orders whose due date passes `isDue`, as a count of orders and the units of each item. Open means
+ * not handed over and not cancelled. Null when there are none.
+ */
+export function summarizeDue(orders: Order[], menu: Pick<MenuItem, 'id' | 'name'>[], isDue: (date: string) => boolean): DueSummary | null {
+  const open = orders.filter(o => isOpenPreorder(o) && isDue(o.date));
+  if (open.length === 0) return null;
+  const units = new Map<string, { name: string; quantity: number }>();
+  for (const o of open) {
+    const name = menu.find(m => m.id === o.menuItemId)?.name ?? o.itemNameAtSale ?? 'Item';
+    const entry = units.get(o.menuItemId) ?? { name, quantity: 0 };
+    entry.quantity += o.quantity || 0;
+    units.set(o.menuItemId, entry);
+  }
+  return {
+    orderCount: clusterOrdersByGroup(open).length,
+    items: [...units].map(([menuItemId, v]) => ({ menuItemId, ...v })).sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name)),
+  };
 }

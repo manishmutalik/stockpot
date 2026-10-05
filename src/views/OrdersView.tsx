@@ -373,7 +373,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
   const {
     orders, menu, currency, settings, orderFilterStart, setOrderFilterStart, orderFilterEnd, setOrderFilterEnd,
     setIsAddOrderModalOpen, shopifyStatus, importShopifyOrders, isImportingShopify, odooStatus,
-    importOdooOrders, isImportingOdoo, fulfillOrder, cancelPreorder, markOrdersPaid, setOrdersPaymentMethod, updateOrder, deleteOrder, materials
+    importOdooOrders, isImportingOdoo, fulfillOrder, cancelPreorder, ordersFilterOnOpen, markOrdersPaid, setOrdersPaymentMethod, updateOrder, deleteOrder, materials
   } = props;
 
   // Which orders currently have their "Delivery Details" section expanded.
@@ -416,7 +416,8 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
   const [markPaid, setMarkPaid] = useState<{ ids: string[]; title: string; summary: string; amount: number } | null>(null);
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  // The Dashboard's pre-order card can open this tab on its Upcoming list.
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(ordersFilterOnOpen ?? 'all');
 
   const money = (n: number) =>
     `${currency.symbol}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

@@ -479,6 +479,10 @@ export interface AppViewProps {
   deleteProductionRunSession: (sessionId: string) => void;
   handleDiscardBatch: (b: any) => void;
   updateOrder: (id: string, f: string, v: any) => void;
+  /** Opens the Orders tab on its Upcoming list (pre-orders due after today). */
+  openUpcomingOrders: () => void;
+  /** When set, the Orders tab opens on this status filter (used by openUpcomingOrders). */
+  ordersFilterOnOpen?: 'upcoming';
   /** Hands an order over. A pre-order claims its stock now (all items, or none); resolves to whether it was handed over. */
   fulfillOrder: (order: Order) => Promise<boolean>;
   /** Cancels a pre-order not yet handed over; `advanceOutcome` is required when an advance was paid. Resolves to whether it was cancelled. */
