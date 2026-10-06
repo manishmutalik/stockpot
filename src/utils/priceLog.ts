@@ -29,10 +29,12 @@ export function newPriceLogEntry(input: {
   /** YYYY-MM-DD; defaults to today. */
   date?: string;
   now?: number;
+  /** Defaults to a random id; passed in so a plan is deterministic. */
+  id?: string;
 }): PriceLogEntry {
   const now = input.now ?? Date.now();
   return {
-    id: Math.random().toString(36).slice(2, 11),
+    id: input.id ?? Math.random().toString(36).slice(2, 11),
     materialId: input.materialId,
     date: input.date ?? new Date(now).toISOString().split('T')[0],
     unitCost: round6(input.unitCost),
