@@ -1,5 +1,21 @@
 # Changelog
 
+## The paywall is now switched on from the server
+
+The paywall used to be bypassed by a constant in `src/App.tsx`, so a new sign-up went straight into
+the app and never saw checkout. It is now decided by the server, per account, and stays off for
+everyone until you set it:
+
+- `BILLING_ENFORCED_EMAILS=you@example.com` puts only those (verified) accounts behind it, so the
+  whole trial and payment flow can be tried on the live site with Razorpay Test Mode while everyone
+  else is unaffected.
+- `BILLING_ENFORCED=true` puts every account behind it, for launch.
+- Never applied to demo accounts, while `BILLING_DISABLED=true`, or when the Razorpay settings are
+  missing (so nobody is locked out of an app they cannot pay for).
+- An account behind the paywall sees "Start your free trial" after signing in, which opens
+  Razorpay Checkout; Settings → User Account also offers Start free trial for any account
+  without a plan.
+
 ## Landing page headline
 
 The hero headline is now "The CFO of your food business", with "Know exactly how much money your

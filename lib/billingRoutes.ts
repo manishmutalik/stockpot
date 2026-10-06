@@ -13,11 +13,33 @@
 import type { Request, Response } from 'express';
 import type { AuthedRequest } from './auth';
 import {
-  billingFromSubscription, uidFromNotes, verifyPaymentSignature, verifyWebhookSignature,
+  billingFromSubscription, readRazorpayConfig, uidFromNotes, verifyPaymentSignature, verifyWebhookSignature,
   RazorpayError, type RazorpayApi, type RazorpayConfig, type RazorpaySubscription,
 } from './razorpay';
 import { hasActiveAccess, type BillingInfo } from './subscriptionStore';
+import { isDemoAccountEmail } from './aiConfig';
 import { TRIAL_DAYS } from '../src/utils/trial';
+
+/**
+ * Whether this account must have a plan to use the app (the paywall). Off for
+ * everyone unless the server turns it on, so deploying billing changes nothing
+ * until then:
+ *  - BILLING_ENFORCED=true: every account (the launch switch).
+ *  - BILLING_ENFORCED_EMAILS=a@x.com,b@y.com: only these accounts, so the whole
+ *    flow can be tried on a live site with Razorpay Test Mode while everyone
+ *    else is unaffected. The email must be verified, as for the AI allow-list.
+ * Never on for demo accounts, while the testing switch BILLING_DISABLED=true is
+ * on, or when Razorpay is not configured (a paywall that cannot take payment
+ * would only lock people out).
+ */
+export function paywallApplies(account: { email?: string; emailVerified?: boolean }, env: Record<string, string | undefined> = process.env): boolean {
+  if (env.BILLING_DISABLED === 'true') return false;
+  if (isDemoAccountEmail(account.email)) return false;
+  if (!readRazorpayConfig(env)) return false;
+  if (env.BILLING_ENFORCED === 'true') return true;
+  const listed = (env.BILLING_ENFORCED_EMAILS ?? '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+  return !!account.email && !!account.emailVerified && listed.includes(account.email.toLowerCase());
+}
 
 export interface BillingRouteDeps {
   /** True while the temporary BILLING_DISABLED testing switch is on. */
@@ -46,11 +68,13 @@ export const DISABLED_BILLING_STATUS = (nowMs: number): BillingInfo => ({
   razorpaySubscriptionId: null, status: 'active', currentPeriodEnd: null, trialUsed: false, cancelScheduled: false, lastEventAt: 0, updatedAt: nowMs,
 });
 
-export function createBillingStatusHandler(deps: Pick<BillingRouteDeps, 'billingDisabled' | 'store' | 'now'>) {
+export function createBillingStatusHandler(deps: Pick<BillingRouteDeps, 'billingDisabled' | 'store' | 'now'> & { paywall: (account: { email?: string; emailVerified?: boolean }) => boolean }) {
   return async (req: AuthedRequest, res: Response) => {
-    if (deps.billingDisabled()) return res.json(DISABLED_BILLING_STATUS(deps.now()));
+    if (deps.billingDisabled()) return res.json({ ...DISABLED_BILLING_STATUS(deps.now()), paywall: false });
     try {
-      return res.json(await deps.store.get(req.uid!));
+      const info = await deps.store.get(req.uid!);
+      // `paywall`: this account must have a plan to use the app.
+      return res.json({ ...info, paywall: deps.paywall({ email: req.email, emailVerified: req.emailVerified }) });
     } catch (err: any) {
       console.error('Failed to fetch billing status:', err?.message);
       return res.status(500).json({ error: 'Failed to fetch billing status' });

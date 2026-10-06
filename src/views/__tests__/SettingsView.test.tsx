@@ -14,7 +14,7 @@ const makeProps = (over: Record<string, any> = {}) => ({
   addCategory: vi.fn(), deleteCategory: vi.fn(),
   user: { name: 'Asha', email: 'asha@example.com' },
   handleLogout: vi.fn(),
-  billing: { status: 'active', currentPeriodEnd: null, trialUsed: true, cancelScheduled: false },
+  billing: { status: 'active', currentPeriodEnd: null, trialUsed: true, cancelScheduled: false, paywall: false },
   cancelSubscription: vi.fn(), isCancelling: false, startCheckout: vi.fn(), isStartingCheckout: false,
   shopifyStatus: { connected: false }, shopifyConfig: { hasEnvCredentials: true },
   shopifyShopInput: '', setShopifyShopInput: vi.fn(), isConnectingShopify: false,
@@ -131,7 +131,7 @@ describe('SettingsView', () => {
     const END = Date.parse('2026-12-19T10:00:00Z') / 1000;
     const date = new Date(END * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
     const withBilling = (billing: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
-      makeProps({ activeSettingsTab: 'account', billing: { status: 'active', currentPeriodEnd: END, trialUsed: true, cancelScheduled: false, ...billing }, ...extra });
+      makeProps({ activeSettingsTab: 'account', billing: { status: 'active', currentPeriodEnd: END, trialUsed: true, cancelScheduled: false, paywall: false, ...billing }, ...extra });
 
     it('says when there is no plan, and offers the free trial to someone who has not had it', () => {
       const props = withBilling({ status: 'none', currentPeriodEnd: null, trialUsed: false });
