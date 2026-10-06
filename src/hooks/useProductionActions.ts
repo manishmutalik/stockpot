@@ -19,14 +19,8 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { deductIngredients } from '../utils/inventoryDeduction';
 import { MenuItem, RawMaterial, Order } from '../types';
 import { ProductionRun, ProductionPurpose } from '../components/ProductionRunModal';
-
-/**
- * The stock the next step of a multi-step save must start from. Logging or deleting several runs in one
- * sitting must hand each step the result of the one before it: every step reads the materials and menu
- * stock it was given, so steps that all started from the same copy would each overwrite the last one's
- * change to an ingredient (or an item) they share.
- */
-type Working = { materials: RawMaterial[]; menu: MenuItem[] };
+import { planProductionRun, randomId, type Working } from '../utils/plans';
+import { addWritesToBatch } from '../utils/plans/clientCommit';
 
 export function useProductionActions(
   menu: MenuItem[],
@@ -51,68 +45,24 @@ export function useProductionActions(
   ): Promise<Working> => {
     if (!auth.currentUser) return state;
 
-    // The selected recipe must exist in the current menu — a stale/unknown id
-    // (e.g. a UI default picked before the real menu loaded) would otherwise
-    // silently create a nameless phantom `menu/{recipeId}` doc and a dangling
-    // Order, both of which render with a blank item name.
-    const recipeItem = state.menu.find(m => m.id === runData.recipeId);
-    if (!recipeItem) {
-      showAlert('Error', 'Selected recipe could not be found. Please reselect it and try again.');
-      throw new Error(`logProductionRun: no menu item found for recipeId "${runData.recipeId}"`);
+    const plan = planProductionRun(runData, state, { newId: randomId, now: () => Date.now() });
+    if (plan.ok === false) {
+      showAlert(plan.error.title, plan.error.message);
+      throw new Error(plan.error.thrown);
     }
-
     const userId = auth.currentUser.uid;
-    const id = Math.random().toString(36).substr(2, 9);
-
-    // Firestore does not accept `undefined` — build object only with defined fields
-    let expiryDate = undefined;
-    if (recipeItem?.shelfLifeDays) {
-       const d = new Date(runData.date);
-       d.setDate(d.getDate() + recipeItem.shelfLifeDays);
-       expiryDate = d.toISOString().split('T')[0];
-    }
-    const yieldAmt = runData.quantityYield ?? runData.quantityProduced;
-    const run: Record<string, any> = {
-      id,
-      recipeId: runData.recipeId,
-      quantityProduced: runData.quantityProduced,
-      remainingQuantity: yieldAmt,
-      ...(expiryDate && { expiryDate }),
-      date: runData.date,
-      costTotal: runData.costTotal,
-      createdAt: Date.now(),
-    };
-    if (runData.quantityYield !== undefined) run.quantityYield = runData.quantityYield;
-    if (runData.notes) run.notes = runData.notes;
-    if (runData.productionSessionId) run.productionSessionId = runData.productionSessionId;
+    const recipeItem = state.menu.find(m => m.id === runData.recipeId)!;
 
     try {
+      // Deducted materials, added finished goods and the run record: all or nothing.
       const batch = writeBatch(db);
-
-      // 1. Deduct raw materials (added to batch, not committed yet)
-      const materialsAfter = await deductIngredients(userId, state.materials, recipeItem.recipe, runData.quantityProduced, batch);
-
-      // 2. Add finished goods — every production run adds to available stock.
-      const effectiveYield = runData.quantityYield ?? runData.quantityProduced;
-      const currentStock = recipeItem.finishedGoodsStock ?? 0;
-      batch.set(
-        doc(db, 'users', userId, 'menu', runData.recipeId),
-        { finishedGoodsStock: currentStock + effectiveYield },
-        { merge: true }
-      );
-
-      // 3. Persist the run record
-      batch.set(doc(db, 'users', userId, 'productionRuns', id), run);
-
+      addWritesToBatch(batch, userId, plan.writes);
       await batch.commit();
 
       if (!options?.silent) {
         showAlert('Production Run Logged', `Recorded ${runData.quantityProduced} unit(s) of ${recipeItem.name}. Raw materials deducted.`);
       }
-      return {
-        materials: materialsAfter,
-        menu: state.menu.map(m => (m.id === runData.recipeId ? { ...m, finishedGoodsStock: currentStock + effectiveYield } : m)),
-      };
+      return plan.state;
     } catch (err: any) {
       console.error('logProductionRun error:', err);
       showAlert('Error', `Failed to log production run: ${err?.message || 'Unknown error'}`);

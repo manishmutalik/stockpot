@@ -21,10 +21,11 @@
 import { auth, db, doc, setDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../types';
-import { stampFor } from '../utils/orderPricing';
 import { formatShortDate } from '../utils/localDate';
 import { holdsStock, isOpenPreorder } from '../utils/preorders';
-import { saleAmounts } from '../utils/profit';
+import { stampFor } from '../utils/orderPricing';
+import { planOrderGroup, planHandOver, planMarkPaid, paymentFields as planPaymentFields, randomId } from '../utils/plans';
+import { addWritesToBatch } from '../utils/plans/clientCommit';
 
 export function useOrderActions(
   menu: MenuItem[],
@@ -45,7 +46,7 @@ export function useOrderActions(
 ) {
   const todayDate = () => (options.today ? options.today() : new Date().toISOString().split('T')[0]);
   /** What to write to record how an order was paid, with the fee rate in force right now. */
-  const paymentFields = (method: PaymentMethod) => ({ paymentMethod: method, paymentFeeRate: paymentFeeRates[method] ?? 0 });
+  const paymentFields = (method: PaymentMethod) => planPaymentFields(method, paymentFeeRates);
 
   const describeLines = (lines: { menuItemId: string; quantity: number }[], items: MenuItem[]) =>
     lines.map(l => `${l.quantity} ${items.find(m => m.id === l.menuItemId)?.name ?? 'item'}`).join(', ');
@@ -99,101 +100,19 @@ export function useOrderActions(
   ) => {
     if (!auth.currentUser || lineItems.length === 0) return;
 
-    const badItem = lineItems.find(li => !menu.some(m => m.id === li.menuItemId));
-    if (badItem) {
-      showAlert('Error', 'One of the selected items could not be found. Please reselect it and try again.');
-      throw new Error(`addOrderGroup: no menu item found for menuItemId "${badItem.menuItemId}"`);
-    }
-
-    const preorder = common.preorder === true;
-    const requestedByItem = new Map<string, number>();
-    for (const li of lineItems) {
-      requestedByItem.set(li.menuItemId, (requestedByItem.get(li.menuItemId) ?? 0) + li.quantity);
-    }
-    // A pre-order takes no stock until it is handed over, so only an order from stock is capped.
-    if (!preorder) {
-      for (const [menuItemId, requested] of requestedByItem) {
-        const item = menu.find(m => m.id === menuItemId)!;
-        const available = item.finishedGoodsStock ?? 0;
-        if (requested > available) {
-          showAlert(
-            'Not Enough Stock',
-            `Only ${available} unit(s) of "${item.name}" in stock, but this order needs ${requested}. Log another production run to cover the rest.`
-          );
-          throw new Error(`addOrderGroup: insufficient stock for menuItemId "${menuItemId}" (requested ${requested}, available ${available})`);
-        }
-      }
-    }
-
     const userId = auth.currentUser.uid;
-    const today = todayDate();
-    const orderGroupId = lineItems.length > 1 ? Math.random().toString(36).substr(2, 9) : undefined;
-    const advance = preorder ? common.advance : undefined;
-
-    // What the new orders are, before they are written: the same stamps, so the total below is the one the bill will show.
-    const drafts = lineItems.map((item, index) => {
-      const id = Math.random().toString(36).substr(2, 9);
-      const order: Order = {
-        id,
-        menuItemId: item.menuItemId,
-        quantity: item.quantity,
-        date: common.date,
-        bookedOn: today,
-        // What the item sells for (or the agreed price) and costs now, kept on the order for good (see utils/orderPricing).
-        ...stampFor(menu.find(m => m.id === item.menuItemId)!, materials, item.unitPrice),
-        ...(common.customerName && { customerName: common.customerName }),
-        ...(common.customerPhone && { customerPhone: common.customerPhone }),
-        // Where it is going belongs to the whole order, so it is on every item of the group.
-        ...(common.deliveryAddress && { deliveryAddress: common.deliveryAddress }),
-        ...(orderGroupId && { orderGroupId }),
-        // A discount belongs to the whole order, so it goes on the first item only and is counted once.
-        ...(index === 0 && (common.discount ?? 0) > 0 && { discount: common.discount }),
-        ...(preorder && { preorder: true, stockClaimed: false }),
-        ...(preorder && common.dueSlot && { dueSlot: common.dueSlot }),
-        ...(preorder && common.notes && { notes: common.notes }),
-      };
-      return order;
+    const plan = planOrderGroup({
+      common, lineItems, menu, materials, feeRates: paymentFeeRates, gst: options.gst, today: todayDate(), ctx: { newId: randomId },
     });
-
-    // An advance is checked against what the customer owes, GST and discount included, before anything is written.
-    let advanceCoversAll = false;
-    if (advance) {
-      const owed = Math.round(saleAmounts(drafts, menu, options.gst ?? {}).customerPays * 100) / 100;
-      if (!(advance.amount > 0) || !Number.isFinite(advance.amount)) {
-        showAlert('Error', 'The advance must be more than nothing.');
-        throw new Error('addOrderGroup: advance must be positive');
-      }
-      if (advance.amount > owed + 0.005) {
-        showAlert('Error', `The advance (${advance.amount}) is more than the order comes to (${owed}). Please check it and try again.`);
-        throw new Error('addOrderGroup: advance exceeds the order total');
-      }
-      advanceCoversAll = advance.amount >= owed - 0.005;
+    if (plan.ok === false) {
+      showAlert(plan.error.title, plan.error.message);
+      throw new Error(plan.error.thrown);
     }
+    const { preorder, requestedByItem } = plan;
 
     try {
       const batch = writeBatch(db);
-      drafts.forEach((draft, index) => {
-        const order: Order = { ...draft };
-        // With an advance, whether the balance is still owed decides the payment status for the whole order.
-        const unpaid = advance ? !advanceCoversAll : common.paymentStatus === 'unpaid';
-        // Only "pay later" is stored; an order with no value counts as paid.
-        if (unpaid) order.paymentStatus = 'unpaid';
-        if (advance && index === 0) order.advance = { amount: advance.amount, method: advance.method, feeRate: paymentFeeRates[advance.method] ?? 0, date: today };
-        // How it was paid (a pay-later order has not been paid yet), with the fee rate in force now. An advance that
-        // covered everything was paid by its own method.
-        if (!unpaid) {
-          const method = advance ? advance.method : common.paymentMethod;
-          if (method) Object.assign(order, paymentFields(method));
-        }
-        batch.set(doc(db, 'users', userId, 'orders', order.id), order);
-      });
-      if (!preorder) {
-        for (const [menuItemId, requested] of requestedByItem) {
-          const item = menu.find(m => m.id === menuItemId)!;
-          const current = item.finishedGoodsStock ?? 0;
-          batch.set(doc(db, 'users', userId, 'menu', menuItemId), { finishedGoodsStock: current - requested }, { merge: true });
-        }
-      }
+      addWritesToBatch(batch, userId, plan.writes);
       await batch.commit();
       if (preorder) {
         const due = formatShortDate(common.date);
@@ -239,14 +158,19 @@ export function useOrderActions(
   const fulfillOrder = async (order: Order): Promise<boolean> => {
     if (!auth.currentUser) return false;
     const userId = auth.currentUser.uid;
-    const members = order.orderGroupId ? orders.filter(o => o.orderGroupId === order.orderGroupId) : [order];
-    const group = members.length > 0 ? members : [order];
+    const plan = planHandOver({ order, orders, menu, materials });
 
-    if (!group.some(o => o.preorder)) {
-      // An ordinary order: unchanged.
-      if (order.fulfilled) return false;
+    if (plan.kind === 'noop') return false;
+    if (plan.kind === 'error') {
+      showAlert(plan.title, plan.message);
+      return false;
+    }
+
+    if (!plan.atomic) {
+      // An ordinary order: one plain field write.
       try {
-        await setDoc(doc(db, 'users', userId, 'orders', order.id), { fulfilled: true }, { merge: true });
+        const w = plan.writes[0];
+        await setDoc(doc(db, 'users', userId, w.collection, w.id), w.data, { merge: true });
         return true;
       } catch (err) {
         handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${order.id}`);
@@ -254,45 +178,9 @@ export function useOrderActions(
       }
     }
 
-    if (group.some(o => o.cancelledOn)) {
-      showAlert('Cancelled', 'This pre-order was cancelled, so it cannot be handed over.');
-      return false;
-    }
-    const toHandOver = group.filter(o => !o.fulfilled);
-    if (toHandOver.length === 0) return false;
-
-    const requestedByItem = new Map<string, number>();
-    for (const o of toHandOver) requestedByItem.set(o.menuItemId, (requestedByItem.get(o.menuItemId) ?? 0) + o.quantity);
-    for (const [menuItemId, requested] of requestedByItem) {
-      const item = menu.find(m => m.id === menuItemId);
-      const available = item?.finishedGoodsStock ?? 0;
-      if (!item || requested > available) {
-        showAlert(
-          'Not Enough Stock',
-          `Only ${available} unit(s) of "${item?.name ?? 'this item'}" in stock, but this pre-order needs ${requested}. Log a production run first.`
-        );
-        return false;
-      }
-    }
-
     try {
       const batch = writeBatch(db);
-      for (const o of toHandOver) {
-        const item = menu.find(m => m.id === o.menuItemId)!;
-        const costs = stampFor(item, materials);
-        batch.set(doc(db, 'users', userId, 'orders', o.id), {
-          stockClaimed: true,
-          fulfilled: true,
-          // The costs are those of today, when it was made; the booked price and name stay as they were.
-          unitIngredientCostAtSale: costs.unitIngredientCostAtSale,
-          unitPackagingCostAtSale: costs.unitPackagingCostAtSale,
-          unitInputGstAtSale: costs.unitInputGstAtSale,
-        }, { merge: true });
-      }
-      for (const [menuItemId, requested] of requestedByItem) {
-        const item = menu.find(m => m.id === menuItemId)!;
-        batch.set(doc(db, 'users', userId, 'menu', menuItemId), { finishedGoodsStock: (item.finishedGoodsStock ?? 0) - requested }, { merge: true });
-      }
+      addWritesToBatch(batch, userId, plan.writes);
       await batch.commit();
       return true;
     } catch (err) {
@@ -360,12 +248,7 @@ export function useOrderActions(
     const userId = auth.currentUser.uid;
     try {
       const batch = writeBatch(db);
-      for (const id of ids) {
-        batch.set(doc(db, 'users', userId, 'orders', id), {
-          paymentStatus: paid ? 'paid' : 'unpaid',
-          ...(paid && method && paymentFields(method)),
-        }, { merge: true });
-      }
+      addWritesToBatch(batch, userId, planMarkPaid({ ids, paid, method, feeRates: paymentFeeRates }));
       await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders`);

@@ -18,7 +18,8 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { apiFetch } from '../utils/apiClient';
 import { RawMaterial, MenuItem } from '../types';
 import { newPriceLogEntry } from '../utils/priceLog';
-import { convertAmount } from '../utils/conversions';
+import { planRestock } from '../utils/plans';
+import { addWritesToBatch } from '../utils/plans/clientCommit';
 // Type-only: erased at build time, so the search functions themselves
 // (axios calls, USDA_API_KEY) never end up in the client bundle.
 import type { NutritionSearchResult } from '../../lib/nutritionSearch';
@@ -298,36 +299,19 @@ export function useInventoryActions(
     e.preventDefault();
     if (!restockMaterial || !auth.currentUser || !restockQty || !restockBaseTotal) return;
     try {
-      const baseTotal = Number(restockBaseTotal);
-      // The quantity may be typed in another unit of the same kind (500 g for an item kept in kg); stock and
-      // cost are always held in the material's own unit, so it is converted here, and the price paid then
-      // works out per that unit (520 for 500 g is 1,040 a kg).
-      const materialUnit = restockMaterial.unit || 'g';
-      const qty = Math.round(convertAmount(Number(restockQty), restockQtyUnit || materialUnit, materialUnit) * 1e6) / 1e6;
-      if (!(qty > 0)) return;
-
-      const newStock = (restockMaterial.initialStock || 0) + qty;
-      const oldTotalValue = (restockMaterial.initialStock || 0) * (restockMaterial.costPerUnit || 0);
-      const newMAC = newStock > 0 ? (oldTotalValue + baseTotal) / newStock : 0;
-
-      const userId = auth.currentUser.uid;
-      const restockUpdate: Record<string, any> = {
-        initialStock: newStock,
-        // Keep real precision: costs are per gram or ml (e.g. 0.045), so rounding to 2 decimals
-        // would shift them by 10% or more (0.045 -> 0.04) and distort every recipe cost.
-        costPerUnit: parseFloat(newMAC.toFixed(6))
-      };
-      if (restockExpiryDate) {
-        restockUpdate.expiryDate = restockExpiryDate;
-      }
-      // The material and its price-log entry are written together, so a restock is never half recorded.
-      const entry = newPriceLogEntry({
-        materialId: restockMaterial.id, unit: restockMaterial.unit || 'g',
-        unitCost: baseTotal / qty, quantity: qty, macAfter: restockUpdate.costPerUnit, source: 'restock',
+      const plan = planRestock({
+        material: restockMaterial,
+        quantity: Number(restockQty),
+        quantityUnit: restockQtyUnit || undefined,
+        total: Number(restockBaseTotal),
+        expiryDate: restockExpiryDate || undefined,
+        ctx: { newId: () => Math.random().toString(36).slice(2, 11), now: () => Date.now() },
       });
+      if (plan.ok === false) return;
+
+      // The material and its price-log entry are written together, so a restock is never half recorded.
       const batch = writeBatch(db);
-      batch.set(doc(db, 'users', userId, 'materials', restockMaterial.id), restockUpdate, { merge: true });
-      batch.set(doc(db, 'users', userId, 'priceLog', entry.id), entry);
+      addWritesToBatch(batch, auth.currentUser.uid, plan.writes);
       await batch.commit();
 
       closeRestock();

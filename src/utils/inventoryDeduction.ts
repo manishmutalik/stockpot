@@ -35,6 +35,28 @@ export async function deductIngredients(
   multiplier: number,
   batch?: ReturnType<typeof writeBatch>
 ): Promise<RawMaterial[]> {
+  const plan = planIngredientDeduction(materials, recipe, multiplier);
+  for (const { materialId, stock } of plan.updates) {
+    const matRef = doc(db, 'users', userId, 'materials', materialId);
+    if (batch) {
+      batch.set(matRef, { initialStock: stock }, { merge: true });
+    } else {
+      await setDoc(matRef, { initialStock: stock }, { merge: true });
+    }
+  }
+  return plan.materials;
+}
+
+/**
+ * The same deduction worked out without writing anything: the new stock of each
+ * material the recipe uses, and the materials as they stand afterwards. Shared
+ * by `deductIngredients` (the browser) and the production plan (also the server).
+ */
+export function planIngredientDeduction(
+  materials: RawMaterial[],
+  recipe: { materialId: string; amount: number; unit: string }[],
+  multiplier: number
+): { updates: { materialId: string; stock: number }[]; materials: RawMaterial[] } {
   const totals = new Map<string, number>();
   for (const req of recipe) {
     const mat = materials.find(m => m.id === req.materialId);
@@ -42,17 +64,11 @@ export async function deductIngredients(
     totals.set(mat.id, (totals.get(mat.id) ?? 0) + convertAmount(req.amount, req.unit || 'g', mat.unit) * multiplier);
   }
 
-  const newStocks = new Map<string, number>();
+  const updates: { materialId: string; stock: number }[] = [];
   for (const [materialId, totalDeduction] of totals) {
     const mat = materials.find(m => m.id === materialId)!;
-    const newStock = parseFloat((mat.initialStock - totalDeduction).toFixed(4));
-    newStocks.set(materialId, newStock);
-    const matRef = doc(db, 'users', userId, 'materials', materialId);
-    if (batch) {
-      batch.set(matRef, { initialStock: newStock }, { merge: true });
-    } else {
-      await setDoc(matRef, { initialStock: newStock }, { merge: true });
-    }
+    updates.push({ materialId, stock: parseFloat((mat.initialStock - totalDeduction).toFixed(4)) });
   }
-  return materials.map(m => (newStocks.has(m.id) ? { ...m, initialStock: newStocks.get(m.id)! } : m));
+  const byId = new Map(updates.map(u => [u.materialId, u.stock]));
+  return { updates, materials: materials.map(m => (byId.has(m.id) ? { ...m, initialStock: byId.get(m.id)! } : m)) };
 }
