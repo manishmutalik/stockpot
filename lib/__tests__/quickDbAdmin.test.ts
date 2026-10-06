@@ -6,18 +6,29 @@ const calls: string[] = [];
 const ref = (path: string) => ({ path });
 const snapOf = (path: string) => ({ exists: store.has(path), id: path.split('/').pop()!, data: () => store.get(path) });
 
-const userCollection = (uidPath: string) => (name: string) => ({
-  doc: (id: string) => ref(`${uidPath}/${name}/${id}`),
-  where: (field: string, _op: string, value: unknown) => ({ q: { collection: `${uidPath}/${name}`, field, value } }),
+type Filter = { field: string; op: string; value: unknown };
+const query = (collection: string, filters: Filter[] = []) => ({
+  q: { collection, filters },
+  where: (field: string, op: string, value: unknown) => query(collection, [...filters, { field, op, value }]),
 });
+const userCollection = (uidPath: string) => (name: string) => ({
+  col: `${uidPath}/${name}`,
+  doc: (id: string) => ref(`${uidPath}/${name}/${id}`),
+  where: (field: string, op: string, value: unknown) => query(`${uidPath}/${name}`, [{ field, op, value }]),
+});
+const matches = (d: any, f: Filter) => (f.op === '==' ? d[f.field] === f.value : f.op === '>=' ? d[f.field] >= (f.value as any) : f.op === '<=' ? d[f.field] <= (f.value as any) : false);
 const firestore = {
   collection: (c: string) => ({ doc: (uid: string) => ({ collection: userCollection(`${c}/${uid}`) }) }),
   runTransaction: async (fn: (t: any) => Promise<any>) => fn({
     get: async (target: any) => {
       if (target.q) {
         calls.push('query');
-        const docs = [...store].filter(([p, d]) => p.startsWith(`${target.q.collection}/`) && d[target.q.field] === target.q.value).map(([p]) => snapOf(p));
+        const docs = [...store].filter(([p, d]) => p.startsWith(`${target.q.collection}/`) && target.q.filters.every((f: Filter) => matches(d, f))).map(([p]) => snapOf(p));
         return { docs };
+      }
+      if (target.col) {
+        calls.push('readCollection');
+        return { docs: [...store].filter(([p]) => p.startsWith(`${target.col}/`)).map(([p]) => snapOf(p)) };
       }
       calls.push(`read ${target.path}`);
       return snapOf(target.path);
@@ -75,6 +86,18 @@ describe('createAdminQuickDb', () => {
     const db = createAdminQuickDb(() => NOW);
     await expect(db.run('u1', async tx => { tx.apply([{ collection: 'orders', id: 'o1', data: {}, merge: false }]); throw new Error('boom'); })).rejects.toThrow('boom');
     expect(store.size).toBe(0);
+  });
+
+  it('finds documents within a range, inclusive, and reads a whole collection', async () => {
+    store.set('users/u1/productionRuns/a', { expiryDate: '2026-10-01' });
+    store.set('users/u1/productionRuns/b', { expiryDate: '2026-10-06' });
+    store.set('users/u1/productionRuns/c', { expiryDate: '2026-10-09' });
+    store.set('users/u2/productionRuns/d', { expiryDate: '2026-10-06' });
+    const db = createAdminQuickDb(() => NOW);
+    await db.run('u1', async tx => {
+      expect((await tx.range('productionRuns', 'expiryDate', '2026-10-02', '2026-10-09')).map(d => d.id).sort()).toEqual(['b', 'c']);
+      expect((await tx.all('productionRuns')).map(d => d.id).sort()).toEqual(['a', 'b', 'c']); // never u2's
+    });
   });
 
   it('finds documents by a field', async () => {

@@ -10,7 +10,8 @@ import { saveCredentials, getCredentials, deleteCredentials } from "./lib/integr
 import { readRazorpayConfig, createRazorpayApi } from "./lib/razorpay";
 import { setBillingInfo, getBillingInfo, findUidByRazorpaySubscriptionId, hasActiveAccess } from "./lib/subscriptionStore";
 import { createAdminQuickDb } from "./lib/quickDb";
-import { createAccessGate, createQuickOrderHandler, createQuickRestockHandler, createQuickProductionHandler, createQuickHandOverHandler, createQuickPaymentHandler } from "./lib/quickRoutes";
+import { createAccessGate, createQuickOrderHandler, createQuickRestockHandler, createQuickProductionHandler, createQuickHandOverHandler, createQuickPaymentHandler, createQuickTodayHandler, createQuickUpcomingHandler,
+  createQuickPushTokenHandler, createQuickNotificationSettingsGetHandler, createQuickNotificationSettingsPutHandler } from "./lib/quickRoutes";
 import { randomId } from "./src/utils/plans";
 import {
   paywallApplies, createBillingStatusHandler, createSubscriptionHandler, createVerifyPaymentHandler, createCancelHandler, createWebhookHandler,
@@ -150,6 +151,11 @@ async function startServer() {
   api.post("/mobile/production-runs", quickGate, createQuickProductionHandler(quickDeps));
   api.post("/mobile/orders/:id/hand-over", quickGate, createQuickHandOverHandler(quickDeps));
   api.post("/mobile/payments", quickGate, createQuickPaymentHandler(quickDeps));
+  api.get("/mobile/today", quickGate, createQuickTodayHandler(quickDeps));
+  api.get("/mobile/upcoming", quickGate, createQuickUpcomingHandler(quickDeps));
+  api.post("/mobile/push-token", quickGate, createQuickPushTokenHandler(quickDeps));
+  api.get("/mobile/notification-settings", quickGate, createQuickNotificationSettingsGetHandler(quickDeps));
+  api.put("/mobile/notification-settings", quickGate, createQuickNotificationSettingsPutHandler(quickDeps));
 
   // --- Shopify OAuth Routes ---
 
