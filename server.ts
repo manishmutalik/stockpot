@@ -22,6 +22,7 @@ import { createBriefingHandler } from "./lib/briefingRoutes";
 import { createChatHandler } from "./lib/chatRoutes";
 import { createChatModel } from "./lib/chatModel";
 import { createOrderParseHandler } from "./lib/orderParseRoutes";
+import { createQuickParseHandler } from "./lib/quickParseRoutes";
 import { createOrderParseModel } from "./lib/orderParseModel";
 import { createProductionParseHandler } from "./lib/productionParseRoutes";
 import { createProductionParseModel } from "./lib/productionParseModel";
@@ -146,6 +147,7 @@ async function startServer() {
     paywall: account => paywallApplies(account),
     hasActiveAccess: async uid => hasActiveAccess((await getBillingInfo(uid)).status),
   });
+  api.post("/mobile/parse", quickGate, createQuickParseHandler({ ...aiGuardDeps, db: quickDeps.db, now: quickDeps.now, orderModel: createOrderParseModel() }));
   api.post("/mobile/orders", quickGate, createQuickOrderHandler(quickDeps));
   api.post("/mobile/restocks", quickGate, createQuickRestockHandler(quickDeps));
   api.post("/mobile/production-runs", quickGate, createQuickProductionHandler(quickDeps));

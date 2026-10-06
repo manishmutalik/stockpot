@@ -275,8 +275,12 @@ Nothing is queued. The AI list in the handoff is complete.
   **Build progress:** Phase 1 (shared plan functions) is done: the write logic of Add Order, hand over, Mark paid,
   Restock and Log Production Run now lives in `src/utils/plans/` (pure, no Firebase). The web hooks commit exactly
   what a plan says (`src/hooks/__tests__/plansParity.test.ts` proves it) and the phone app's server will commit the
-  same plans inside Firestore transactions. Next: the server API (`/api/mobile/*`), the notifications job, then the
-  Expo app in `mobile/`.
+  same plans inside Firestore transactions. Phase 2 (server API `/api/mobile/*`) so far: save endpoints for orders,
+  restocks, production runs, hand-over and payments; Today and Upcoming data; push token and notification settings
+  (`lib/quickRoutes.ts`, `src/utils/quickViews.ts`); and `POST /api/mobile/parse` for **orders** (`lib/quickParseRoutes.ts`,
+  `src/utils/quickParse.ts`: kind detection, questions, answers applied in code, preview figures from the same plan the
+  save runs). Still to build: the restock, payment and production readers in `parse`, then the notifications job, then
+  the Expo app in `mobile/`. Not tested against a real Firestore or a real model.
 
 - **Razorpay is built and tested only against mocks.** The account was under review, so
   nothing has run against Razorpay itself yet. When it is live the owner posts the Test Mode
