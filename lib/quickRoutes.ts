@@ -427,28 +427,31 @@ function readHandler(deps: QuickRouteDeps, load: (tx: QuickTx, ctx: { today: str
 
 const merge = (...lists: QuickDoc[][]) => [...new Map(lists.flat().map(d => [d.id, d])).values()];
 
+/** What the Today screen shows, read inside the caller's transaction. Also what the notification job summarises, so they cannot disagree. */
+export async function loadTodayView(tx: QuickTx, { today, settings }: { today: string; settings: Partial<BakerySettings> & { currency?: { code: string; symbol: string } } }) {
+  const [dated, cancelled, unpaid, preorders, menu, materials, experiments, wastageLogs, productionRuns] = await Promise.all([
+    tx.where('orders', 'date', today),
+    tx.where('orders', 'cancelledOn', today),
+    tx.where('orders', 'paymentStatus', 'unpaid'),
+    tx.where('orders', 'preorder', true),
+    tx.all('menu'),
+    tx.all('materials'),
+    tx.all('experiments'),
+    tx.where('wastageLogs', 'date', today),
+    // Batches whose use-by date is near or recently passed.
+    tx.range('productionRuns', 'expiryDate', addDays(today, -30), addDays(today, USE_BY_SOON_DAYS)),
+  ]);
+  return buildToday({
+    today, settings, currency: currencyOf(settings),
+    orders: merge(dated, cancelled, unpaid, preorders) as unknown as Order[],
+    menu: menu as unknown as MenuItem[], materials: materials as unknown as RawMaterial[],
+    experiments: experiments as any, wastageLogs: wastageLogs as any, productionRuns: productionRuns as any,
+  });
+}
+
 /** The Today screen: what needs attention, in order, and today's takings. */
 export function createQuickTodayHandler(deps: QuickRouteDeps) {
-  return readHandler(deps, async (tx, { today, settings }) => {
-    const [dated, cancelled, unpaid, preorders, menu, materials, experiments, wastageLogs, productionRuns] = await Promise.all([
-      tx.where('orders', 'date', today),
-      tx.where('orders', 'cancelledOn', today),
-      tx.where('orders', 'paymentStatus', 'unpaid'),
-      tx.where('orders', 'preorder', true),
-      tx.all('menu'),
-      tx.all('materials'),
-      tx.all('experiments'),
-      tx.where('wastageLogs', 'date', today),
-      // Batches whose use-by date is near or recently passed.
-      tx.range('productionRuns', 'expiryDate', addDays(today, -30), addDays(today, USE_BY_SOON_DAYS)),
-    ]);
-    return buildToday({
-      today, settings, currency: currencyOf(settings),
-      orders: merge(dated, cancelled, unpaid, preorders) as unknown as Order[],
-      menu: menu as unknown as MenuItem[], materials: materials as unknown as RawMaterial[],
-      experiments: experiments as any, wastageLogs: wastageLogs as any, productionRuns: productionRuns as any,
-    });
-  });
+  return readHandler(deps, (tx, ctx) => loadTodayView(tx, ctx));
 }
 
 /** The Upcoming screen: open pre-orders, overdue ones apart, soonest first. */

@@ -281,8 +281,9 @@ Nothing is queued. The AI list in the handoff is complete.
   `src/utils/quickParse.ts`: kind detection, questions, answers applied in code, preview figures from the same plan the
   save runs), now for all four kinds: orders, stock bought (`restockParse.ts`), something made and a payment
   (`paymentParse.ts`, `quickPayments.ts`; readers' prompts and models in `lib/quickReaders.ts`). Voice reading has its
-  own limit, 60 a day (`AI_QUICK_DAILY_LIMIT`); the demo kitchen's mic stays and shows an alert. Still to build: the
-  notifications job, then the Expo app in `mobile/`. Not tested against a real Firestore or a real model.
+  own limit, 60 a day (`AI_QUICK_DAILY_LIMIT`); the demo kitchen's mic stays and shows an alert. The notifications job is built
+  (`POST /api/internal/notifications/run`, needs `NOTIFICATIONS_CRON_SECRET` and a Render Cron Job every 15 minutes;
+  see README). Still to build: the Expo app in `mobile/`. Not tested against a real Firestore or a real model.
 
 - **Razorpay is built and tested only against mocks.** The account was under review, so
   nothing has run against Razorpay itself yet. When it is live the owner posts the Test Mode

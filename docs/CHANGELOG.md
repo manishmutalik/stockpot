@@ -1,5 +1,17 @@
 # Changelog
 
+## Stockpot Quick: the notifications job (server)
+
+A scheduled job sends the phone app's notifications through Expo: a morning summary at the owner's chosen time
+(orders due, payments pending, running low, use by soon), a running-low notice when a material newly drops below
+its alert level, a use-by notice for materials and finished batches within two days of their date, and an optional
+evening reminder of tomorrow's pre-orders. It respects each owner's switches and time zone, sends at most one of
+each kind per day, never at night for stock and use-by, and says nothing when there is nothing to say. Two runs
+overlapping cannot send the same thing twice; a notification no phone accepted is retried on the next run; a phone
+that has uninstalled the app is switched off. It is triggered by calling `POST /api/internal/notifications/run`
+with a shared secret every 15 minutes (a Render Cron Job; setup in the README) and is off until
+`NOTIFICATIONS_CRON_SECRET` is set. Not yet used by any screen.
+
 ## Stockpot Quick: reading an order from what the owner said (server)
 
 `POST /api/mobile/parse` reads a typed or spoken order into a draft the phone app can confirm, and the
