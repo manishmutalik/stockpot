@@ -14,6 +14,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     // Security-rules tests need the Firestore emulator; see `npm run test:rules`.
-    exclude: [...configDefaults.exclude, 'test/rules/**'],
+    // The phone app (mobile/) has its own dependencies and its own config; its tests run in the `mobile` CI job.
+    exclude: [...configDefaults.exclude, 'test/rules/**', 'mobile/**'],
   },
 });

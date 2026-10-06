@@ -175,9 +175,10 @@ A few things are worth knowing about if you're picking up this codebase:
   content should be reviewed by a lawyer before you charge real customers —
   requirements vary significantly by where your business and customers are
   located (e.g. GDPR, CCPA).
-- **`bakery-mobile/`** (a separate Expo/React Native app) currently lives
-  inside this repo as a plain subfolder rather than a proper monorepo
-  workspace or its own repository.
+- **`mobile/`** (Stockpot Quick, the phone companion app: Expo/React Native)
+  lives inside this repo as a plain subfolder with its own `package.json`
+  rather than a proper monorepo workspace; see `mobile/README.md`. **`bakery-mobile/`**
+  is an older unused prototype, left alone until the new app ships.
 
 ## Design notes
 
