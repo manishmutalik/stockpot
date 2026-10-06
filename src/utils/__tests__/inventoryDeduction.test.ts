@@ -71,4 +71,42 @@ describe('deductIngredients', () => {
     expect(setDoc).not.toHaveBeenCalled();
     expect(batchSet).toHaveBeenCalledTimes(1);
   });
+
+  describe('when the same material is used more than once', () => {
+    it('deducts a material listed on two lines of one recipe by the total, written once', async () => {
+      const batchSet = vi.fn();
+      const recipe = [
+        { materialId: 'sugar', amount: 50, unit: 'g' },
+        { materialId: 'sugar', amount: 20, unit: 'g' },
+      ];
+
+      await deductIngredients('user1', materials, recipe, 2, { set: batchSet } as any);
+
+      expect(batchSet).toHaveBeenCalledTimes(1);
+      expect(batchSet.mock.calls[0][1].initialStock).toBeCloseTo(360); // 500 - (50 + 20) * 2
+    });
+
+    it('returns the materials as they stand afterwards, so the next recipe starts from there', async () => {
+      const batchSet = vi.fn();
+      const first = await deductIngredients('user1', materials, [{ materialId: 'sugar', amount: 100, unit: 'g' }], 2, { set: batchSet } as any);
+      expect(first.find(m => m.id === 'sugar')!.initialStock).toBeCloseTo(300);
+      expect(first.find(m => m.id === 'flour')!.initialStock).toBe(10); // untouched
+      expect(materials.find(m => m.id === 'sugar')!.initialStock).toBe(500); // the input is not changed
+
+      await deductIngredients('user1', first, [{ materialId: 'sugar', amount: 50, unit: 'g' }], 2, { set: batchSet } as any);
+      expect(batchSet.mock.calls[1][1].initialStock).toBeCloseTo(200); // 500 - 200 - 100, not 500 - 100
+    });
+
+    it('returns the materials unchanged when nothing matched', async () => {
+      const out = await deductIngredients('user1', materials, [{ materialId: 'nope', amount: 1, unit: 'g' }], 1);
+      expect(out).toEqual(materials);
+    });
+  });
+
+  it('writes only the stock, never a copy of the rest of the material', async () => {
+    const batchSet = vi.fn();
+    await deductIngredients('user1', materials, [{ materialId: 'sugar', amount: 50, unit: 'g' }], 1, { set: batchSet } as any);
+    expect(batchSet.mock.calls[0][1]).toEqual({ initialStock: 450 });
+    expect(batchSet.mock.calls[0][2]).toEqual({ merge: true });
+  });
 });

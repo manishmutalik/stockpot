@@ -1,5 +1,21 @@
 # Changelog
 
+## Fix: ingredient and item stock when several items are logged or deleted together
+
+When one "Log Production Run" had two items that use the same ingredient (say flour in both a
+croissant and a sourdough), only the last item's use of that ingredient was taken off. Flour at
+1,000 g with 200 g and 100 g used came out at 900 g instead of 700 g. The same happened to the
+finished stock of an item entered twice in one session, to an ingredient listed twice in one
+recipe, and in reverse when a whole session was deleted (too little was given back).
+
+Each step now starts from the stock the previous one left, and an ingredient used more than once
+is deducted by the total. Only the stock figure is written, not a copy of the whole ingredient, so
+an older cost can no longer be put back by mistake.
+
+**Worth checking:** sessions logged before this fix with a shared ingredient took off too little of
+it, so those ingredients' stock may read higher than what is on the shelf. A stock count, then a
+correction in Inventory, puts them right.
+
 ## The paywall is now switched on from the server
 
 The paywall used to be bypassed by a constant in `src/App.tsx`, so a new sign-up went straight into

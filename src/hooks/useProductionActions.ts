@@ -20,6 +20,14 @@ import { deductIngredients } from '../utils/inventoryDeduction';
 import { MenuItem, RawMaterial, Order } from '../types';
 import { ProductionRun, ProductionPurpose } from '../components/ProductionRunModal';
 
+/**
+ * The stock the next step of a multi-step save must start from. Logging or deleting several runs in one
+ * sitting must hand each step the result of the one before it: every step reads the materials and menu
+ * stock it was given, so steps that all started from the same copy would each overwrite the last one's
+ * change to an ingredient (or an item) they share.
+ */
+type Working = { materials: RawMaterial[]; menu: MenuItem[] };
+
 export function useProductionActions(
   menu: MenuItem[],
   materials: RawMaterial[],
@@ -36,17 +44,18 @@ export function useProductionActions(
    *     etc.) is decided later, when it's consumed from stock.
    *  3. Writes the run document to `users/{userId}/productionRuns/{id}`.
    */
-  const logProductionRun = async (
+  const recordRun = async (
     runData: Omit<ProductionRun, 'id' | 'createdAt' | 'purpose'>,
+    state: Working,
     options?: { silent?: boolean } // silent: true skips the success alert (used by logProductionRunSession for multi-item sessions, which shows one consolidated alert instead of one per item)
-  ) => {
-    if (!auth.currentUser) return;
+  ): Promise<Working> => {
+    if (!auth.currentUser) return state;
 
     // The selected recipe must exist in the current menu — a stale/unknown id
     // (e.g. a UI default picked before the real menu loaded) would otherwise
     // silently create a nameless phantom `menu/{recipeId}` doc and a dangling
     // Order, both of which render with a blank item name.
-    const recipeItem = menu.find(m => m.id === runData.recipeId);
+    const recipeItem = state.menu.find(m => m.id === runData.recipeId);
     if (!recipeItem) {
       showAlert('Error', 'Selected recipe could not be found. Please reselect it and try again.');
       throw new Error(`logProductionRun: no menu item found for recipeId "${runData.recipeId}"`);
@@ -81,7 +90,7 @@ export function useProductionActions(
       const batch = writeBatch(db);
 
       // 1. Deduct raw materials (added to batch, not committed yet)
-      await deductIngredients(userId, materials, recipeItem.recipe, runData.quantityProduced, batch);
+      const materialsAfter = await deductIngredients(userId, state.materials, recipeItem.recipe, runData.quantityProduced, batch);
 
       // 2. Add finished goods — every production run adds to available stock.
       const effectiveYield = runData.quantityYield ?? runData.quantityProduced;
@@ -100,11 +109,22 @@ export function useProductionActions(
       if (!options?.silent) {
         showAlert('Production Run Logged', `Recorded ${runData.quantityProduced} unit(s) of ${recipeItem.name}. Raw materials deducted.`);
       }
+      return {
+        materials: materialsAfter,
+        menu: state.menu.map(m => (m.id === runData.recipeId ? { ...m, finishedGoodsStock: currentStock + effectiveYield } : m)),
+      };
     } catch (err: any) {
       console.error('logProductionRun error:', err);
       showAlert('Error', `Failed to log production run: ${err?.message || 'Unknown error'}`);
       throw err; // re-throw so modal catch block handles isSaving reset
     }
+  };
+
+  const logProductionRun = async (
+    runData: Omit<ProductionRun, 'id' | 'createdAt' | 'purpose'>,
+    options?: { silent?: boolean }
+  ) => {
+    await recordRun(runData, { materials, menu }, options);
   };
 
   /**
@@ -154,10 +174,14 @@ export function useProductionActions(
     const isSession = rows.length > 1 || !!existingSessionId;
     const sessionId = isSession ? (existingSessionId || Math.random().toString(36).substr(2, 9)) : undefined;
 
+    // Each row starts from the stock the previous row left, so two items that share an ingredient (or the
+    // same item entered twice) add up instead of the later row overwriting the earlier one.
+    let working: Working = { materials, menu };
     for (let i = 0; i < rows.length; i++) {
       try {
-        await logProductionRun(
+        working = await recordRun(
           { ...rows[i], ...(sessionId && { productionSessionId: sessionId }) },
+          working,
           { silent: isSession }
         );
       } catch {
@@ -195,58 +219,75 @@ export function useProductionActions(
    *     would leave an orphaned, already-fulfilled order behind with
    *     nothing backing it.
    */
+  const removeRun = async (
+    runId: string,
+    state: Working,
+    options?: { silent?: boolean }
+  ): Promise<Working> => {
+    if (!auth.currentUser) return state;
+    const userId = auth.currentUser.uid;
+    const run = productionRuns.find(r => r.id === runId);
+    if (!run) return state;
+
+    try {
+      const batch = writeBatch(db);
+      let after = state;
+
+      const item = state.menu.find(m => m.id === run.recipeId);
+      if (item) {
+        const materialsAfter = await deductIngredients(userId, state.materials, item.recipe, -run.quantityProduced, batch);
+        after = { ...after, materials: materialsAfter };
+
+        const addedStockAtCreation = !run.purpose || LEGACY_STOCK_PURPOSES.includes(run.purpose);
+        if (addedStockAtCreation) {
+          const effectiveYield = run.quantityYield ?? run.quantityProduced;
+          const currentStock = item.finishedGoodsStock ?? 0;
+          const stockAfter = Math.max(0, currentStock - effectiveYield);
+          batch.set(
+            doc(db, 'users', userId, 'menu', run.recipeId),
+            { finishedGoodsStock: stockAfter },
+            { merge: true }
+          );
+          after = { ...after, menu: after.menu.map(m => (m.id === run.recipeId ? { ...m, finishedGoodsStock: stockAfter } : m)) };
+        }
+      }
+
+      batch.delete(doc(db, 'users', userId, 'productionRuns', runId));
+
+      // A linked order here is always one of the old auto-created
+      // "customer order" orders (see logProductionRun's history) — it
+      // never claimed stock on its own the way addOrderGroup does today,
+      // since it was created pre-fulfilled and the run's own addition
+      // above already accounts for the full quantity. So this is a plain
+      // delete, not deleteOrder(): restoring stock for it too would
+      // over-credit by quantity it never actually held.
+      const linkedOrder = orders.find(o => o.productionRunId === runId);
+      if (linkedOrder) {
+        batch.delete(doc(db, 'users', userId, 'orders', linkedOrder.id));
+      }
+
+      await batch.commit();
+
+      if (!options?.silent) {
+        showAlert('Success', 'Production run deleted and inventory restored.');
+      }
+      return after;
+    } catch (err: any) {
+      console.error('deleteProductionRun error:', err);
+      showAlert('Error', `Failed to delete production run: ${err?.message || 'Unknown error'}`);
+      return state;
+    }
+  };
+
   const deleteProductionRun = async (
     runId: string,
     options?: { skipConfirm?: boolean; silent?: boolean } // used by deleteProductionRunSession to bulk-delete a session with one confirm and one summary alert instead of one per run
   ) => {
     if (!auth.currentUser) return;
-    const userId = auth.currentUser.uid;
-    const run = productionRuns.find(r => r.id === runId);
-    if (!run) return;
+    if (!productionRuns.some(r => r.id === runId)) return;
 
     if (options?.skipConfirm || window.confirm('Are you sure you want to delete this production run? This will restore raw materials and deduct finished goods stock.')) {
-      try {
-        const batch = writeBatch(db);
-
-        const item = menu.find(m => m.id === run.recipeId);
-        if (item) {
-          await deductIngredients(userId, materials, item.recipe, -run.quantityProduced, batch);
-
-          const addedStockAtCreation = !run.purpose || LEGACY_STOCK_PURPOSES.includes(run.purpose);
-          if (addedStockAtCreation) {
-            const effectiveYield = run.quantityYield ?? run.quantityProduced;
-            const currentStock = item.finishedGoodsStock ?? 0;
-            batch.set(
-              doc(db, 'users', userId, 'menu', run.recipeId),
-              { finishedGoodsStock: Math.max(0, currentStock - effectiveYield) },
-              { merge: true }
-            );
-          }
-        }
-
-        batch.delete(doc(db, 'users', userId, 'productionRuns', runId));
-
-        // A linked order here is always one of the old auto-created
-        // "customer order" orders (see logProductionRun's history) — it
-        // never claimed stock on its own the way addOrderGroup does today,
-        // since it was created pre-fulfilled and the run's own addition
-        // above already accounts for the full quantity. So this is a plain
-        // delete, not deleteOrder(): restoring stock for it too would
-        // over-credit by quantity it never actually held.
-        const linkedOrder = orders.find(o => o.productionRunId === runId);
-        if (linkedOrder) {
-          batch.delete(doc(db, 'users', userId, 'orders', linkedOrder.id));
-        }
-
-        await batch.commit();
-
-        if (!options?.silent) {
-          showAlert('Success', 'Production run deleted and inventory restored.');
-        }
-      } catch (err: any) {
-        console.error('deleteProductionRun error:', err);
-        showAlert('Error', `Failed to delete production run: ${err?.message || 'Unknown error'}`);
-      }
+      await removeRun(runId, { materials, menu }, options);
     }
   };
 
@@ -266,8 +307,11 @@ export function useProductionActions(
       return;
     }
 
+    // Each run starts from the stock the previous one left (see Working), so runs that share an
+    // ingredient, or are of the same item, each restore on top of the last instead of replacing it.
+    let working: Working = { materials, menu };
     for (const run of sessionRuns) {
-      await deleteProductionRun(run.id, { skipConfirm: true, silent: true });
+      working = await removeRun(run.id, working, { silent: true });
     }
 
     showAlert('Success', `Deleted ${sessionRuns.length} item(s) and restored inventory.`);

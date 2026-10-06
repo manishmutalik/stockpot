@@ -18,6 +18,15 @@ import { RawMaterial } from '../types';
  * @param multiplier Number of units produced (positive) or reversed (negative).
  * @param batch      Optional WriteBatch to add operations to for atomic commits.
  *                   When omitted, writes are executed immediately.
+ * @returns          The materials as they stand after this deduction. A caller that goes on to
+ *                   deduct for another recipe in the same sitting must pass THIS array on, not the
+ *                   one it started with: two recipes that share an ingredient would otherwise each
+ *                   work from the same starting stock, and the second write would silently undo
+ *                   the first's deduction.
+ *
+ * A material that appears on more than one line of the recipe is deducted once, by the total.
+ * Only the stock is written, never a copy of the rest of the material: a copy taken earlier
+ * could otherwise put back an older cost or name.
  */
 export async function deductIngredients(
   userId: string,
@@ -25,18 +34,25 @@ export async function deductIngredients(
   recipe: { materialId: string; amount: number; unit: string }[],
   multiplier: number,
   batch?: ReturnType<typeof writeBatch>
-) {
+): Promise<RawMaterial[]> {
+  const totals = new Map<string, number>();
   for (const req of recipe) {
     const mat = materials.find(m => m.id === req.materialId);
     if (!mat) continue;
-    const convertedAmt = convertAmount(req.amount, req.unit || 'g', mat.unit);
-    const totalDeduction = convertedAmt * multiplier;
+    totals.set(mat.id, (totals.get(mat.id) ?? 0) + convertAmount(req.amount, req.unit || 'g', mat.unit) * multiplier);
+  }
+
+  const newStocks = new Map<string, number>();
+  for (const [materialId, totalDeduction] of totals) {
+    const mat = materials.find(m => m.id === materialId)!;
     const newStock = parseFloat((mat.initialStock - totalDeduction).toFixed(4));
-    const matRef = doc(db, 'users', userId, 'materials', mat.id);
+    newStocks.set(materialId, newStock);
+    const matRef = doc(db, 'users', userId, 'materials', materialId);
     if (batch) {
-      batch.set(matRef, { ...mat, initialStock: newStock }, { merge: true });
+      batch.set(matRef, { initialStock: newStock }, { merge: true });
     } else {
-      await setDoc(matRef, { ...mat, initialStock: newStock }, { merge: true });
+      await setDoc(matRef, { initialStock: newStock }, { merge: true });
     }
   }
+  return materials.map(m => (newStocks.has(m.id) ? { ...m, initialStock: newStocks.get(m.id)! } : m));
 }
