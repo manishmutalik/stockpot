@@ -9,6 +9,9 @@ import { requireCsrf, issueCsrfToken } from "./lib/csrf";
 import { saveCredentials, getCredentials, deleteCredentials } from "./lib/integrationStore";
 import { readRazorpayConfig, createRazorpayApi } from "./lib/razorpay";
 import { setBillingInfo, getBillingInfo, findUidByRazorpaySubscriptionId, hasActiveAccess } from "./lib/subscriptionStore";
+import { createAdminQuickDb } from "./lib/quickDb";
+import { createAccessGate, createQuickOrderHandler, createQuickRestockHandler, createQuickProductionHandler } from "./lib/quickRoutes";
+import { randomId } from "./src/utils/plans";
 import {
   paywallApplies, createBillingStatusHandler, createSubscriptionHandler, createVerifyPaymentHandler, createCancelHandler, createWebhookHandler,
 } from "./lib/billingRoutes";
@@ -131,6 +134,17 @@ async function startServer() {
   api.post("/billing/create-subscription", requireCsrf, createSubscriptionHandler(billingDeps));
   api.post("/billing/verify-payment", requireCsrf, createVerifyPaymentHandler(billingDeps));
   api.post("/billing/cancel", requireCsrf, createCancelHandler(billingDeps));
+
+  // --- Stockpot Quick (phone app) save endpoints ---
+  // Bearer-token only, so no CSRF check (see lib/quickRoutes.ts). Every POST needs an Idempotency-Key header.
+  const quickDeps = { db: createAdminQuickDb(), now: () => Date.now(), newId: randomId };
+  const quickGate = createAccessGate({
+    paywall: account => paywallApplies(account),
+    hasActiveAccess: async uid => hasActiveAccess((await getBillingInfo(uid)).status),
+  });
+  api.post("/mobile/orders", quickGate, createQuickOrderHandler(quickDeps));
+  api.post("/mobile/restocks", quickGate, createQuickRestockHandler(quickDeps));
+  api.post("/mobile/production-runs", quickGate, createQuickProductionHandler(quickDeps));
 
   // --- Shopify OAuth Routes ---
 

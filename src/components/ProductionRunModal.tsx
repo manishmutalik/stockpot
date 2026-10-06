@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Calendar, Check, ChevronDown, ChevronUp, CirclePlus, Factory, Hourglass, Loader2, Package, Sparkles, Trash2 } from 'lucide-react';
 import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
-import { convertAmount } from '../utils/conversions';
+import { productionRunCost } from '../utils/plans/planProduction';
 import type { ProductionParser } from '../hooks/useProductionParser';
 import type { NotFoundItem } from '../utils/orderParse';
 import type { UnplacedWaste } from '../utils/productionParse';
@@ -154,13 +154,8 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   const rowCosts = useMemo(() => rows.map(row => {
     const recipe = menu.find(m => m.id === row.recipeId);
     if (!recipe) return 0;
-    return recipe.recipe.reduce((sum, req) => {
-      const mat = materials.find(m => m.id === req.materialId);
-      if (!mat) return sum; // skip ingredients whose material record is missing
-      // Convert recipe unit (e.g. 'g') → material's stored unit (e.g. 'kg') before costing
-      const convertedAmt = convertAmount(req.amount, req.unit || 'g', mat.unit);
-      return sum + convertedAmt * mat.costPerUnit * row.quantity;
-    }, 0);
+    // Ingredients whose material record is missing are skipped; each amount is unit-converted to the material's stored unit.
+    return productionRunCost(recipe.recipe, materials, row.quantity);
   }), [rows, menu, materials]);
   const costTotal = useMemo(() => rowCosts.reduce((sum, c) => sum + c, 0), [rowCosts]);
 

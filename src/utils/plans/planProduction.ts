@@ -14,10 +14,28 @@
 import type { MenuItem, RawMaterial } from '../../types';
 import type { ProductionRun } from '../../components/ProductionRunModal';
 import { planIngredientDeduction } from '../inventoryDeduction';
+import { convertAmount } from '../conversions';
 import { collapseWrites, type PlanContext, type PlanError, type PlannedWrite } from './types';
 
 /** The stock the next step must start from. */
 export type Working = { materials: RawMaterial[]; menu: MenuItem[] };
+
+/**
+ * What `quantity` units of a recipe cost in materials, at the materials' current costs per unit (each ingredient amount is
+ * converted to the material's own unit first; an ingredient whose material is missing adds nothing). A run stores this,
+ * rounded to two decimals, as its `costTotal`.
+ */
+export function productionRunCost(
+  recipe: { materialId: string; amount: number; unit?: string }[],
+  materials: Pick<RawMaterial, 'id' | 'unit' | 'costPerUnit'>[],
+  quantity: number
+): number {
+  return recipe.reduce((sum, req) => {
+    const mat = materials.find(m => m.id === req.materialId);
+    if (!mat) return sum;
+    return sum + convertAmount(req.amount, req.unit || 'g', mat.unit) * mat.costPerUnit * quantity;
+  }, 0);
+}
 
 export type ProductionRunInput = Omit<ProductionRun, 'id' | 'createdAt' | 'purpose'>;
 
