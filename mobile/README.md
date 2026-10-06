@@ -27,7 +27,8 @@ npx tsc --noEmit                       # types
 npx expo export --platform android     # does it bundle?
 ```
 
-The app's unit tests (`src/lib/__tests__`) run with the main project's tests (`npm test` at the repo root).
+The app's unit tests (`src/lib/__tests__`, plain logic with no React Native) run with `npm test` in this folder, using the
+main project's vitest (run `npm install` at the repo root first). They are not part of the root `npm test`.
 
 ## Layout
 

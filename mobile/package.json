@@ -34,7 +34,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "export:web": "expo export --platform web",
-    "export:android": "expo export --platform android"
+    "export:android": "expo export --platform android",
+    "test": "vitest run"
   },
   "private": true
 }

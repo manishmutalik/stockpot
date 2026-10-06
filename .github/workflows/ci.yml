@@ -56,8 +56,8 @@ jobs:
       - name: Test the Firestore rules
         run: npm run test:rules
 
-  # The phone app (mobile/) has its own dependencies. Its unit tests run with the main ones (`npm test`); this checks its
-  # types, and that it still bundles for Android.
+  # The phone app (mobile/) has its own dependencies, tests and config: this runs its tests, checks its types, and
+  # checks that it still bundles for Android.
   mobile:
     runs-on: ubuntu-latest
     steps:
@@ -81,6 +81,10 @@ jobs:
 
       - name: Type-check the app
         run: npx tsc --noEmit
+        working-directory: mobile
+
+      - name: Test the app's logic
+        run: npm test
         working-directory: mobile
 
       - name: Bundle the app for Android
