@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import crypto from 'node:crypto';
 import {
-  createBillingStatusHandler, createSubscriptionHandler, createVerifyPaymentHandler, createCancelHandler, createWebhookHandler,
+  paywallApplies, createBillingStatusHandler, createSubscriptionHandler, createVerifyPaymentHandler, createCancelHandler, createWebhookHandler,
   type BillingRouteDeps,
 } from '../billingRoutes';
 import type { BillingInfo } from '../subscriptionStore';
@@ -46,21 +46,56 @@ function setup(initial: Record<string, Partial<BillingInfo>> = {}, over: Partial
 const authed = (body: any = {}, uid = 'u1') => ({ uid, body }) as any;
 
 describe('GET /billing/status', () => {
-  it('returns the stored billing info', async () => {
+  const status = (deps: BillingRouteDeps, paywall: (account: { email?: string; emailVerified?: boolean }) => boolean = () => false) => createBillingStatusHandler({ ...deps, paywall });
+  it('returns the stored billing info and whether this account must have a plan', async () => {
     const { deps } = setup({ u1: { status: 'trialing', currentPeriodEnd: 5 } });
-    const r = res(); await createBillingStatusHandler(deps)(authed(), r);
-    expect(r.body.status).toBe('trialing');
+    let r = res(); await status(deps)(authed(), r);
+    expect(r.body).toMatchObject({ status: 'trialing', paywall: false });
+    const asked: any[] = [];
+    r = res(); await status(deps, (acct: any) => { asked.push(acct); return true; })({ uid: 'u1', email: 'a@x.com', emailVerified: true } as any, r);
+    expect(r.body.paywall).toBe(true);
+    expect(asked).toEqual([{ email: 'a@x.com', emailVerified: true }]);
   });
-  it('says active while billing is switched off for testing', async () => {
+  it('says active, with no paywall, while billing is switched off for testing', async () => {
     const { deps } = setup({}, { billingDisabled: () => true });
-    const r = res(); await createBillingStatusHandler(deps)(authed(), r);
-    expect(r.body.status).toBe('active');
+    const r = res(); await status(deps, () => true)(authed(), r);
+    expect(r.body).toMatchObject({ status: 'active', paywall: false });
   });
   it('answers 500 when the store fails', async () => {
     const { deps } = setup();
     deps.store.get = async () => { throw new Error('down'); };
-    const r = res(); await createBillingStatusHandler(deps)(authed(), r);
+    const r = res(); await status(deps)(authed(), r);
     expect(r.code).toBe(500);
+  });
+});
+
+describe('paywallApplies', () => {
+  const configured = { RAZORPAY_KEY_ID: 'rzp_test_1', RAZORPAY_KEY_SECRET: 's', RAZORPAY_PLAN_ID: 'plan_1' };
+  const asha = { email: 'asha@example.com', emailVerified: true };
+
+  it('is off for everyone by default, so deploying billing changes nothing', () => {
+    expect(paywallApplies(asha, configured)).toBe(false);
+  });
+  it('BILLING_ENFORCED=true puts every account behind it', () => {
+    expect(paywallApplies(asha, { ...configured, BILLING_ENFORCED: 'true' })).toBe(true);
+    expect(paywallApplies({}, { ...configured, BILLING_ENFORCED: 'true' })).toBe(true);
+  });
+  it('BILLING_ENFORCED_EMAILS puts only the listed, verified accounts behind it', () => {
+    const env = { ...configured, BILLING_ENFORCED_EMAILS: ' Asha@Example.com , tester@example.com ' };
+    expect(paywallApplies(asha, env)).toBe(true);
+    expect(paywallApplies({ email: 'someone@example.com', emailVerified: true }, env)).toBe(false);
+    expect(paywallApplies({ email: 'asha@example.com', emailVerified: false }, env)).toBe(false); // an unverified email proves nothing
+    expect(paywallApplies({}, env)).toBe(false);
+  });
+  it('never applies to a demo account', () => {
+    expect(paywallApplies({ email: 'demo_1700000000_42@bettereat.com', emailVerified: true }, { ...configured, BILLING_ENFORCED: 'true' })).toBe(false);
+  });
+  it('never applies while the testing switch is on', () => {
+    expect(paywallApplies(asha, { ...configured, BILLING_ENFORCED: 'true', BILLING_DISABLED: 'true' })).toBe(false);
+  });
+  it('never applies when Razorpay is not set up, so nobody is locked out of an app they cannot pay for', () => {
+    expect(paywallApplies(asha, { BILLING_ENFORCED: 'true' })).toBe(false);
+    expect(paywallApplies(asha, { ...configured, RAZORPAY_PLAN_ID: '', BILLING_ENFORCED: 'true' })).toBe(false);
   });
 });
 

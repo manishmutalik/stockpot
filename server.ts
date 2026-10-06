@@ -10,7 +10,7 @@ import { saveCredentials, getCredentials, deleteCredentials } from "./lib/integr
 import { readRazorpayConfig, createRazorpayApi } from "./lib/razorpay";
 import { setBillingInfo, getBillingInfo, findUidByRazorpaySubscriptionId, hasActiveAccess } from "./lib/subscriptionStore";
 import {
-  createBillingStatusHandler, createSubscriptionHandler, createVerifyPaymentHandler, createCancelHandler, createWebhookHandler,
+  paywallApplies, createBillingStatusHandler, createSubscriptionHandler, createVerifyPaymentHandler, createCancelHandler, createWebhookHandler,
 } from "./lib/billingRoutes";
 import { readAiConfig } from "./lib/aiConfig";
 import { createAiStatusHandler } from "./lib/aiRoutes";
@@ -126,7 +126,7 @@ async function startServer() {
   api.post("/ai/parse-order", requireCsrf, createOrderParseHandler({ ...aiGuardDeps, model: createOrderParseModel() }));
   api.post("/ai/parse-production-run", requireCsrf, createProductionParseHandler({ ...aiGuardDeps, model: createProductionParseModel() }));
 
-  api.get("/billing/status", createBillingStatusHandler(billingDeps));
+  api.get("/billing/status", createBillingStatusHandler({ ...billingDeps, paywall: account => paywallApplies(account) }));
   // The free trial length is TRIAL_DAYS in src/utils/trial.ts, shared with the landing page.
   api.post("/billing/create-subscription", requireCsrf, createSubscriptionHandler(billingDeps));
   api.post("/billing/verify-payment", requireCsrf, createVerifyPaymentHandler(billingDeps));

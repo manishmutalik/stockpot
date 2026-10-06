@@ -90,9 +90,12 @@ enabled), a Razorpay account.
    `.halted`, `.cancelled`, `.completed`, `.paused`, `.resumed`). Razorpay
    must be able to reach the URL, so test webhooks on a deployed URL (or
    through a tunnel such as ngrok).
-4. Turn the paywall on: it is bypassed by `SKIP_BILLING_GATE_FOR_TESTING` in
-   `src/App.tsx` and the `BILLING_DISABLED` environment variable (see
-   `.env.example`).
+4. Turn the paywall on. It is off for everyone by default. Make sure
+   `BILLING_DISABLED` is empty, then set `BILLING_ENFORCED_EMAILS` to your own
+   test accounts (comma separated) to try the whole flow while everyone else is
+   unaffected, and `BILLING_ENFORCED=true` at launch to put every account behind
+   it (see `.env.example`). Demo accounts are never asked to pay, and nothing is
+   enforced while the `RAZORPAY_*` values are missing.
 5. To take real payments, once Razorpay has activated the account, swap in the
    Live Mode keys and a Live Mode Plan, and re-create the webhook in Live Mode.
 

@@ -273,8 +273,9 @@ Nothing is queued. The AI list in the handoff is complete.
   Key Id, Key Secret, a ₹1,200 monthly Plan id and a webhook secret (set as Render
   environment variables, never in chat). Then, in Test Mode: run a full checkout, check the
   webhook arrives, and confirm Razorpay accepts a first charge 45 days ahead (the trial). The
-  paywall is still off (`SKIP_BILLING_GATE_FOR_TESTING` in `src/App.tsx`, and
-  `BILLING_DISABLED`); turning it on is the last step. Stripe is gone from the code (no
+  paywall is off for everyone until the server turns it on: `BILLING_ENFORCED_EMAILS` (only
+  those test accounts) or `BILLING_ENFORCED=true` (everyone), with `BILLING_DISABLED` empty;
+  turning it on for everyone is the last step. Stripe is gone from the code (no
   existing Stripe subscribers: the paywall was never on).
 - **Trial and price decisions.** The free trial is 45 days (`src/utils/trial.ts`, shared by the
   landing page, paywall, Terms and server). ₹1,200 a month becomes GST-inclusive once the

@@ -23,6 +23,8 @@ export interface BillingInfo {
   trialUsed: boolean;
   /** Ends at the end of the period already paid for. */
   cancelScheduled: boolean;
+  /** The server says this account must have a plan to use the app. Off unless billing is switched on. */
+  paywall: boolean;
 }
 
 const DEFAULT_BILLING: BillingInfo = {
@@ -30,6 +32,7 @@ const DEFAULT_BILLING: BillingInfo = {
   currentPeriodEnd: null,
   trialUsed: false,
   cancelScheduled: false,
+  paywall: false,
 };
 
 export function hasActiveAccess(status: SubscriptionStatus): boolean {

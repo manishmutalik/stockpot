@@ -7,7 +7,7 @@ vi.mock('../../utils/apiClient', () => ({ apiFetch: (...a: any[]) => apiFetch(..
 import { useBilling, loadRazorpayCheckout } from '../useBilling';
 
 const reply = (body: any, ok = true) => ({ ok, json: async () => body });
-const STATUS = { status: 'none', currentPeriodEnd: null, trialUsed: false, cancelScheduled: false };
+const STATUS = { status: 'none', currentPeriodEnd: null, trialUsed: false, cancelScheduled: false, paywall: false };
 
 /** A stand-in for Razorpay's popup that records its options so the test can finish or dismiss the payment. */
 function stubRazorpay() {
@@ -33,6 +33,21 @@ describe('useBilling', () => {
     await waitFor(() => expect(result.current.isLoadingBilling).toBe(false));
     expect(result.current.billing.status).toBe('trialing');
     expect(result.current.hasAccess).toBe(true);
+  });
+
+  it('reports whether the server says this account needs a plan', async () => {
+    apiFetch.mockResolvedValue(reply({ ...STATUS, paywall: true }));
+    const { result } = mount();
+    await waitFor(() => expect(result.current.isLoadingBilling).toBe(false));
+    expect(result.current.billing.paywall).toBe(true);
+    expect(result.current.hasAccess).toBe(false);
+  });
+
+  it('assumes no paywall when the status cannot be read', async () => {
+    apiFetch.mockRejectedValue(new Error('offline'));
+    const { result } = mount();
+    await waitFor(() => expect(result.current.isLoadingBilling).toBe(false));
+    expect(result.current.billing.paywall).toBe(false);
   });
 
   it('opens Razorpay Checkout with the subscription the server made, and prefilled email', async () => {
