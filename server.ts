@@ -25,6 +25,7 @@ import { createOrderParseHandler } from "./lib/orderParseRoutes";
 import { createQuickParseHandler } from "./lib/quickParseRoutes";
 import { createNotificationRunHandler, listUsersWithDevices } from "./lib/notificationRoutes";
 import { runNotificationJob } from "./lib/notificationJob";
+import { createDemoSeedHandler, seedDemoKitchen } from "./lib/demoSeedRoutes";
 import { createExpoPushSender } from "./lib/expoPush";
 import { getAuth } from "firebase-admin/auth";
 import { createPaymentParseModel, createRestockParseModel } from "./lib/quickReaders";
@@ -166,6 +167,8 @@ async function startServer() {
     paywall: account => paywallApplies(account),
     hasActiveAccess: async uid => hasActiveAccess((await getBillingInfo(uid)).status),
   });
+  // The demo kitchen is not behind the plan check (demo accounts are never charged); it has its own guard.
+  api.post("/mobile/demo/seed", createDemoSeedHandler({ seed: seedDemoKitchen, now: quickDeps.now }));
   api.post("/mobile/parse", quickGate, createQuickParseHandler({
     ...aiGuardDeps, db: quickDeps.db, now: quickDeps.now,
     orderModel: createOrderParseModel(), productionModel: createProductionParseModel(),

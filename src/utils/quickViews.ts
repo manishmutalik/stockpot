@@ -15,7 +15,10 @@ import { financialsForRange } from './profit';
 import { buildBill, billBalance, formatMoney } from './billing';
 import { groupPendingPayments } from './payments';
 import { clusterOrdersByGroup } from './orderClustering';
-import { isOpenPreorder, summarizeDue, type DueSummary } from './preorders';
+import { isOpenPreorder, summarizeDue } from './preorders';
+import type { Currency, StatusLine, TodayView, UpcomingOrder, UpcomingView } from './quickApiTypes';
+
+export type { Currency, DueSummary, StatusKind, StatusLine, TodayView, UpcomingOrder, UpcomingView } from './quickApiTypes';
 import { getExperimentMaterialUsage } from './experimentMaterialUsage';
 import { getStockStatus } from './inventoryStatus';
 import { getBatchesNeedingAttention } from './stockAging';
@@ -23,8 +26,6 @@ import { addDays, daysBetween } from './localDate';
 
 /** A raw material or finished batch is "use by soon" when its date is this many days away or fewer. */
 export const USE_BY_SOON_DAYS = 2;
-
-export interface Currency { code: string; symbol: string }
 
 /** What buildBill needs from the settings, with a blank for anything the owner has not filled in. */
 export function billSettingsOf(s: Partial<BakerySettings>) {
@@ -38,32 +39,6 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 // ─── Today ──────────────────────────────────────────────────────────────────
-
-export type StatusKind = 'orders_due' | 'payments_pending' | 'running_low' | 'use_by_soon' | 'profit';
-
-export interface StatusLine {
-  kind: StatusKind;
-  /** coral: needs doing now; amber: needs a look; green: good news. */
-  tone: 'coral' | 'amber' | 'green';
-  label: string;
-}
-
-export interface TodayView {
-  date: string;
-  businessName: string;
-  currency: Currency;
-  /** Up to five, most urgent first. Empty means "All clear". */
-  statusLines: StatusLine[];
-  dueToday: DueSummary | null;
-  dueTomorrow: DueSummary | null;
-  /** Open pre-orders whose due date has passed. */
-  overdue: DueSummary | null;
-  pendingPayments: { customers: number; orders: number; total: number };
-  lowStock: { id: string; name: string; remaining: number; unit: string; threshold: number }[];
-  useBySoon: { kind: 'material' | 'batch'; id: string; name: string; date: string; daysLeft: number }[];
-  /** Today's takings and what the business really made on them. */
-  today: { revenue: number; trueProfit: number; orderCount: number };
-}
 
 export function buildToday(input: {
   today: string;
@@ -142,34 +117,6 @@ export function buildToday(input: {
 }
 
 // ─── Upcoming ───────────────────────────────────────────────────────────────
-
-export interface UpcomingOrder {
-  /** The order's first item id; hand over and confirmation use it. */
-  orderId: string;
-  orderIds: string[];
-  customerName: string | null;
-  customerPhone: string | null;
-  /** YYYY-MM-DD */
-  date: string;
-  dueSlot: string | null;
-  notes: string | null;
-  items: { menuItemId: string; name: string; quantity: number }[];
-  total: number;
-  advance: { amount: number; method: string } | null;
-  /** What is still to pay: the total less the advance. */
-  balanceDue: number;
-  /** Items of which there is not enough finished stock to hand the order over today. */
-  stockShort: { name: string; short: number }[];
-}
-
-export interface UpcomingView {
-  today: string;
-  currency: Currency;
-  /** Open pre-orders whose due date has passed, oldest first. */
-  overdue: UpcomingOrder[];
-  /** Open pre-orders due today or later, soonest first. */
-  upcoming: UpcomingOrder[];
-}
 
 export function buildUpcoming(input: {
   today: string;

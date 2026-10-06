@@ -283,7 +283,10 @@ Nothing is queued. The AI list in the handoff is complete.
   (`paymentParse.ts`, `quickPayments.ts`; readers' prompts and models in `lib/quickReaders.ts`). Voice reading has its
   own limit, 60 a day (`AI_QUICK_DAILY_LIMIT`); the demo kitchen's mic stays and shows an alert. The notifications job is built
   (`POST /api/internal/notifications/run`, needs `NOTIFICATIONS_CRON_SECRET` and a Render Cron Job every 15 minutes;
-  see README). Still to build: the Expo app in `mobile/`. Not tested against a real Firestore or a real model.
+  see README). The Expo app is in `mobile/`
+  (see `mobile/README.md`): sign-in, the "demo kitchen" (server-seeded) and Today are built; capture and confirm
+  screens, Upcoming and notification settings are still to build, then a development build with speech recognition and
+  push. Not tested against a real Firestore or a real model.
 
 - **Razorpay is built and tested only against mocks.** The account was under review, so
   nothing has run against Razorpay itself yet. When it is live the owner posts the Test Mode

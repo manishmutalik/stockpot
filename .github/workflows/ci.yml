@@ -55,3 +55,37 @@ jobs:
 
       - name: Test the Firestore rules
         run: npm run test:rules
+
+  # The phone app (mobile/) has its own dependencies. Its unit tests run with the main ones (`npm test`); this checks its
+  # types, and that it still bundles for Android.
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+
+      # The app's tests import vitest, which lives in the main project.
+      - name: Install main dependencies
+        run: npm ci
+
+      - name: Install the app's dependencies
+        run: npm ci
+        working-directory: mobile
+
+      - name: Type-check the app
+        run: npx tsc --noEmit
+        working-directory: mobile
+
+      - name: Bundle the app for Android
+        run: npx expo export --platform android
+        working-directory: mobile
+        env:
+          CI: '1'
+          EXPO_PUBLIC_API_URL: https://example.invalid

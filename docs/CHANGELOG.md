@@ -1,5 +1,13 @@
 # Changelog
 
+## Stockpot Quick: the phone app begins (`mobile/`)
+
+A new Expo (React Native) app, for Android now and iOS later: sign in with email and password, a "Try the demo
+kitchen" button (the server fills a demo account with the sample kitchen; only demo accounts, only once), and the
+Today screen with what needs attention, "All clear", the mic and the four shortcuts, as designed. Capturing what
+happened, the confirm screens, Upcoming and notification settings follow. CI now type-checks the app and
+bundles it for Android.
+
 ## Stockpot Quick: the notifications job (server)
 
 A scheduled job sends the phone app's notifications through Expo: a morning summary at the owner's chosen time

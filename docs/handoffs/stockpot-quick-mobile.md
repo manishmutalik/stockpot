@@ -310,3 +310,15 @@ come from the server.
 - **Safety:** what is about to be sent is recorded first (so two overlapping runs cannot both send it); if no phone accepted a notification the record is given back so the next run tries again; a phone Expo reports gone (`DeviceNotRegistered`) is switched off (`disabled: true`) until the app registers it again. Owners whose plan has lapsed get nothing. Expo's later delivery receipts are not read yet.
 - **Tap targets** (`data.screen`): `today`, `stock-in`, `items`, `upcoming`. The app maps these to its screens.
 - **Scale note:** each run lists every owner's phones (one read per phone). Fine for hundreds of owners; at thousands, keep a small registry of owners with phones instead.
+
+### F. Built so far: the app (`mobile/`), step 1
+
+- **Where:** `mobile/`, a new Expo SDK 57 + Expo Router project, as decision 1 says (not `bakery-mobile/`). Its own `package.json` and lockfile; CI type-checks it and bundles it for Android. Run instructions in `mobile/README.md`.
+- **Built:** sign-in (email and password, forgot password, "Try the demo kitchen"), the tab shell (Today, Upcoming, Settings), and Today (status lines most urgent first, "All clear", the big mic and the four shortcut chips, pull to refresh). Matches the Stitch designs closely; checked by rendering the web build of the app next to the designs.
+- **Not built yet:** capture, questions, confirm and saved screens (the mic and chips say "Coming soon"), Upcoming and hand over, notification settings and push registration, speech recognition.
+- **Demo kitchen:** the app makes a demo account as the web does, then calls the new `POST /api/mobile/demo/seed`, which fills it with the sample kitchen on the server (demo accounts only, only if the account has no settings yet, so it cannot touch a real kitchen). The mic in the demo shows "Not available in the demo".
+- **Shared types:** the shapes of `/today` and `/upcoming` live in `src/utils/quickApiTypes.ts`, a file of types with no imports, which the server builds against and the app imports as types only.
+- **iOS:** the "Start your free trial on the Stockpot website" link is left out on iOS (Apple's rules on sending people elsewhere to buy a subscription: review note 8) and shown on Android.
+- **Placeholders to replace before release:** the app icon and splash are Expo's defaults; the bundle id `com.stockpot.quick` is a proposal (it cannot change once published).
+- **Money shows with two decimals** (`₹2,350.00`) because the server formats it with the web's `formatMoney`; the designs show `₹2,350`. Say if you want the decimals dropped on the phone.
+
