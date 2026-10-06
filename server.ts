@@ -23,6 +23,10 @@ import { createChatHandler } from "./lib/chatRoutes";
 import { createChatModel } from "./lib/chatModel";
 import { createOrderParseHandler } from "./lib/orderParseRoutes";
 import { createQuickParseHandler } from "./lib/quickParseRoutes";
+import { createNotificationRunHandler, listUsersWithDevices } from "./lib/notificationRoutes";
+import { runNotificationJob } from "./lib/notificationJob";
+import { createExpoPushSender } from "./lib/expoPush";
+import { getAuth } from "firebase-admin/auth";
 import { createPaymentParseModel, createRestockParseModel } from "./lib/quickReaders";
 import { createOrderParseModel } from "./lib/orderParseModel";
 import { createProductionParseHandler } from "./lib/productionParseRoutes";
@@ -144,6 +148,20 @@ async function startServer() {
     db: createAdminQuickDb(), now: () => Date.now(), newId: randomId,
     bills: createOrRefreshBill, publicUrl: process.env.APP_URL,
   };
+  // The scheduled job that sends the phone app's notifications (see lib/notificationRoutes.ts). Not behind requireAuth: it has
+  // its own shared secret, and is off until NOTIFICATIONS_CRON_SECRET is set.
+  app.post("/api/internal/notifications/run", createNotificationRunHandler({
+    secret: () => process.env.NOTIFICATIONS_CRON_SECRET,
+    run: () => runNotificationJob({
+      db: quickDeps.db, now: quickDeps.now, listUsers: listUsersWithDevices,
+      send: createExpoPushSender({ accessToken: process.env.EXPO_ACCESS_TOKEN }),
+      isEntitled: async uid => {
+        const user = await getAuth().getUser(uid);
+        const account = { email: user.email, emailVerified: user.emailVerified };
+        return !paywallApplies(account) || hasActiveAccess((await getBillingInfo(uid)).status);
+      },
+    }),
+  }));
   const quickGate = createAccessGate({
     paywall: account => paywallApplies(account),
     hasActiveAccess: async uid => hasActiveAccess((await getBillingInfo(uid)).status),

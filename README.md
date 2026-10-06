@@ -72,6 +72,9 @@ enabled), a Razorpay account.
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | For billing | Razorpay API keys. Without them, the server still boots and every non-billing route works; only billing routes and the paywall fail with a clear error. The Key Id is public (checkout needs it); the Key Secret stays on the server. |
 | `RAZORPAY_PLAN_ID` | For billing | The Razorpay Plan (monthly, INR) customers subscribe to. |
 | `RAZORPAY_WEBHOOK_SECRET` | For billing | The secret you chose for the Razorpay webhook (see below). |
+| `NOTIFICATIONS_CRON_SECRET` | For phone notifications | A long random string (16+ characters) that the scheduler sends to `POST /api/internal/notifications/run`. Without it that route answers 503 and no notifications go out. See "Phone app notifications" below. |
+| `EXPO_ACCESS_TOKEN` | No | Only if the Expo project has "enhanced push security" switched on; sent when pushing through Expo. |
+| `AI_QUICK_DAILY_LIMIT` | No | Voice/text readings per user per day for the phone app (default 60), separate from the web's `AI_PARSE_DAILY_LIMIT`. |
 | `COOKIE_SECRET` | No | Reserved for future cookie signing; currently only the CSRF token cookie is set, and it isn't signed. |
 | `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` | No | Only needed if you want to enable the Shopify order-import integration. |
 | `USDA_API_KEY` | No | Free key from [fdc.nal.usda.gov](https://fdc.nal.usda.gov/api-key-signup.html), used by the Inventory tab's nutrition "Look up" feature. Without it, that one search source returns a clear "not configured" error — Open Food Facts (queried alongside it) needs no key. |
@@ -117,6 +120,23 @@ only offered while the account has never approved a mandate (`billing.trialUsed`
 Whether Razorpay accepts a first charge `TRIAL_DAYS` days ahead has to be
 checked in Test Mode: if it refuses, checkout fails with a clear error and the
 trial length must be adjusted.
+
+### Phone app notifications
+
+Stockpot Quick's notifications (morning summary, running low, use-by soon, due tomorrow) are sent by a job the server
+runs when `POST /api/internal/notifications/run` is called with `Authorization: Bearer $NOTIFICATIONS_CRON_SECRET`. On
+Render, add a **Cron Job** with the schedule `0,15,30,45 * * * *` and the command
+
+```
+curl -fsS -X POST -H "Authorization: Bearer $NOTIFICATIONS_CRON_SECRET" "$APP_URL/api/internal/notifications/run"
+```
+
+(give the cron job the same two environment variables). Each run visits every owner who has registered a phone and
+sends what is due: at most one of each kind per owner per day, only what the owner has switched on, in the owner's own
+time zone, and never between 9 pm and 7 am for stock and use-by. It answers with a small summary
+(`{ users, notifications, delivered, released, errors }`). A run that starts while another is still going gets a 409.
+The route reads each phone's push token from `users/{uid}/devices` and what was already sent from
+`users/{uid}/mobileSettings/notificationState`, both of which only the server can reach.
 
 ## Scripts
 

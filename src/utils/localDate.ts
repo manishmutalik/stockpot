@@ -56,6 +56,17 @@ export function todayInZone(timeZone: unknown, now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
 
+/** The time of day (HH:MM, 24-hour) it is right now in a time zone. */
+export function timeInZone(timeZone: unknown, now: Date = new Date()): string {
+  const zone = resolveTimeZone(timeZone);
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+  const get = (type: string) => parts.find(p => p.type === type)?.value ?? '00';
+  return `${get('hour')}:${get('minute')}`;
+}
+
+/** Minutes since midnight for an HH:MM time. */
+export const minutesOfDay = (hhmm: string): number => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+
 /** A YYYY-MM-DD date moved by a number of days (negative for earlier). Pure calendar arithmetic, no zones. */
 export function addDays(date: string, days: number): string {
   const [y, m, d] = date.split('-').map(Number);
