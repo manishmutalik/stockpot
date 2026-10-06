@@ -1,5 +1,14 @@
 # Changelog
 
+## Stockpot Quick: reading an order from what the owner said (server)
+
+`POST /api/mobile/parse` reads a typed or spoken order into a draft the phone app can confirm, and the
+questions the message leaves open (which menu item, the date, whether it was paid, how an advance was paid,
+a pre-order when there is not the stock). It uses the web's own order reader and checks, removes phone
+numbers and known customers' names before the model sees the message, shows the figures the save will use,
+and saves nothing. Answering a question does not use the model again. Restock, payment and production
+messages follow. Not yet used by any screen.
+
 ## Fix: ingredient and item stock when several items are logged or deleted together
 
 When one "Log Production Run" had two items that use the same ingredient (say flour in both a

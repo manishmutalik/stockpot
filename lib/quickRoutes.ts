@@ -195,13 +195,13 @@ function writeHandler<T>(
   };
 }
 
-const asMenu = (docs: Map<string, any>) => [...docs.values()] as MenuItem[];
+export const asMenu = (docs: Map<string, any>) => [...docs.values()] as MenuItem[];
 
 /** The business settings, or an empty object for an account that has not saved any. */
-const loadSettings = async (tx: QuickTx): Promise<Partial<BakerySettings>> => ((await tx.get('settings', 'bakery')) ?? {}) as Partial<BakerySettings>;
+export const loadSettings = async (tx: QuickTx): Promise<Partial<BakerySettings>> => ((await tx.get('settings', 'bakery')) ?? {}) as Partial<BakerySettings>;
 
 /** The materials the recipes of these menu items use, loaded together. */
-async function materialsFor(tx: QuickTx, items: MenuItem[]): Promise<RawMaterial[]> {
+export async function materialsFor(tx: QuickTx, items: MenuItem[]): Promise<RawMaterial[]> {
   const ids = items.flatMap(m => (m.recipe ?? []).map(r => r.materialId));
   return [...(await tx.getMany('materials', ids)).values()] as RawMaterial[];
 }
@@ -305,7 +305,7 @@ export function createQuickProductionHandler(deps: QuickRouteDeps) {
 const DEFAULT_CURRENCY = { code: 'INR', symbol: '₹' };
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-const currencyOf = (s: Partial<BakerySettings> & { currency?: { code: string; symbol: string } }) => s.currency ?? DEFAULT_CURRENCY;
+export const currencyOf = (s: Partial<BakerySettings> & { currency?: { code: string; symbol: string } }) => s.currency ?? DEFAULT_CURRENCY;
 
 // ─── POST /mobile/orders/:id/hand-over ──────────────────────────────────────
 

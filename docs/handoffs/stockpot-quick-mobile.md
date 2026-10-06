@@ -172,6 +172,7 @@ Also later: a real offline queue, and home-screen quick actions (long-press the 
 - **Accounts:** a Google Play developer account and an Apple Developer Program membership (check their current fees). Both stores need a privacy policy URL; extend the existing Privacy page to cover the app.
 - **App IDs:** e.g. `com.stockpot.quick` on both stores (decide once; it can't change later).
 - **Store privacy forms:** declare speech recognition and microphone use; no audio stored; account data shared with the Stockpot server only; AI reading done by Anthropic on text (no phone numbers sent).
+- **Platforms:** one Expo / React Native codebase builds both the Android and the iOS app, so the iOS release later is mostly store work, not a rewrite. For iOS: an Apple Developer Program membership; Sign in with Apple must be offered if the app offers Google sign-in (email and password alone does not need it); the sign-up and upgrade screens must not link out to buy a subscription from inside the iOS app unless Apple's current rules allow it (see the App Store link risk in the review notes); speech recognition needs the microphone and speech permissions with their usage strings; push needs an APNs key in EAS. The first release can be Android only.
 - **Builds:** EAS development builds for testing on real phones; internal testing track (Play) and TestFlight (iOS) before public release.
 
 ---
@@ -287,3 +288,11 @@ come from the server.
 - What Remind does, and whether overdue pre-orders show (item 6).
 - Whether `parse` gets its own limit, and what the demo kitchen's mic does (A3, A4).
 - Whether a production session saves as one transaction (A6).
+
+### D. Built so far in `/api/mobile/parse` (differs from the spec above)
+
+- **Answering a question does not call the model again.** The first response carries the checked `reading`; the app sends the same `text` back with that `reading` and the `answers`. The server checks the reading against the text again (every quantity and name must still be written in it) and applies the answers in code. So answering is free and cannot change what the message said. A fresh read costs one `parse` use (shared with the web readers).
+- **Unknown menu item.** The spec says to ask a price, but an order line must be a menu item (the plan refuses an unknown id). The question is instead "Which menu item is it?" with the closest match and "Leave it out"; any menu id is accepted as the answer. Selling something not on the menu needs adding to the menu in the web app first.
+- **Kind detection is by words, not by the model.** Orders, stock bought, something made, payment received each have hint words; when none or two kinds match equally, the response is a `kind` question and nothing is spent. The app's four shortcut chips send `kind` directly.
+- **Questions so far (order):** `item:N`, `date`, `payment` (paid by a method, or later), `advance_method`, `advance` (amount, when it is more than the order), `stock` (book it as a pre-order). `preview` has the lines, total, advance and balance due, worked out by the same plan the save runs.
+- Restock, payment and production readers are not built yet: those kinds answer 501 `kind_not_ready`.
