@@ -457,3 +457,73 @@ describe('deleteProductionRunSession — bulk-deleting a whole session with one 
     window.confirm = originalConfirm;
   });
 });
+
+describe('items that share an ingredient, or repeat, in one session', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Croissant uses 100 g of flour a unit, Sourdough 50 g.
+  const shareMenu: MenuItem[] = [
+    { id: 'croissant', name: 'Croissant', sellingPrice: 10, finishedGoodsStock: 0, recipe: [{ materialId: 'flour', amount: 100, unit: 'g' }] } as MenuItem,
+    { id: 'sourdough', name: 'Sourdough', sellingPrice: 10, finishedGoodsStock: 3, recipe: [{ materialId: 'flour', amount: 50, unit: 'g' }] } as MenuItem,
+  ];
+  const flour = (stock: number): RawMaterial[] => [{ id: 'flour', name: 'Flour', unit: 'g', initialStock: stock, costPerUnit: 0.05 } as RawMaterial];
+  const row = (recipeId: string, quantity = 2) => ({ recipeId, quantityProduced: quantity, date: '2026-10-06', costTotal: 0 });
+  const written = (collection: string, id: string, field: string) =>
+    batchSet.mock.calls.filter(([ref]: any[]) => ref.path.endsWith(`/${collection}/${id}`)).map(([, data]: any[]) => data[field]);
+
+  it('logging: flour used by both items is deducted by both (1000 − 200 − 100), not just the last', async () => {
+    const { result } = renderHook(() => useProductionActions(shareMenu, flour(1000), [], [], vi.fn()));
+    const outcome = await result.current.logProductionRunSession([row('croissant'), row('sourdough')]);
+    expect(outcome.failedIndex).toBeNull();
+    expect(written('materials', 'flour', 'initialStock')).toEqual([800, 700]);
+  });
+
+  it('logging: the same item entered twice adds both amounts to its stock', async () => {
+    const { result } = renderHook(() => useProductionActions(shareMenu, flour(1000), [], [], vi.fn()));
+    await result.current.logProductionRunSession([row('croissant', 2), row('croissant', 3)]);
+    expect(written('menu', 'croissant', 'finishedGoodsStock')).toEqual([2, 5]);
+    expect(written('materials', 'flour', 'initialStock')).toEqual([800, 500]);
+  });
+
+  it('logging: a single run is unchanged', async () => {
+    const { result } = renderHook(() => useProductionActions(shareMenu, flour(1000), [], [], vi.fn()));
+    await result.current.logProductionRun(row('croissant') as any);
+    expect(written('materials', 'flour', 'initialStock')).toEqual([800]);
+    expect(written('menu', 'croissant', 'finishedGoodsStock')).toEqual([2]);
+  });
+
+  it('logging: when a later row fails, the earlier rows stay recorded and the failure is reported', async () => {
+    const { result } = renderHook(() => useProductionActions(shareMenu, flour(1000), [], [], vi.fn()));
+    const outcome = await result.current.logProductionRunSession([row('croissant'), row('not-on-the-menu')]);
+    expect(outcome).toMatchObject({ succeededCount: 1, failedIndex: 1 });
+    expect(written('materials', 'flour', 'initialStock')).toEqual([800]);
+  });
+
+  describe('deleting a whole session', () => {
+    const run = (id: string, recipeId: string, quantity: number) =>
+      ({ id, recipeId, quantityProduced: quantity, quantityYield: quantity, remainingQuantity: quantity, date: '2026-10-06', purpose: 'market_stock', costTotal: 0, productionSessionId: 'sess' }) as ProductionRun;
+    const withConfirm = async (fn: () => Promise<void>) => {
+      const original = window.confirm;
+      window.confirm = vi.fn(() => true);
+      try { await fn(); } finally { window.confirm = original; }
+    };
+
+    it('gives back the flour of both items (700 + 200 + 100), not just the last one\'s', async () => {
+      const menuNow = shareMenu.map(m => ({ ...m, finishedGoodsStock: 10 }));
+      const runs = [run('r1', 'croissant', 2), run('r2', 'sourdough', 2)];
+      const { result } = renderHook(() => useProductionActions(menuNow, flour(700), runs, [], vi.fn()));
+      await withConfirm(() => result.current.deleteProductionRunSession('sess'));
+      expect(written('materials', 'flour', 'initialStock')).toEqual([900, 1000]);
+    });
+
+    it('takes both runs of the same item out of its stock', async () => {
+      const menuNow = shareMenu.map(m => ({ ...m, finishedGoodsStock: 10 }));
+      const runs = [run('r1', 'croissant', 2), run('r2', 'croissant', 3)];
+      const { result } = renderHook(() => useProductionActions(menuNow, flour(500), runs, [], vi.fn()));
+      await withConfirm(() => result.current.deleteProductionRunSession('sess'));
+      expect(written('menu', 'croissant', 'finishedGoodsStock')).toEqual([8, 5]);
+    });
+  });
+});
