@@ -18,18 +18,27 @@
  */
 import type { NextFunction, Response } from 'express';
 import type { AuthedRequest } from './auth';
-import { parseIdempotencyKey, withIdempotency, type QuickDb, type QuickTx, type StoredResult } from './quickDb';
-import { planOrderGroup, planRestock, planProductionSession, collapseWrites, productionRunCost } from '../src/utils/plans';
+import { parseIdempotencyKey, withIdempotency, type QuickDb, type QuickDoc, type QuickTx, type StoredResult } from './quickDb';
+import { planOrderGroup, planRestock, planProductionSession, planHandOver, planMarkPaid, collapseWrites, productionRunCost } from '../src/utils/plans';
 import type { OrderGroupCommon, OrderLineItem, PlanError, ProductionRunInput } from '../src/utils/plans';
 import { enterableUnits } from '../src/utils/conversions';
 import { saleAmounts } from '../src/utils/profit';
-import { todayInZone } from '../src/utils/localDate';
-import type { BakerySettings, MenuItem, PaymentMethod, RawMaterial } from '../src/types';
+import { buildBill, billBalance, formatMoney } from '../src/utils/billing';
+import { groupPendingPayments, isUnpaid } from '../src/utils/payments';
+import { billSettingsOf, buildToday, buildUpcoming, USE_BY_SOON_DAYS } from '../src/utils/quickViews';
+import { EXPO_PUSH_TOKEN, readNotificationSettings, withNotificationDefaults } from '../src/utils/quickNotifications';
+import { clusterOrdersByGroup } from '../src/utils/orderClustering';
+import { addDays, todayInZone } from '../src/utils/localDate';
+import type { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../src/types';
 
 export interface QuickRouteDeps {
   db: QuickDb;
   now: () => number;
   newId: () => string;
+  /** Makes (or refreshes) the public bill for an order, once it is saved. Absent: answers carry no bill link. */
+  bills?: (uid: string, orderId: string) => Promise<{ token: string } | null>;
+  /** The app's public address, for the "view bill online" link. */
+  publicUrl?: string;
 }
 
 // ─── Access ─────────────────────────────────────────────────────────────────
@@ -160,7 +169,9 @@ function writeHandler<T>(
   deps: QuickRouteDeps,
   scope: string,
   read: (body: unknown) => Read<T>,
-  run: (tx: QuickTx, input: T, req: AuthedRequest) => Promise<StoredResult>
+  run: (tx: QuickTx, input: T, req: AuthedRequest) => Promise<StoredResult>,
+  /** Adds to a successful answer after it is saved (not remembered with it), e.g. a link made outside the transaction. */
+  decorate?: (body: any, req: AuthedRequest) => Promise<Record<string, unknown>>
 ) {
   return async (req: AuthedRequest, res: Response) => {
     const key = parseIdempotencyKey(req.headers['idempotency-key']);
@@ -171,7 +182,12 @@ function writeHandler<T>(
     try {
       const result = await withIdempotency(deps.db, { uid: req.uid!, scope, key, now: deps.now }, tx => run(tx, parsed.value, req));
       if (result.replayed) res.setHeader('Idempotent-Replayed', 'true');
-      return res.status(result.status).json(result.body);
+      let body = result.body;
+      if (decorate && result.status >= 200 && result.status < 300) {
+        try { body = { ...(result.body as object), ...(await decorate(result.body, req)) }; }
+        catch (err: any) { console.error(`Quick ${scope} could not add to its answer:`, err?.message); }
+      }
+      return res.status(result.status).json(body);
     } catch (err: any) {
       console.error(`Quick ${scope} failed:`, err?.message);
       return res.status(500).json({ error: 'Could not save that. Nothing was saved; please try again.', code: 'save_failed' });
@@ -282,4 +298,228 @@ export function createQuickProductionHandler(deps: QuickRouteDeps) {
       .map(m => ({ materialId: m.id, name: m.name, unit: m.unit, short: Math.round(-m.initialStock * 10000) / 10000 }));
     return { status: 201, body: { runIds: plan.runIds, sessionId: plan.sessionId ?? null, shortages } };
   });
+}
+
+// ─── Bills and balances ─────────────────────────────────────────────────────
+
+const DEFAULT_CURRENCY = { code: 'INR', symbol: '₹' };
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+const currencyOf = (s: Partial<BakerySettings> & { currency?: { code: string; symbol: string } }) => s.currency ?? DEFAULT_CURRENCY;
+
+// ─── POST /mobile/orders/:id/hand-over ──────────────────────────────────────
+
+function readHandOverBody(body: unknown): Read<{ method?: PaymentMethod }> {
+  if (body === undefined || body === null || (isObject(body) && Object.keys(body).length === 0)) return { ok: true, value: {} };
+  if (!isObject(body)) return bad('Send { balanceReceived: { method } } or nothing.');
+  if (body.balanceReceived === undefined) return { ok: true, value: {} };
+  const m = isObject(body.balanceReceived) ? method(body.balanceReceived.method) : null;
+  return m ? { ok: true, value: { method: m } } : bad('balanceReceived needs a payment method.');
+}
+
+/**
+ * Hands an order over (a pre-order takes its stock now, all or nothing) and, when asked, records the balance as received
+ * in the same save, by the method given. Answers with the balance that was due and a link to the bill.
+ */
+export function createQuickHandOverHandler(deps: QuickRouteDeps) {
+  return writeHandler(deps, 'hand-over', readHandOverBody, async (tx, { method: paidBy }, req) => {
+    const id = req.params.id;
+    if (typeof id !== 'string' || !ID.test(id)) return failure(400, 'That is not an order id.', { code: 'bad_request' });
+
+    const order = (await tx.get('orders', id)) as Order | null;
+    if (!order) return failure(404, 'Order not found.', { code: 'not_found' });
+    // A multi-item order is always handed over whole.
+    const orders = order.orderGroupId ? ((await tx.where('orders', 'orderGroupId', order.orderGroupId)) as Order[]) : [order];
+    const menu = asMenu(await tx.getMany('menu', orders.map(o => o.menuItemId)));
+    const materials = await materialsFor(tx, menu);
+    const settings = await loadSettings(tx);
+
+    const plan = planHandOver({ order, orders, menu, materials });
+    if (plan.kind === 'noop') return { status: 200, body: { handedOver: false, reason: 'already_handed_over', orderIds: orders.map(o => o.id) } };
+    if (plan.kind === 'error') return failure(409, plan.message, { code: plan.code, title: plan.title });
+
+    // What the customer still owes: the total less any advance, unless it is already paid.
+    const unpaid = orders.filter(isUnpaid);
+    const balanceDue = unpaid.length > 0 ? round2(billBalance(buildBill({ orders, menu, settings: billSettingsOf(settings), currency: currencyOf(settings) }))) : 0;
+
+    let writes = plan.writes;
+    const received = !!paidBy && balanceDue > 0;
+    if (received) writes = collapseWrites([...writes, ...planMarkPaid({ ids: unpaid.map(o => o.id), paid: true, method: paidBy, feeRates: settings.paymentFeeRates })]);
+    tx.apply(writes);
+
+    return { status: 200, body: { handedOver: true, orderIds: orders.map(o => o.id), balanceDue, balanceReceived: received ? balanceDue : 0, ...(received && { method: paidBy }) } };
+  }, async (body, req) => {
+    if (!deps.bills || !body?.orderIds?.length) return {};
+    const made = await deps.bills(req.uid!, body.orderIds[0]);
+    return made && deps.publicUrl ? { billUrl: `${deps.publicUrl.replace(/\/$/, '')}/bill/${made.token}` } : {};
+  });
+}
+
+// ─── POST /mobile/payments ──────────────────────────────────────────────────
+
+function readPaymentBody(body: unknown): Read<{ customerKey: string; amount: number; method: PaymentMethod }> {
+  if (!isObject(body)) return bad('Send { customerKey, amount, method }.');
+  if (typeof body.customerKey !== 'string' || body.customerKey.length === 0 || body.customerKey.length > 200) return bad('Say whose payment it is.');
+  if (!isPositive(body.amount, 1_000_000_000)) return bad('The amount must be above nothing.');
+  const m = method(body.method);
+  if (!m) return bad('Unknown payment method.');
+  return { ok: true, value: { customerKey: body.customerKey, amount: body.amount, method: m } };
+}
+
+/**
+ * A customer paid what they owe: their unpaid orders are marked paid, oldest first, by the method and with its fee rate,
+ * as Mark paid does on the web. There are no part-payments yet (only a pre-order's advance), so the amount must come to
+ * exactly what one or more whole orders are owed. Anything else is refused with what is owed, so the app can ask, and
+ * nothing is guessed.
+ */
+export function createQuickPaymentHandler(deps: QuickRouteDeps) {
+  return writeHandler(deps, 'payments', readPaymentBody, async (tx, { customerKey, amount, method: paidBy }) => {
+    const settings = await loadSettings(tx);
+    const unpaid = (await tx.where('orders', 'paymentStatus', 'unpaid')) as Order[];
+    const menu = asMenu(await tx.getMany('menu', unpaid.map(o => o.menuItemId)));
+    const currency = currencyOf(settings);
+    const today = todayInZone(settings.timezone, new Date(deps.now()));
+
+    const customer = groupPendingPayments({ orders: unpaid, menu, settings: billSettingsOf(settings), currency, today }).find(c => c.key === customerKey);
+    if (!customer) return failure(404, 'Nothing is pending for that customer.', { code: 'no_pending' });
+
+    // One entry per whole order (a multi-item order counts once), oldest first, with what that order is owed.
+    const dues = clusterOrdersByGroup(customer.orders).map(c => {
+      const orders = c.type === 'single' ? [c.order] : c.orders;
+      return { orders, due: round2(billBalance(buildBill({ orders, menu, settings: billSettingsOf(settings), currency }))) };
+    });
+
+    // The amounts that would pay whole orders, oldest first: 900, then 900 + 400, and so on.
+    let running = 0;
+    const options = dues.map(d => (running = round2(running + d.due)));
+    const matched = options.findIndex(total => Math.abs(total - amount) < 0.005);
+
+    if (matched < 0) {
+      const owed = round2(customer.dueTotal);
+      const orderWord = (n: number) => `${n} order${n === 1 ? '' : 's'}`;
+      const why = amount > owed + 0.005
+        ? `${formatMoney(amount, currency)} is more than that.`
+        : `${formatMoney(amount, currency)} doesn't cover ${dues.length === 1 ? 'it' : `a whole order (the oldest is ${formatMoney(dues[0].due, currency)})`}.`;
+      return failure(422, `${customer.name} owes ${formatMoney(owed, currency)} for ${orderWord(customer.orderCount)}. ${why}`, {
+        code: 'amount_mismatch', customerName: customer.name, owed, orderCount: customer.orderCount, oldestOrderDue: dues[0].due, amountsThatWork: options,
+      });
+    }
+
+    const paid = dues.slice(0, matched + 1).flatMap(d => d.orders);
+    tx.apply(planMarkPaid({ ids: paid.map(o => o.id), paid: true, method: paidBy, feeRates: settings.paymentFeeRates }));
+    return { status: 200, body: {
+      customerName: customer.name, amount, method: paidBy, orderIds: paid.map(o => o.id),
+      remainingDue: round2(customer.dueTotal - amount),
+    } };
+  });
+}
+
+// ─── GET /mobile/today and /mobile/upcoming ─────────────────────────────────
+
+/** Whoever reads must be able to read these: they are the owner's own, and nothing here is written. */
+function readHandler(deps: QuickRouteDeps, load: (tx: QuickTx, ctx: { today: string; settings: Partial<BakerySettings> & { currency?: { code: string; symbol: string } } }) => Promise<unknown>) {
+  return async (req: AuthedRequest, res: Response) => {
+    try {
+      const body = await deps.db.run(req.uid!, async tx => {
+        const settings = (await loadSettings(tx)) as Partial<BakerySettings> & { currency?: { code: string; symbol: string } };
+        return load(tx, { today: todayInZone(settings.timezone, new Date(deps.now())), settings });
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.status(200).json(body);
+    } catch (err: any) {
+      console.error('Quick read failed:', err?.message);
+      return res.status(500).json({ error: 'Could not load that. Pull to refresh to try again.', code: 'read_failed' });
+    }
+  };
+}
+
+const merge = (...lists: QuickDoc[][]) => [...new Map(lists.flat().map(d => [d.id, d])).values()];
+
+/** The Today screen: what needs attention, in order, and today's takings. */
+export function createQuickTodayHandler(deps: QuickRouteDeps) {
+  return readHandler(deps, async (tx, { today, settings }) => {
+    const [dated, cancelled, unpaid, preorders, menu, materials, experiments, wastageLogs, productionRuns] = await Promise.all([
+      tx.where('orders', 'date', today),
+      tx.where('orders', 'cancelledOn', today),
+      tx.where('orders', 'paymentStatus', 'unpaid'),
+      tx.where('orders', 'preorder', true),
+      tx.all('menu'),
+      tx.all('materials'),
+      tx.all('experiments'),
+      tx.where('wastageLogs', 'date', today),
+      // Batches whose use-by date is near or recently passed.
+      tx.range('productionRuns', 'expiryDate', addDays(today, -30), addDays(today, USE_BY_SOON_DAYS)),
+    ]);
+    return buildToday({
+      today, settings, currency: currencyOf(settings),
+      orders: merge(dated, cancelled, unpaid, preorders) as unknown as Order[],
+      menu: menu as unknown as MenuItem[], materials: materials as unknown as RawMaterial[],
+      experiments: experiments as any, wastageLogs: wastageLogs as any, productionRuns: productionRuns as any,
+    });
+  });
+}
+
+/** The Upcoming screen: open pre-orders, overdue ones apart, soonest first. */
+export function createQuickUpcomingHandler(deps: QuickRouteDeps) {
+  return readHandler(deps, async (tx, { today, settings }) => {
+    const [preorders, menu] = await Promise.all([tx.where('orders', 'preorder', true), tx.all('menu')]);
+    return buildUpcoming({ today, settings, currency: currencyOf(settings), orders: preorders as unknown as Order[], menu: menu as unknown as MenuItem[] });
+  });
+}
+
+// ─── Push token and notification settings ───────────────────────────────────
+
+/** The settings document: one per owner. */
+const NOTIFICATIONS_DOC = 'notifications';
+
+/**
+ * POST /mobile/push-token: remembers this phone, so the notification job can reach it. Saving the same phone again only
+ * refreshes it, so no idempotency key is needed. One document per token, in a collection only the server reads.
+ */
+export function createQuickPushTokenHandler(deps: QuickRouteDeps) {
+  return async (req: AuthedRequest, res: Response) => {
+    const { token, platform } = req.body ?? {};
+    if (typeof token !== 'string' || !EXPO_PUSH_TOKEN.test(token)) return res.status(400).json({ error: 'That is not a push token.', code: 'bad_request' });
+    if (platform !== 'ios' && platform !== 'android') return res.status(400).json({ error: 'platform must be ios or android.', code: 'bad_request' });
+    try {
+      const id = token.replace(/[^A-Za-z0-9]/g, '_');
+      await deps.db.run(req.uid!, async tx => {
+        tx.apply([{ collection: 'devices', id, merge: false, data: { token, platform, updatedAt: deps.now() } }]);
+      });
+      return res.json({ saved: true });
+    } catch (err: any) {
+      console.error('Quick push token failed:', err?.message);
+      return res.status(500).json({ error: 'Could not save that.', code: 'save_failed' });
+    }
+  };
+}
+
+/** GET /mobile/notification-settings: what the owner chose, with the defaults for anything not chosen yet. */
+export function createQuickNotificationSettingsGetHandler(deps: QuickRouteDeps) {
+  return async (req: AuthedRequest, res: Response) => {
+    try {
+      const stored = await deps.db.run(req.uid!, tx => tx.get('mobileSettings', NOTIFICATIONS_DOC));
+      return res.json(withNotificationDefaults(stored));
+    } catch (err: any) {
+      console.error('Quick notification settings read failed:', err?.message);
+      return res.status(500).json({ error: 'Could not load that.', code: 'read_failed' });
+    }
+  };
+}
+
+/** PUT /mobile/notification-settings: saves all of them. An off switch is respected by the job that sends. */
+export function createQuickNotificationSettingsPutHandler(deps: QuickRouteDeps) {
+  return async (req: AuthedRequest, res: Response) => {
+    const parsed = readNotificationSettings(req.body);
+    if (parsed.ok === false) return res.status(400).json({ error: parsed.error, code: 'bad_request' });
+    try {
+      await deps.db.run(req.uid!, async tx => {
+        tx.apply([{ collection: 'mobileSettings', id: NOTIFICATIONS_DOC, merge: false, data: { ...parsed.value, updatedAt: deps.now() } }]);
+      });
+      return res.json(parsed.value);
+    } catch (err: any) {
+      console.error('Quick notification settings save failed:', err?.message);
+      return res.status(500).json({ error: 'Could not save that.', code: 'save_failed' });
+    }
+  };
 }

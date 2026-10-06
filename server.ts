@@ -10,7 +10,8 @@ import { saveCredentials, getCredentials, deleteCredentials } from "./lib/integr
 import { readRazorpayConfig, createRazorpayApi } from "./lib/razorpay";
 import { setBillingInfo, getBillingInfo, findUidByRazorpaySubscriptionId, hasActiveAccess } from "./lib/subscriptionStore";
 import { createAdminQuickDb } from "./lib/quickDb";
-import { createAccessGate, createQuickOrderHandler, createQuickRestockHandler, createQuickProductionHandler } from "./lib/quickRoutes";
+import { createAccessGate, createQuickOrderHandler, createQuickRestockHandler, createQuickProductionHandler, createQuickHandOverHandler, createQuickPaymentHandler, createQuickTodayHandler, createQuickUpcomingHandler,
+  createQuickPushTokenHandler, createQuickNotificationSettingsGetHandler, createQuickNotificationSettingsPutHandler } from "./lib/quickRoutes";
 import { randomId } from "./src/utils/plans";
 import {
   paywallApplies, createBillingStatusHandler, createSubscriptionHandler, createVerifyPaymentHandler, createCancelHandler, createWebhookHandler,
@@ -137,7 +138,10 @@ async function startServer() {
 
   // --- Stockpot Quick (phone app) save endpoints ---
   // Bearer-token only, so no CSRF check (see lib/quickRoutes.ts). Every POST needs an Idempotency-Key header.
-  const quickDeps = { db: createAdminQuickDb(), now: () => Date.now(), newId: randomId };
+  const quickDeps = {
+    db: createAdminQuickDb(), now: () => Date.now(), newId: randomId,
+    bills: createOrRefreshBill, publicUrl: process.env.APP_URL,
+  };
   const quickGate = createAccessGate({
     paywall: account => paywallApplies(account),
     hasActiveAccess: async uid => hasActiveAccess((await getBillingInfo(uid)).status),
@@ -145,6 +149,13 @@ async function startServer() {
   api.post("/mobile/orders", quickGate, createQuickOrderHandler(quickDeps));
   api.post("/mobile/restocks", quickGate, createQuickRestockHandler(quickDeps));
   api.post("/mobile/production-runs", quickGate, createQuickProductionHandler(quickDeps));
+  api.post("/mobile/orders/:id/hand-over", quickGate, createQuickHandOverHandler(quickDeps));
+  api.post("/mobile/payments", quickGate, createQuickPaymentHandler(quickDeps));
+  api.get("/mobile/today", quickGate, createQuickTodayHandler(quickDeps));
+  api.get("/mobile/upcoming", quickGate, createQuickUpcomingHandler(quickDeps));
+  api.post("/mobile/push-token", quickGate, createQuickPushTokenHandler(quickDeps));
+  api.get("/mobile/notification-settings", quickGate, createQuickNotificationSettingsGetHandler(quickDeps));
+  api.put("/mobile/notification-settings", quickGate, createQuickNotificationSettingsPutHandler(quickDeps));
 
   // --- Shopify OAuth Routes ---
 

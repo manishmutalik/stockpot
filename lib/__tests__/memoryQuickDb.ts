@@ -29,6 +29,14 @@ export function memoryQuickDb(now: () => number = () => Date.now()) {
           const prefix = `${uid}/${collection}/`;
           return [...docs].filter(([k, d]) => k.startsWith(prefix) && d[field] === value).map(([k, d]) => withId(k.slice(prefix.length), d));
         },
+        async range(collection, field, min, max) {
+          const prefix = `${uid}/${collection}/`;
+          return [...docs].filter(([k, d]) => k.startsWith(prefix) && typeof d[field] === 'string' && d[field] >= min && d[field] <= max).map(([k, d]) => withId(k.slice(prefix.length), d));
+        },
+        async all(collection) {
+          const prefix = `${uid}/${collection}/`;
+          return [...docs].filter(([k]) => k.startsWith(prefix)).map(([k, d]) => withId(k.slice(prefix.length), d));
+        },
         apply(writes) {
           for (const w of writes) pending.push(() => {
             const k = key(uid, w.collection, w.id);

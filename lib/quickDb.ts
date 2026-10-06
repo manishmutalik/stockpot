@@ -17,7 +17,11 @@ import type { PlanCollection, PlannedWrite } from '../src/utils/plans/types';
 export type QuickDoc = Record<string, any> & { id: string };
 
 /** The collections an endpoint may read: everything it can write, plus the settings document. */
-export type QuickCollection = PlanCollection | 'settings';
+export type QuickCollection = PlanCollection | 'settings' | 'experiments' | 'wastageLogs' | 'devices' | 'mobileSettings';
+
+/** Where an endpoint may write: the business collections, plus two the server alone uses (never matched by a Firestore rule). */
+export type QuickWriteCollection = PlanCollection | 'devices' | 'mobileSettings';
+export type QuickWrite = Omit<PlannedWrite, 'collection'> & { collection: QuickWriteCollection };
 
 /** What an endpoint answered, kept so a repeated request gets the same answer. */
 export interface StoredResult { status: number; body: unknown }
@@ -28,8 +32,12 @@ export interface QuickTx {
   getMany(collection: QuickCollection, ids: string[]): Promise<Map<string, QuickDoc>>;
   /** Every document in the collection whose `field` equals `value`. */
   where(collection: QuickCollection, field: string, value: unknown): Promise<QuickDoc[]>;
+  /** Every document in the collection whose `field` is between `min` and `max`, inclusive (strings such as YYYY-MM-DD compare as text). */
+  range(collection: QuickCollection, field: string, min: string, max: string): Promise<QuickDoc[]>;
+  /** Every document in the collection. */
+  all(collection: QuickCollection): Promise<QuickDoc[]>;
   /** Buffered, and applied together once the endpoint has finished reading. */
-  apply(writes: PlannedWrite[]): void;
+  apply(writes: QuickWrite[]): void;
   getResult(scopedKey: string): Promise<StoredResult | null>;
   putResult(scopedKey: string, result: StoredResult): void;
 }
@@ -96,6 +104,14 @@ export function createAdminQuickDb(now: () => number = Date.now): QuickDb {
           },
           async where(collection, field, value) {
             const snap = await t.get(user.collection(collection).where(field, '==', value));
+            return snap.docs.map(asDoc);
+          },
+          async range(collection, field, min, max) {
+            const snap = await t.get(user.collection(collection).where(field, '>=', min).where(field, '<=', max));
+            return snap.docs.map(asDoc);
+          },
+          async all(collection) {
+            const snap = await t.get(user.collection(collection));
             return snap.docs.map(asDoc);
           },
           apply(writes) {
