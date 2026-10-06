@@ -410,7 +410,7 @@ const LandingPage: React.FC = () => {
               <div className="lg:col-span-5 flex flex-col gap-9 order-1 lg:order-2">
                 <Reveal>
                   <StepTag n="03" />
-                  <h3 className="text-2xl font-bold tracking-tight mb-3">Know what every order made</h3>
+                  <h3 className="text-2xl font-bold tracking-tight mb-3">Know how much money every order made</h3>
                   <p className="text-muted leading-relaxed mb-4">
                     Every order shows what you made on it after ingredients, packaging, delivery, discounts, payment fees and GST. Your dashboard then takes off wastage and your rent, gas and salaries, so the profit you see is the profit you keep.
                   </p>

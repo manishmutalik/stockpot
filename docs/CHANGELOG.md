@@ -5,8 +5,9 @@
 The hero headline is now "The CFO of your food business", with "Know exactly how much money your
 food business makes." directly under it (this replaces the old headline wording, "Know exactly
 what your food business makes."). The same wording runs through the page: the problem section
-now asks "Busy every day. Still not sure how much money you made?" and the closing banner says
-"Know exactly how much money you made this week."
+now asks "Busy every day. Still not sure how much money you made?", the third feature reads
+"Know how much money every order made", and the closing banner says "Know exactly how much
+money you made this week."
 
 ## Payments move from Stripe to Razorpay, and the free trial is 45 days
 

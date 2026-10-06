@@ -92,7 +92,7 @@ describe('LandingPage', () => {
     for (const phrase of [
       'Take orders the way customers send them',
       'Get paid without chasing',
-      'Know what every order made',
+      'Know how much money every order made',
       'Know when a price needs to go up',
       'A business briefing every morning',
       'Stock that keeps itself up to date',
