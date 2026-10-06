@@ -270,8 +270,8 @@ Nothing is queued. The AI list in the handoff is complete.
 
 - **Stockpot Quick (phone companion app): planned, not started.** Spec and screen-design review:
   `docs/handoffs/stockpot-quick-mobile.md` (read its "Review notes" first). Decided: saving needs a connection and
-  the draft is kept (no offline queue in the first version). Not yet decided: what "Remind" does, the
-  voice-reading limit and demo-kitchen mic, and whether production sessions save as one transaction.
+  the draft is kept (no offline queue in the first version). Not yet decided: what "Remind" does and whether
+  overdue pre-orders show. Production sessions save as one transaction on the server.
   **Build progress:** Phase 1 (shared plan functions) is done: the write logic of Add Order, hand over, Mark paid,
   Restock and Log Production Run now lives in `src/utils/plans/` (pure, no Firebase). The web hooks commit exactly
   what a plan says (`src/hooks/__tests__/plansParity.test.ts` proves it) and the phone app's server will commit the
@@ -279,8 +279,10 @@ Nothing is queued. The AI list in the handoff is complete.
   restocks, production runs, hand-over and payments; Today and Upcoming data; push token and notification settings
   (`lib/quickRoutes.ts`, `src/utils/quickViews.ts`); and `POST /api/mobile/parse` for **orders** (`lib/quickParseRoutes.ts`,
   `src/utils/quickParse.ts`: kind detection, questions, answers applied in code, preview figures from the same plan the
-  save runs). Still to build: the restock, payment and production readers in `parse`, then the notifications job, then
-  the Expo app in `mobile/`. Not tested against a real Firestore or a real model.
+  save runs), now for all four kinds: orders, stock bought (`restockParse.ts`), something made and a payment
+  (`paymentParse.ts`, `quickPayments.ts`; readers' prompts and models in `lib/quickReaders.ts`). Voice reading has its
+  own limit, 60 a day (`AI_QUICK_DAILY_LIMIT`); the demo kitchen's mic stays and shows an alert. Still to build: the
+  notifications job, then the Expo app in `mobile/`. Not tested against a real Firestore or a real model.
 
 - **Razorpay is built and tested only against mocks.** The account was under review, so
   nothing has run against Razorpay itself yet. When it is live the owner posts the Test Mode

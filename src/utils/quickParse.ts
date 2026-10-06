@@ -14,7 +14,8 @@ import type { MenuItem, PaymentMethod, RawMaterial, BakerySettings } from '../ty
 import { PAYMENT_METHODS } from '../types';
 import { buildBill, billBalance, formatMoney } from './billing';
 import { customerLabels, groupOrdersByCustomer } from './customers';
-import { planOrderGroup, type OrderGroupCommon, type OrderLineItem } from './plans';
+import { planOrderGroup, planProductionSession, productionRunCost, type OrderGroupCommon, type OrderLineItem, type ProductionRunInput } from './plans';
+import type { ProductionFormFill } from './productionParse';
 import type { OrderFormFill } from './orderParse';
 import type { Order } from '../types';
 
@@ -268,4 +269,97 @@ export function previewOrder(input: {
     total, advance, balanceDue: balance,
     label: { total: money(total), balanceDue: money(balance), advance: advance === null ? null : money(advance) },
   } };
+}
+
+// ─── What was made ──────────────────────────────────────────────────────────
+
+/** The body of the production endpoint. */
+export interface ProductionDraft {
+  date?: string;
+  rows: { recipeId: string; quantityProduced: number; quantityYield?: number; notes?: string }[];
+}
+
+/**
+ * What was made, as the production endpoint takes it, and what is still open. The date is never in the future (it has
+ * happened). With one item and waste written, the sellable yield is the quantity less the waste.
+ * Questions (answer ids): `item:N` which menu item the Nth unmatched item is (a menu id, or `skip`); `date`.
+ */
+export function buildProductionDraft(input: {
+  fill: ProductionFormFill;
+  menu: { id: string; name: string }[];
+  today: string;
+  answers: Map<string, string>;
+}): DraftResult<ProductionDraft> {
+  const { fill, menu, today, answers } = input;
+  const questions: Question[] = [];
+  const notes: string[] = [];
+
+  const quantities = new Map<string, number>(fill.rows.map(r => [r.recipeId, r.quantity]));
+  fill.notFound.forEach((nf, i) => {
+    const id = `item:${i}`;
+    const chosen = answers.get(id);
+    if (chosen === 'skip') { notes.push(`Left out ${nf.quantity} × ${nf.nameAsWritten}.`); return; }
+    if (chosen && menu.some(m => m.id === chosen)) { quantities.set(chosen, (quantities.get(chosen) ?? 0) + nf.quantity); return; }
+    questions.push({
+      id, type: 'choice', prompt: `"${nf.nameAsWritten}" is not on your menu. Which menu item is it?`,
+      options: [...(nf.suggestion ? [{ value: nf.suggestion.id, label: nf.suggestion.name }] : []), { value: 'skip', label: 'Leave it out' }],
+    });
+  });
+
+  let date = fill.date ?? today;
+  if (fill.dateNotUnderstood) {
+    const chosen = validDate(answers.get('date'));
+    if (chosen && chosen <= today) date = chosen;
+    else questions.push({ id: 'date', type: 'date', prompt: `I could not tell the date from "${fill.dateNotUnderstood}". When was it made?` });
+  }
+
+  const rows: ProductionDraft['rows'] = [...quantities].map(([recipeId, quantityProduced]) => ({ recipeId, quantityProduced }));
+  if (fill.yieldQty !== undefined && rows.length === 1 && fill.notFound.length === 0) rows[0].quantityYield = fill.yieldQty;
+  if (fill.notes && rows.length > 0) rows[0].notes = fill.notes;
+  for (const w of fill.unplacedWaste) notes.push(`${w.units} ${w.name} wasted: record it with Discard in the web app's Production Log.`);
+
+  return { draft: { ...(date !== today && { date }), rows }, questions, notes };
+}
+
+export interface ProductionPreview {
+  date: string;
+  rows: { recipeId: string; name: string; quantityProduced: number; quantityYield: number; costTotal: number; costPerUnit: number; stockAfter: number }[];
+  /** Ingredients this would take below nothing, as the web would let it. The app asks "Produce anyway?". */
+  shortages: { materialId: string; name: string; unit: string; short: number }[];
+  total: number;
+  label: { total: string };
+}
+
+/** The same plan the save runs, so the cost and the shortfall shown are the ones that will be recorded. */
+export function previewProduction(input: {
+  draft: ProductionDraft;
+  menu: MenuItem[];
+  materials: RawMaterial[];
+  currency: { code: string; symbol: string };
+  today: string;
+}): { ok: true; preview: ProductionPreview } | { ok: false; message: string } {
+  const { draft, menu, materials, currency } = input;
+  const day = draft.date ?? input.today;
+  const inputs: ProductionRunInput[] = draft.rows.map(r => {
+    const recipe = menu.find(m => m.id === r.recipeId)?.recipe ?? [];
+    return {
+      recipeId: r.recipeId, quantityProduced: r.quantityProduced, quantityYield: r.quantityYield ?? r.quantityProduced, date: day, notes: r.notes,
+      costTotal: parseFloat(productionRunCost(recipe, materials, r.quantityProduced).toFixed(2)),
+    };
+  });
+  let n = 0;
+  const plan = planProductionSession(inputs, { materials, menu }, { newId: () => `preview-${++n}`, now: () => 0 });
+  if (plan.ok === false) return { ok: false, message: plan.error.message };
+
+  const rows = inputs.map(r => ({
+    recipeId: r.recipeId, name: menu.find(m => m.id === r.recipeId)?.name ?? 'Item',
+    quantityProduced: r.quantityProduced, quantityYield: r.quantityYield, costTotal: r.costTotal,
+    costPerUnit: r.quantityYield > 0 ? Math.round((r.costTotal / r.quantityYield) * 100) / 100 : 0,
+    stockAfter: plan.state.menu.find(m => m.id === r.recipeId)?.finishedGoodsStock ?? 0,
+  }));
+  const total = Math.round(rows.reduce((s, r) => s + r.costTotal, 0) * 100) / 100;
+  const shortages = plan.state.materials
+    .filter(m => m.initialStock < 0)
+    .map(m => ({ materialId: m.id, name: m.name, unit: m.unit, short: Math.round(-m.initialStock * 10000) / 10000 }));
+  return { ok: true, preview: { date: day, rows, shortages, total, label: { total: formatMoney(total, currency) } } };
 }

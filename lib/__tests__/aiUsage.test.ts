@@ -81,12 +81,12 @@ describe('peekAiUsage', () => {
   it('reports what has been used without using any', async () => {
     await reserveAiUse(base); await reserveAiUse(base); await reserveAiUse({ ...base, feature: 'briefing' });
     const before = JSON.stringify([...store.entries()]);
-    expect(await peekAiUsage('u1', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 2, briefing: 1, parse: 0 }, global: 3 });
+    expect(await peekAiUsage('u1', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 2, briefing: 1, parse: 0, quick: 0 }, global: 3 });
     expect(JSON.stringify([...store.entries()])).toBe(before);
   });
 
   it('is all zero for a user with no use', async () => {
-    expect(await peekAiUsage('nobody', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 0, briefing: 0, parse: 0 }, global: 0 });
+    expect(await peekAiUsage('nobody', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 0, briefing: 0, parse: 0, quick: 0 }, global: 0 });
   });
 });
 
