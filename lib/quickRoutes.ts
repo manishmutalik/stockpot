@@ -19,17 +19,24 @@
 import type { NextFunction, Response } from 'express';
 import type { AuthedRequest } from './auth';
 import { parseIdempotencyKey, withIdempotency, type QuickDb, type QuickTx, type StoredResult } from './quickDb';
-import { planOrderGroup, planRestock, planProductionSession, collapseWrites, productionRunCost } from '../src/utils/plans';
+import { planOrderGroup, planRestock, planProductionSession, planHandOver, planMarkPaid, collapseWrites, productionRunCost } from '../src/utils/plans';
 import type { OrderGroupCommon, OrderLineItem, PlanError, ProductionRunInput } from '../src/utils/plans';
 import { enterableUnits } from '../src/utils/conversions';
 import { saleAmounts } from '../src/utils/profit';
+import { buildBill, billBalance, formatMoney } from '../src/utils/billing';
+import { groupPendingPayments, isUnpaid } from '../src/utils/payments';
+import { clusterOrdersByGroup } from '../src/utils/orderClustering';
 import { todayInZone } from '../src/utils/localDate';
-import type { BakerySettings, MenuItem, PaymentMethod, RawMaterial } from '../src/types';
+import type { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../src/types';
 
 export interface QuickRouteDeps {
   db: QuickDb;
   now: () => number;
   newId: () => string;
+  /** Makes (or refreshes) the public bill for an order, once it is saved. Absent: answers carry no bill link. */
+  bills?: (uid: string, orderId: string) => Promise<{ token: string } | null>;
+  /** The app's public address, for the "view bill online" link. */
+  publicUrl?: string;
 }
 
 // ─── Access ─────────────────────────────────────────────────────────────────
@@ -160,7 +167,9 @@ function writeHandler<T>(
   deps: QuickRouteDeps,
   scope: string,
   read: (body: unknown) => Read<T>,
-  run: (tx: QuickTx, input: T, req: AuthedRequest) => Promise<StoredResult>
+  run: (tx: QuickTx, input: T, req: AuthedRequest) => Promise<StoredResult>,
+  /** Adds to a successful answer after it is saved (not remembered with it), e.g. a link made outside the transaction. */
+  decorate?: (body: any, req: AuthedRequest) => Promise<Record<string, unknown>>
 ) {
   return async (req: AuthedRequest, res: Response) => {
     const key = parseIdempotencyKey(req.headers['idempotency-key']);
@@ -171,7 +180,12 @@ function writeHandler<T>(
     try {
       const result = await withIdempotency(deps.db, { uid: req.uid!, scope, key, now: deps.now }, tx => run(tx, parsed.value, req));
       if (result.replayed) res.setHeader('Idempotent-Replayed', 'true');
-      return res.status(result.status).json(result.body);
+      let body = result.body;
+      if (decorate && result.status >= 200 && result.status < 300) {
+        try { body = { ...(result.body as object), ...(await decorate(result.body, req)) }; }
+        catch (err: any) { console.error(`Quick ${scope} could not add to its answer:`, err?.message); }
+      }
+      return res.status(result.status).json(body);
     } catch (err: any) {
       console.error(`Quick ${scope} failed:`, err?.message);
       return res.status(500).json({ error: 'Could not save that. Nothing was saved; please try again.', code: 'save_failed' });
@@ -281,5 +295,126 @@ export function createQuickProductionHandler(deps: QuickRouteDeps) {
       .filter(m => m.initialStock < 0)
       .map(m => ({ materialId: m.id, name: m.name, unit: m.unit, short: Math.round(-m.initialStock * 10000) / 10000 }));
     return { status: 201, body: { runIds: plan.runIds, sessionId: plan.sessionId ?? null, shortages } };
+  });
+}
+
+// ─── Bills and balances ─────────────────────────────────────────────────────
+
+const DEFAULT_CURRENCY = { code: 'INR', symbol: '₹' };
+const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+/** What buildBill needs from the settings, with a blank for anything the owner has not filled in. */
+function billSettings(s: Partial<BakerySettings>) {
+  return {
+    name: s.name ?? '', address: s.address ?? '', phone: s.phone ?? '', logo: s.logo,
+    gstApplicable: s.gstApplicable, gstRate: s.gstRate, gstPricingMode: s.gstPricingMode, upiId: s.upiId,
+  };
+}
+const currencyOf = (s: Partial<BakerySettings> & { currency?: { code: string; symbol: string } }) => s.currency ?? DEFAULT_CURRENCY;
+
+// ─── POST /mobile/orders/:id/hand-over ──────────────────────────────────────
+
+function readHandOverBody(body: unknown): Read<{ method?: PaymentMethod }> {
+  if (body === undefined || body === null || (isObject(body) && Object.keys(body).length === 0)) return { ok: true, value: {} };
+  if (!isObject(body)) return bad('Send { balanceReceived: { method } } or nothing.');
+  if (body.balanceReceived === undefined) return { ok: true, value: {} };
+  const m = isObject(body.balanceReceived) ? method(body.balanceReceived.method) : null;
+  return m ? { ok: true, value: { method: m } } : bad('balanceReceived needs a payment method.');
+}
+
+/**
+ * Hands an order over (a pre-order takes its stock now, all or nothing) and, when asked, records the balance as received
+ * in the same save, by the method given. Answers with the balance that was due and a link to the bill.
+ */
+export function createQuickHandOverHandler(deps: QuickRouteDeps) {
+  return writeHandler(deps, 'hand-over', readHandOverBody, async (tx, { method: paidBy }, req) => {
+    const id = req.params.id;
+    if (typeof id !== 'string' || !ID.test(id)) return failure(400, 'That is not an order id.', { code: 'bad_request' });
+
+    const order = (await tx.get('orders', id)) as Order | null;
+    if (!order) return failure(404, 'Order not found.', { code: 'not_found' });
+    // A multi-item order is always handed over whole.
+    const orders = order.orderGroupId ? ((await tx.where('orders', 'orderGroupId', order.orderGroupId)) as Order[]) : [order];
+    const menu = asMenu(await tx.getMany('menu', orders.map(o => o.menuItemId)));
+    const materials = await materialsFor(tx, menu);
+    const settings = await loadSettings(tx);
+
+    const plan = planHandOver({ order, orders, menu, materials });
+    if (plan.kind === 'noop') return { status: 200, body: { handedOver: false, reason: 'already_handed_over', orderIds: orders.map(o => o.id) } };
+    if (plan.kind === 'error') return failure(409, plan.message, { code: plan.code, title: plan.title });
+
+    // What the customer still owes: the total less any advance, unless it is already paid.
+    const unpaid = orders.filter(isUnpaid);
+    const balanceDue = unpaid.length > 0 ? round2(billBalance(buildBill({ orders, menu, settings: billSettings(settings), currency: currencyOf(settings) }))) : 0;
+
+    let writes = plan.writes;
+    const received = !!paidBy && balanceDue > 0;
+    if (received) writes = collapseWrites([...writes, ...planMarkPaid({ ids: unpaid.map(o => o.id), paid: true, method: paidBy, feeRates: settings.paymentFeeRates })]);
+    tx.apply(writes);
+
+    return { status: 200, body: { handedOver: true, orderIds: orders.map(o => o.id), balanceDue, balanceReceived: received ? balanceDue : 0, ...(received && { method: paidBy }) } };
+  }, async (body, req) => {
+    if (!deps.bills || !body?.orderIds?.length) return {};
+    const made = await deps.bills(req.uid!, body.orderIds[0]);
+    return made && deps.publicUrl ? { billUrl: `${deps.publicUrl.replace(/\/$/, '')}/bill/${made.token}` } : {};
+  });
+}
+
+// ─── POST /mobile/payments ──────────────────────────────────────────────────
+
+function readPaymentBody(body: unknown): Read<{ customerKey: string; amount: number; method: PaymentMethod }> {
+  if (!isObject(body)) return bad('Send { customerKey, amount, method }.');
+  if (typeof body.customerKey !== 'string' || body.customerKey.length === 0 || body.customerKey.length > 200) return bad('Say whose payment it is.');
+  if (!isPositive(body.amount, 1_000_000_000)) return bad('The amount must be above nothing.');
+  const m = method(body.method);
+  if (!m) return bad('Unknown payment method.');
+  return { ok: true, value: { customerKey: body.customerKey, amount: body.amount, method: m } };
+}
+
+/**
+ * A customer paid what they owe: their unpaid orders are marked paid, oldest first, by the method and with its fee rate,
+ * as Mark paid does on the web. There are no part-payments yet (only a pre-order's advance), so the amount must come to
+ * exactly what one or more whole orders are owed. Anything else is refused with what is owed, so the app can ask, and
+ * nothing is guessed.
+ */
+export function createQuickPaymentHandler(deps: QuickRouteDeps) {
+  return writeHandler(deps, 'payments', readPaymentBody, async (tx, { customerKey, amount, method: paidBy }) => {
+    const settings = await loadSettings(tx);
+    const unpaid = (await tx.where('orders', 'paymentStatus', 'unpaid')) as Order[];
+    const menu = asMenu(await tx.getMany('menu', unpaid.map(o => o.menuItemId)));
+    const currency = currencyOf(settings);
+    const today = todayInZone(settings.timezone, new Date(deps.now()));
+
+    const customer = groupPendingPayments({ orders: unpaid, menu, settings: billSettings(settings), currency, today }).find(c => c.key === customerKey);
+    if (!customer) return failure(404, 'Nothing is pending for that customer.', { code: 'no_pending' });
+
+    // One entry per whole order (a multi-item order counts once), oldest first, with what that order is owed.
+    const dues = clusterOrdersByGroup(customer.orders).map(c => {
+      const orders = c.type === 'single' ? [c.order] : c.orders;
+      return { orders, due: round2(billBalance(buildBill({ orders, menu, settings: billSettings(settings), currency }))) };
+    });
+
+    // The amounts that would pay whole orders, oldest first: 900, then 900 + 400, and so on.
+    let running = 0;
+    const options = dues.map(d => (running = round2(running + d.due)));
+    const matched = options.findIndex(total => Math.abs(total - amount) < 0.005);
+
+    if (matched < 0) {
+      const owed = round2(customer.dueTotal);
+      const orderWord = (n: number) => `${n} order${n === 1 ? '' : 's'}`;
+      const why = amount > owed + 0.005
+        ? `${formatMoney(amount, currency)} is more than that.`
+        : `${formatMoney(amount, currency)} doesn't cover ${dues.length === 1 ? 'it' : `a whole order (the oldest is ${formatMoney(dues[0].due, currency)})`}.`;
+      return failure(422, `${customer.name} owes ${formatMoney(owed, currency)} for ${orderWord(customer.orderCount)}. ${why}`, {
+        code: 'amount_mismatch', customerName: customer.name, owed, orderCount: customer.orderCount, oldestOrderDue: dues[0].due, amountsThatWork: options,
+      });
+    }
+
+    const paid = dues.slice(0, matched + 1).flatMap(d => d.orders);
+    tx.apply(planMarkPaid({ ids: paid.map(o => o.id), paid: true, method: paidBy, feeRates: settings.paymentFeeRates }));
+    return { status: 200, body: {
+      customerName: customer.name, amount, method: paidBy, orderIds: paid.map(o => o.id),
+      remainingDue: round2(customer.dueTotal - amount),
+    } };
   });
 }
