@@ -81,7 +81,8 @@ first server-side entitlement check.
 5. Daily caps, counted in Firestore by the server (Admin SDK, not reachable by
    clients): per feature per user (`AI_CHAT_DAILY_LIMIT` default 30,
    `AI_BRIEFING_DAILY_LIMIT` default 4, which is the first briefing of the day
-   plus three refreshes, and `AI_PARSE_DAILY_LIMIT` default 30) and a global daily
+   plus three refreshes, `AI_PARSE_DAILY_LIMIT` default 30, and `AI_QUICK_DAILY_LIMIT` default 60 for the phone app's
+   readings, which have their own count) and a global daily
    ceiling (`AI_GLOBAL_DAILY_LIMIT`, default 1500 calls). A user's day is their
    business date (their time zone); the global day is UTC. A request is counted
    before the model is called, atomically, and a failed call still counts.

@@ -8,7 +8,7 @@ describe('readAiConfig', () => {
     expect(c.keyConfigured).toBe(false);
     expect(c.allowedEmails).toEqual([]);
     expect(c.allowedUids).toEqual([]);
-    expect(c.limits).toEqual({ chat: 30, briefing: 4, parse: 30 });
+    expect(c.limits).toEqual({ chat: 30, briefing: 4, parse: 30, quick: 60 });
     expect(c.globalLimit).toBe(1500);
     expect(DEFAULT_LIMITS.chat).toBe(30);
     expect(DEFAULT_GLOBAL_LIMIT).toBe(1500);
@@ -34,6 +34,11 @@ describe('readAiConfig', () => {
     const c = readAiConfig({ AI_BRIEFING_DAILY_LIMIT: '2', AI_PARSE_DAILY_LIMIT: '5', AI_GLOBAL_DAILY_LIMIT: '200' });
     expect(c.limits).toMatchObject({ briefing: 2, parse: 5 });
     expect(c.globalLimit).toBe(200);
+  });
+
+  it('gives the phone app its own limit, 60 a day unless set', () => {
+    expect(readAiConfig({}).limits.quick).toBe(60);
+    expect(readAiConfig({ AI_QUICK_DAILY_LIMIT: '25' }).limits).toMatchObject({ quick: 25, parse: 30 });
   });
 
   it('reads allow-lists, trimming, lower-casing emails and ignoring blanks', () => {

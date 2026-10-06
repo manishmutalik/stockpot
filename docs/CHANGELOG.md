@@ -6,8 +6,17 @@
 questions the message leaves open (which menu item, the date, whether it was paid, how an advance was paid,
 a pre-order when there is not the stock). It uses the web's own order reader and checks, removes phone
 numbers and known customers' names before the model sees the message, shows the figures the save will use,
-and saves nothing. Answering a question does not use the model again. Restock, payment and production
-messages follow. Not yet used by any screen.
+and saves nothing. Answering a question does not use the model again. Not yet used by any screen.
+
+## Stockpot Quick: reading stock bought, something made and a payment (server)
+
+`POST /api/mobile/parse` now also reads "bought 5 kg butter for 2000", "made 40 croissants yesterday, 3
+burnt" and "Priya paid 900 by UPI". Every number, unit and name the model gives must be written in the
+message; an unknown material or menu item is flagged, never created; a missing price, unit, date, customer
+or method is a question. A payment must settle whole orders, oldest first, as the save requires, and the
+amounts that would work are offered. Previews show the new stock and cost per kg, the cost of the run and
+any ingredient it would run out of, and what is left owing. Voice reading has its own limit of 60 a day
+(`AI_QUICK_DAILY_LIMIT`), separate from the web's order-message limit.
 
 ## Fix: ingredient and item stock when several items are logged or deleted together
 

@@ -281,12 +281,11 @@ come from the server.
 
 ### C. Decisions
 
-**Decided:** offline saving follows this handoff (online required to save, draft kept, nothing sent in the background; a true offline queue stays phase 2).
+**Decided:** voice reading has its own limit of 60 a day; the demo kitchen's mic stays visible and shows an alert that it is not available there; offline saving follows this handoff (online required to save, draft kept, nothing sent in the background; a true offline queue stays phase 2).
 
 **Still open:**
 
 - What Remind does, and whether overdue pre-orders show (item 6).
-- Whether `parse` gets its own limit, and what the demo kitchen's mic does (A3, A4).
 - Whether a production session saves as one transaction (A6).
 
 ### D. Built so far in `/api/mobile/parse` (differs from the spec above)
@@ -295,4 +294,9 @@ come from the server.
 - **Unknown menu item.** The spec says to ask a price, but an order line must be a menu item (the plan refuses an unknown id). The question is instead "Which menu item is it?" with the closest match and "Leave it out"; any menu id is accepted as the answer. Selling something not on the menu needs adding to the menu in the web app first.
 - **Kind detection is by words, not by the model.** Orders, stock bought, something made, payment received each have hint words; when none or two kinds match equally, the response is a `kind` question and nothing is spent. The app's four shortcut chips send `kind` directly.
 - **Questions so far (order):** `item:N`, `date`, `payment` (paid by a method, or later), `advance_method`, `advance` (amount, when it is more than the order), `stock` (book it as a pre-order). `preview` has the lines, total, advance and balance due, worked out by the same plan the save runs.
-- Restock, payment and production readers are not built yet: those kinds answer 501 `kind_not_ready`.
+- **All four kinds are read now.** Questions by kind:
+  - *Stock in* (`lib/quickReaders.ts`, `src/utils/restockParse.ts`): `material:N` (not in your materials: closest match, or leave it out; never created), `unit:N` (none written for a gram/ml material, or it does not fit), `total:N` (price not written). A price per unit that is written ("400 a kg") is multiplied in code. `preview` has, per line, the new stock, the cost per kg/l before and after (moving average), the percent change and the menu items whose cost changes. The expiry date is not read from speech yet.
+  - *Production*: `item:N`, `date` (never in the future). A single item with waste written gets the yield worked out; waste on several items is listed as a note to record with Discard in the web app. `preview` has the cost, cost per unit, stock after and `shortages` (ingredients that would go below nothing, for the app's "Produce anyway").
+  - *Payment* (`src/utils/paymentParse.ts`, `src/utils/quickPayments.ts`): `customer` (from those who owe something), `method`, `amount` (with the amounts that settle whole orders, oldest first, as options). `preview` has what they owed, the amount, orders covered, what is left and whether it clears everything. Nobody owing anything answers `nothing_pending` without using the model.
+- **The voice-reading limit is its own:** 60 a day per user (`AI_QUICK_DAILY_LIMIT`), counted as the `quick` feature, separate from the web's 30 (`parse`). `GET /api/ai/status` lists it. Answering a question uses none.
+- **Demo kitchen:** the mic stays visible. The server refuses demo accounts (`403`, `code: "demo_account"`); the app shows an alert that voice reading is not available in the demo when the mic is tapped (it can show it straight away for a demo account, without calling the server).

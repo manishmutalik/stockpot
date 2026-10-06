@@ -24,7 +24,8 @@ import type { OrderGroupCommon, OrderLineItem, PlanError, ProductionRunInput } f
 import { enterableUnits } from '../src/utils/conversions';
 import { saleAmounts } from '../src/utils/profit';
 import { buildBill, billBalance, formatMoney } from '../src/utils/billing';
-import { groupPendingPayments, isUnpaid } from '../src/utils/payments';
+import { isUnpaid } from '../src/utils/payments';
+import { customerDues, matchingOption } from '../src/utils/quickPayments';
 import { billSettingsOf, buildToday, buildUpcoming, USE_BY_SOON_DAYS } from '../src/utils/quickViews';
 import { EXPO_PUSH_TOKEN, readNotificationSettings, withNotificationDefaults } from '../src/utils/quickNotifications';
 import { clusterOrdersByGroup } from '../src/utils/orderClustering';
@@ -357,7 +358,7 @@ export function createQuickHandOverHandler(deps: QuickRouteDeps) {
 
 // ─── POST /mobile/payments ──────────────────────────────────────────────────
 
-function readPaymentBody(body: unknown): Read<{ customerKey: string; amount: number; method: PaymentMethod }> {
+export function readPaymentBody(body: unknown): Read<{ customerKey: string; amount: number; method: PaymentMethod }> {
   if (!isObject(body)) return bad('Send { customerKey, amount, method }.');
   if (typeof body.customerKey !== 'string' || body.customerKey.length === 0 || body.customerKey.length > 200) return bad('Say whose payment it is.');
   if (!isPositive(body.amount, 1_000_000_000)) return bad('The amount must be above nothing.');
@@ -380,19 +381,10 @@ export function createQuickPaymentHandler(deps: QuickRouteDeps) {
     const currency = currencyOf(settings);
     const today = todayInZone(settings.timezone, new Date(deps.now()));
 
-    const customer = groupPendingPayments({ orders: unpaid, menu, settings: billSettingsOf(settings), currency, today }).find(c => c.key === customerKey);
-    if (!customer) return failure(404, 'Nothing is pending for that customer.', { code: 'no_pending' });
-
-    // One entry per whole order (a multi-item order counts once), oldest first, with what that order is owed.
-    const dues = clusterOrdersByGroup(customer.orders).map(c => {
-      const orders = c.type === 'single' ? [c.order] : c.orders;
-      return { orders, due: round2(billBalance(buildBill({ orders, menu, settings: billSettingsOf(settings), currency }))) };
-    });
-
-    // The amounts that would pay whole orders, oldest first: 900, then 900 + 400, and so on.
-    let running = 0;
-    const options = dues.map(d => (running = round2(running + d.due)));
-    const matched = options.findIndex(total => Math.abs(total - amount) < 0.005);
+    const entry = customerDues({ unpaid, menu, settings, currency, today }).find(e => e.customer.key === customerKey);
+    if (!entry) return failure(404, 'Nothing is pending for that customer.', { code: 'no_pending' });
+    const { customer, dues, options } = entry;
+    const matched = matchingOption(options, amount);
 
     if (matched < 0) {
       const owed = round2(customer.dueTotal);
