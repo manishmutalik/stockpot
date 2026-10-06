@@ -267,7 +267,7 @@ resume an unsaved draft, no pre-orders).
 | # | Design shows | Problem | Recommendation |
 | - | ------------ | ------- | -------------- |
 | 1 | "98% / 94% / 100% confidence" on the reading | The readers produce no confidence score, so this would be an invented number, against "interpret, the owner confirms" | Drop it, or show where each value came from ("in your words" / "menu price") |
-| 2 | "Save order (Waiting for network)" and Settings → "Offline draft sync / Sync now" | Implies a queue that sends later; this handoff says online is required, the draft is kept, and nothing is sent in the background | **Open: owner to decide** (draft kept until online, as written, or a send-later queue) |
+| 2 | "Save order (Waiting for network)" and Settings → "Offline draft sync / Sync now" | Implies a queue that sends later; this handoff says online is required, the draft is kept, and nothing is sent in the background | **Decided (owner, 2026-10-06): do what this handoff says.** Saving needs a connection; without one the app shows "No connection — your draft is kept" and Save does not send. Change the design: no "Waiting for network" label, no "Offline draft sync / Sync now" setting. The draft still survives closing the app and is offered again on the next open |
 | 3 | Chips filling in while the owner speaks ("Streaming audio, auto-parsing") | Would call the AI on partial speech and use the daily limit up fast | Read only when **Read it** is tapped |
 | 4 | Figures on the confirm screens: new cost (₹90/kg, was ₹86, +4.6%), "Recipe margins recalculated +₹1.20", the butter shortfall, "Clears her full balance", yield | `/api/mobile/parse` returns only `{ kind, draft, questions[] }` | Return a `preview` with the draft, worked out server-side by a dry run of the plan functions (moving-average cost, `recipesAffectedBy`, stock after, balance after) |
 | 5 | The Hand over sheet records the balance as received, with a payment method | The hand-over endpoint takes no payment | Let hand-over take an optional `{ balanceReceived: { method } }` and do both in one transaction |
@@ -278,9 +278,12 @@ resume an unsaved draft, no pre-orders).
 Sample figures in the designs (order numbers, a 1 kg tier next to "2 × 0.5 kg") are illustrative; real ones
 come from the server.
 
-### C. Decisions still open
+### C. Decisions
 
-- Offline saving (design item 2).
+**Decided:** offline saving follows this handoff (online required to save, draft kept, nothing sent in the background; a true offline queue stays phase 2).
+
+**Still open:**
+
 - What Remind does, and whether overdue pre-orders show (item 6).
 - Whether `parse` gets its own limit, and what the demo kitchen's mic does (A3, A4).
 - Whether a production session saves as one transaction (A6).

@@ -269,8 +269,9 @@ Nothing is queued. The AI list in the handoff is complete.
 ## Open items for the user (none blocking)
 
 - **Stockpot Quick (phone companion app): planned, not started.** Spec and screen-design review:
-  `docs/handoffs/stockpot-quick-mobile.md` (read its "Review notes" first). The owner has not yet decided
-  offline saving, what "Remind" does, or whether production sessions save as one transaction.
+  `docs/handoffs/stockpot-quick-mobile.md` (read its "Review notes" first). Decided: saving needs a connection and
+  the draft is kept (no offline queue in the first version). Not yet decided: what "Remind" does, the
+  voice-reading limit and demo-kitchen mic, and whether production sessions save as one transaction.
 
 - **Razorpay is built and tested only against mocks.** The account was under review, so
   nothing has run against Razorpay itself yet. When it is live the owner posts the Test Mode
