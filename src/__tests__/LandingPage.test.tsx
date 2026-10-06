@@ -92,7 +92,7 @@ describe('LandingPage', () => {
     for (const phrase of [
       'Take orders the way customers send them',
       'Get paid without chasing',
-      'Know what every order made',
+      'Know how much money every order made',
       'Know when a price needs to go up',
       'A business briefing every morning',
       'Stock that keeps itself up to date',
@@ -104,8 +104,13 @@ describe('LandingPage', () => {
 
   it('shows the hero promise, the trial terms and four quick facts', () => {
     const { container } = renderPage();
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Know exactly what your food business makes.');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('The CFO of your food business');
     const text = container.textContent ?? '';
+    expect(text).toContain('Know exactly how much money your food business makes.');
+    expect(text).not.toContain('Know exactly what your food business makes');
+    expect(text).toContain('Busy every day. Still not sure how much money you made?');
+    expect(text).toContain('Know exactly how much money you made this week.');
+    expect(text).not.toMatch(/Still not sure what you made|Know exactly what you made/);
     expect(text).toMatch(/after trial/);
     for (const fact of ['Per-dish', 'UPI + QR', 'Auto-fill', 'Live Alerts']) expect(text).toContain(fact);
     expect(text).toContain('₹743.04');

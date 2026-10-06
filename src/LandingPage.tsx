@@ -197,14 +197,22 @@ const LandingPage: React.FC = () => {
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.06 }}
-              className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-[-0.03em] leading-[1.1] max-w-4xl mb-6"
+              className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-[-0.03em] leading-[1.1] max-w-4xl text-balance mb-5"
             >
-              Know exactly what your food business makes.
+              The CFO of your food business
             </motion.h1>
             <motion.p
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.12 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="text-xl sm:text-2xl font-semibold text-primary max-w-4xl text-balance leading-snug mb-4"
+            >
+              Know exactly how much money your food business makes.
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.14 }}
               className="text-lg md:text-xl text-muted max-w-2xl leading-relaxed mb-8"
             >
               Stockpot tracks your ingredients, orders, and fluctuating costs. It calculates what every single order actually earns you — after packaging, delivery, discounts, payment fees, and GST.
@@ -287,7 +295,7 @@ const LandingPage: React.FC = () => {
             <Reveal className="max-w-2xl mx-auto text-center mb-12 sm:mb-14">
               <span className={`${EYEBROW} block mb-2`}>The profit leak audit</span>
               <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em]">
-                Busy every day. Still not sure what you made?
+                Busy every day. Still not sure how much money you made?
               </h2>
             </Reveal>
             <div className="grid md:grid-cols-3 gap-5 lg:gap-6">
@@ -402,7 +410,7 @@ const LandingPage: React.FC = () => {
               <div className="lg:col-span-5 flex flex-col gap-9 order-1 lg:order-2">
                 <Reveal>
                   <StepTag n="03" />
-                  <h3 className="text-2xl font-bold tracking-tight mb-3">Know what every order made</h3>
+                  <h3 className="text-2xl font-bold tracking-tight mb-3">Know how much money every order made</h3>
                   <p className="text-muted leading-relaxed mb-4">
                     Every order shows what you made on it after ingredients, packaging, delivery, discounts, payment fees and GST. Your dashboard then takes off wastage and your rent, gas and salaries, so the profit you see is the profit you keep.
                   </p>
@@ -587,7 +595,7 @@ const LandingPage: React.FC = () => {
               <img src="/landing/sourdough.webp" alt="" aria-hidden="true" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
               <div className="absolute inset-0 bg-ink/75" />
               <div className="relative">
-                <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] mb-3">Know exactly what you made this week.</h2>
+                <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] mb-3">Know exactly how much money you made this week.</h2>
                 <p className="text-lg text-white/90 mb-8 max-w-xl mx-auto">
                   Start your {TRIAL_DAYS}-day free trial and see your true profit by tomorrow morning.
                 </p>
