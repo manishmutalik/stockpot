@@ -14,7 +14,7 @@ import type { PersistedDraft } from '../../lib/draftStore';
 import type { QuickKind } from '../../../../src/utils/quickApiTypes';
 import { greeting } from '../../lib/greeting';
 import { statusTarget } from '../../lib/statusLines';
-import { useToday } from '../../lib/useToday';
+import { useToday } from '../../lib/useApiView';
 import { colors, fonts } from '../../theme';
 
 export default function Today() {

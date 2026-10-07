@@ -69,6 +69,24 @@ describe('POST /mobile/orders/:id/hand-over', () => {
     expect(bills).toHaveBeenCalledWith(UID, 'p1');
   });
 
+  it('answers with the text to share with the bill, and a WhatsApp link to the customer: the balance while it is owed', async () => {
+    const { mem, deps } = world();
+    mem.seed(UID, 'orders', 'p1', preorder({ customerName: 'Priya Sharma', customerPhone: '98450 10101' }));
+    const r = await handOver(deps, 'p1');
+    const link = `https://stockpot.example/bill/${'f'.repeat(32)}`;
+    expect(r.body.shareMessage).toBe(`Hi Priya Sharma, here's your bill from Anita — ₹1,800.00. Advance received: ₹500.00. Balance due: ₹1,300.00. View/pay: ${link}`);
+    expect(r.body.whatsappUrl).toBe(`https://wa.me/919845010101?text=${encodeURIComponent(r.body.shareMessage)}`);
+  });
+
+  it('and says it is paid in full when the balance was received now', async () => {
+    const { mem, deps } = world();
+    mem.seed(UID, 'orders', 'p1', preorder({ customerName: 'Priya Sharma' }));
+    const r = await handOver(deps, 'p1', { balanceReceived: { method: 'upi' } });
+    expect(r.body.shareMessage).toBe(`Hi Priya Sharma, here's your bill from Anita — ₹1,800.00. Paid in full, thank you! View/pay: https://stockpot.example/bill/${'f'.repeat(32)}`);
+    expect(r.body.shareMessage).not.toMatch(/Balance due|Advance/);
+    expect(r.body.whatsappUrl).toBeNull(); // no phone number on the order
+  });
+
   it('still hands over when the bill link cannot be made', async () => {
     const { mem, deps } = world({ bills: vi.fn(async () => { throw new Error('bills down'); }) });
     mem.seed(UID, 'orders', 'p1', preorder());
@@ -76,6 +94,7 @@ describe('POST /mobile/orders/:id/hand-over', () => {
     expect(r.code).toBe(200);
     expect(r.body.handedOver).toBe(true);
     expect(r.body.billUrl).toBeUndefined();
+    expect(r.body.shareMessage).toBeUndefined();
   });
 
   it('refuses when the stock is short now, all or nothing, and saves nothing', async () => {

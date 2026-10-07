@@ -23,7 +23,7 @@ import { planOrderGroup, planRestock, planProductionSession, planHandOver, planM
 import type { OrderGroupCommon, OrderLineItem, PlanError, ProductionRunInput } from '../src/utils/plans';
 import { enterableUnits } from '../src/utils/conversions';
 import { saleAmounts } from '../src/utils/profit';
-import { buildBill, billBalance } from '../src/utils/billing';
+import { buildBill, billBalance, buildBillMessage, buildWhatsAppUrl, withBillLink } from '../src/utils/billing';
 import { formatAmount } from '../src/utils/money';
 import { isUnpaid } from '../src/utils/payments';
 import { customerDues, matchingOption } from '../src/utils/quickPayments';
@@ -343,18 +343,31 @@ export function createQuickHandOverHandler(deps: QuickRouteDeps) {
 
     // What the customer still owes: the total less any advance, unless it is already paid.
     const unpaid = orders.filter(isUnpaid);
-    const balanceDue = unpaid.length > 0 ? round2(billBalance(buildBill({ orders, menu, settings: billSettingsOf(settings), currency: currencyOf(settings) }))) : 0;
+    const currency = currencyOf(settings);
+    const bill = buildBill({ orders, menu, settings: billSettingsOf(settings), currency });
+    const balanceDue = unpaid.length > 0 ? round2(billBalance(bill)) : 0;
 
     let writes = plan.writes;
     const received = !!paidBy && balanceDue > 0;
     if (received) writes = collapseWrites([...writes, ...planMarkPaid({ ids: unpaid.map(o => o.id), paid: true, method: paidBy, feeRates: settings.paymentFeeRates })]);
     tx.apply(writes);
 
-    return { status: 200, body: { handedOver: true, orderIds: orders.map(o => o.id), balanceDue, balanceReceived: received ? balanceDue : 0, ...(received && { method: paidBy }) } };
+    // The text to share with the bill: what is still owed if anything is, otherwise that it is paid (a bill alone does
+    // not know an advance has since been settled).
+    const settled = balanceDue === 0 || received;
+    const billMessage = settled ? `${buildBillMessage({ ...bill, advance: undefined }, undefined)} Paid in full, thank you!` : buildBillMessage(bill, undefined);
+
+    return { status: 200, body: {
+      handedOver: true, orderIds: orders.map(o => o.id), balanceDue, balanceReceived: received ? balanceDue : 0, ...(received && { method: paidBy }),
+      billMessage, customerPhone: orders.find(o => o.customerPhone)?.customerPhone ?? null,
+    } };
   }, async (body, req) => {
     if (!deps.bills || !body?.orderIds?.length) return {};
     const made = await deps.bills(req.uid!, body.orderIds[0]);
-    return made && deps.publicUrl ? { billUrl: `${deps.publicUrl.replace(/\/$/, '')}/bill/${made.token}` } : {};
+    if (!made || !deps.publicUrl) return {};
+    const billUrl = `${deps.publicUrl.replace(/\/$/, '')}/bill/${made.token}`;
+    const shareMessage = withBillLink(body.billMessage, billUrl);
+    return { billUrl, shareMessage, whatsappUrl: buildWhatsAppUrl(body.customerPhone ?? undefined, shareMessage) };
   });
 }
 

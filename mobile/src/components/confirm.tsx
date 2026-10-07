@@ -10,6 +10,7 @@ import { Pressable, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import type { Currency, OrderDraft, OrderPreview, PaymentDraft, PaymentPreview, ProductionPreview, RestockPreview } from '../../../src/utils/quickApiTypes';
 import { formatAmount } from '../../../src/utils/money';
+import { formatDay } from '../lib/dates';
 import { Card } from './Card';
 import { colors, fonts, radius } from '../theme';
 
@@ -52,7 +53,7 @@ export function Notes({ notes }: { notes: string[] }) {
 // ─── An order ───────────────────────────────────────────────────────────────
 
 const METHOD: Record<string, string> = { upi: 'UPI', cash: 'Cash', card: 'Card', other: 'Other' };
-const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+const day = formatDay;
 
 export function OrderConfirm({ draft, preview, currency }: { draft: OrderDraft; preview: OrderPreview | null | undefined; currency: Currency }) {
   const c = draft.common;

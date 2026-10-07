@@ -134,6 +134,18 @@ describe('GET /mobile/upcoming', () => {
     expect(r.body.upcoming[0]).toMatchObject({ customerName: 'Rohan Mehta', customerPhone: null, total: 720, balanceDue: 720, dueSlot: null, notes: null });
   });
 
+  it('has the WhatsApp confirmation ready, and a link that opens it to the customer when there is a phone number', async () => {
+    const { mem, deps } = world();
+    mem.seed(UID, 'orders', 'a', pre('a', { date: '2026-10-10', quantity: 2, dueSlot: 'evening', advance: { amount: 500, method: 'upi', feeRate: 0, date: '2026-10-02' } }));
+    mem.seed(UID, 'orders', 'b', pre('b', { date: '2026-10-11', customerName: 'Rohan Mehta', customerPhone: undefined }));
+    const r = await get(createQuickUpcomingHandler(deps));
+    const [priya, rohan] = r.body.upcoming;
+    expect(priya.confirmationMessage).toBe('Hi Priya Sharma, your order for 2 Chocolate Truffle Cake on Sat 10 Oct (evening) is confirmed. Advance received: ₹500.00. Balance: ₹1,300.00. Thank you, Anita\'s Bakehouse.');
+    expect(priya.whatsappUrl).toBe(`https://wa.me/919845010101?text=${encodeURIComponent(priya.confirmationMessage)}`);
+    expect(rohan.confirmationMessage).toMatch(/^Hi Rohan Mehta, your order for 1 Chocolate Truffle Cake on Sun 11 Oct is confirmed\. Total: ₹900\.00\./);
+    expect(rohan.whatsappUrl).toBeNull();
+  });
+
   it('says what is short of stock for handing the order over', async () => {
     const { mem, deps } = world();
     mem.seed(UID, 'orders', 'a', pre('a', { date: '2026-10-07', menuItemId: 'muffin', quantity: 12, unitPriceAtSale: 60 })); // 1 muffin in stock

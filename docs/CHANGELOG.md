@@ -1,5 +1,12 @@
 # Changelog
 
+## Stockpot Quick app: Upcoming and hand over
+
+The phone app's Upcoming tab lists open pre-orders by day, overdue ones first, with what is paid and what is left,
+and a warning when there is not enough finished stock. Hand over opens a sheet to record the hand-over and, if the owner
+chooses, the balance received (UPI, cash, card or other), then offers to share the bill on WhatsApp. Send confirmation
+opens WhatsApp to the customer with the usual confirmation text (the server writes the texts, so they match the web app).
+
 ## Stockpot Quick app: telling it what happened, and confirming (typed)
 
 In the phone app, the Today mic and the four shortcuts open a capture screen: type what happened, tap Read it, answer

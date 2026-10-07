@@ -335,3 +335,11 @@ come from the server.
 - **Money:** amounts are written without ".00" when whole and with lakh/crore grouping for rupees (`₹1,00,000`), as in the designs. The server's status lines and previews use the same `formatAmount` (`src/utils/money.ts`); the web bill keeps its own two-decimal format.
 - **Server fix found while building this:** the order save said the balance due was the whole total even for an order paid in full; it now says nothing is owed (the preview already did).
 
+### H. Built so far: the app, step 3 (Upcoming and hand over)
+
+- **Upcoming:** open pre-orders grouped by day, soonest first, with "Attention needed" for overdue ones on top (so overdue pre-orders do show, as the design has them). Each card has the customer, items, slot, notes, advance, what is left and a PENDING / PARTIAL / FULLY SETTLED mark, a warning when finished stock is short, **Hand over** and **Send confirmation**. Pull to refresh; refreshed again each time the tab is opened.
+- **Remind is left out** until you say what it should do (the design has the button; the spec does not say). The server already lists overdue orders, so adding it later is only the button.
+- **Hand over sheet:** what is being handed over, what is still owed (the total less the advance), a receiving mode (UPI, Cash, Card, Other) and a **Balance received now** switch. The switch starts **off**, so the app never records money as received unless the owner turns it on (the design shows it on). Complete takes one idempotency key per opening of the sheet. If finished stock is short, Complete is disabled with the reason (the server refuses it too). Afterwards: "Handed over", what was received or is still due, and **Share bill on WhatsApp**.
+- **Sharing:** the confirmation and bill texts are written by the server (the web's own `buildPreorderConfirmation` and `buildBillMessage`), and the app only opens WhatsApp to the customer's number (`wa.me`), or the phone's share sheet when there is no number. A bill for an order that has been settled says "Paid in full, thank you!" rather than a balance.
+- **Dropped from the designs:** the "Cooling Rack Shelf B2" card in the hand-over sheet (no shelf data exists), the Weekend Prep List card, search and filter buttons.
+

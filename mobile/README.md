@@ -32,7 +32,7 @@ main project's vitest (run `npm install` at the repo root first). They are not p
 
 ## Layout
 
-- `src/app/` the screens (Expo Router): `sign-in`, `capture` (write, questions, confirm, saved), and the tabs `(tabs)/index` (Today), `upcoming`, `settings`.
+- `src/app/` the screens (Expo Router): `sign-in`, `capture` (write, questions, confirm, saved), and the tabs `(tabs)/index` (Today), `upcoming` (pre-orders and the hand-over sheet), `settings`.
 - `src/lib/` plain logic with no React Native in it, so it is unit tested: the API client, the capture flow reducer (`capture.ts`), the saved summary, the unsaved-draft store. `useCapture.ts` is the one hook that runs it against the server.
 - `src/auth/` who is signed in, and the API client that speaks as them.
 - `src/theme/` colours, fonts and spacing from the Stitch design system.

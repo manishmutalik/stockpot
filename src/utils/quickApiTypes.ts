@@ -60,6 +60,10 @@ export interface UpcomingOrder {
   balanceDue: number;
   /** Items of which there is not enough finished stock to hand the order over today. */
   stockShort: { name: string; short: number }[];
+  /** The WhatsApp text confirming the booking: what, when, what is paid and what is left. */
+  confirmationMessage: string;
+  /** A wa.me link that opens WhatsApp to this customer with that text, when there is a phone number. */
+  whatsappUrl: string | null;
 }
 
 /** GET /api/mobile/upcoming */
@@ -235,5 +239,22 @@ export interface PaymentSaved {
   method: PaymentMethodId;
   orderIds: string[];
   remainingDue: number;
+}
+
+/** POST /api/mobile/orders/:id/hand-over (200) */
+export interface HandOverSaved {
+  /** False when the order had already been handed over (nothing was changed). */
+  handedOver: boolean;
+  reason?: 'already_handed_over';
+  orderIds: string[];
+  /** What the customer still owed when it was handed over (nothing for an order paid in full). */
+  balanceDue?: number;
+  /** The balance recorded as received in the same save, and how. */
+  balanceReceived?: number;
+  method?: PaymentMethodId;
+  /** The link to the bill online, and the text to share with it (WhatsApp), when they could be made. */
+  billUrl?: string;
+  shareMessage?: string;
+  whatsappUrl?: string | null;
 }
 
