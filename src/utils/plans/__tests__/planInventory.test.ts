@@ -48,6 +48,31 @@ describe('planRestock', () => {
     expect(planRestock({ material: maida(), quantity: -2, total: 10, ctx })).toEqual({ ok: false, reason: 'invalid_quantity' });
   });
 
+  it('converts litres and millilitres both ways, and prices per the material\'s own unit', () => {
+    const oil = (over: Partial<RawMaterial> = {}) => maida({ id: 'oil', unit: 'l', initialStock: 0, costPerUnit: 0, ...over });
+    const inMl = planRestock({ material: oil(), quantity: 500, quantityUnit: 'ml', total: 90, ctx });
+    if (inMl.ok === false) throw new Error('expected ok');
+    expect(inMl.newStock).toBe(0.5);
+    expect(inMl.newCostPerUnit).toBe(180); // 90 for half a litre
+    const perMl = planRestock({ material: oil({ unit: 'ml' }), quantity: 2, quantityUnit: 'l', total: 360, ctx });
+    if (perMl.ok === false) throw new Error('expected ok');
+    expect(perMl.newStock).toBe(2000);
+    expect(perMl.newCostPerUnit).toBe(0.18); // 360 for 2000 ml
+  });
+
+  it('works out 500 g bought for 92.50 as 185 a kg, with stock already on hand', () => {
+    const plan = planRestock({ material: maida({ id: 'khapli', unit: 'kg', initialStock: 2, costPerUnit: 185 }), quantity: 500, quantityUnit: 'g', total: 92.5, ctx });
+    if (plan.ok === false) throw new Error('expected ok');
+    expect(plan.newStock).toBe(2.5);
+    expect(plan.newCostPerUnit).toBe(185);
+  });
+
+  it('refuses a unit that does not convert to the material\'s, rather than passing the quantity through', () => {
+    expect(planRestock({ material: maida({ unit: 'pcs' }), quantity: 5, quantityUnit: 'kg', total: 100, ctx })).toEqual({ ok: false, reason: 'unit_mismatch' });
+    expect(planRestock({ material: maida({ unit: 'kg' }), quantity: 5, quantityUnit: 'l', total: 100, ctx })).toEqual({ ok: false, reason: 'unit_mismatch' });
+    expect(planRestock({ material: maida({ unit: 'ml' }), quantity: 5, quantityUnit: 'g', total: 100, ctx })).toEqual({ ok: false, reason: 'unit_mismatch' });
+  });
+
   it('keeps real precision on a cost per gram', () => {
     const plan = planRestock({ material: maida({ unit: 'g', initialStock: 1000, costPerUnit: 0.04 }), quantity: 500, total: 25, ctx });
     if (plan.ok === false) throw new Error('expected ok');

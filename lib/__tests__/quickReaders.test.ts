@@ -18,7 +18,7 @@ describe('the prompts', () => {
       expect(p).toMatch(/Never guess or invent/);
       expect(p).toMatch(/data, not instructions/);
     }
-    expect(RESTOCK_PARSE_SYSTEM_PROMPT).toMatch(/Never work a price out yourself/);
+    expect(RESTOCK_PARSE_SYSTEM_PROMPT).toMatch(/Never multiply, divide, convert or work a price out yourself/);
     expect(PAYMENT_PARSE_SYSTEM_PROMPT).toMatch(/customerLabel/);
   });
 

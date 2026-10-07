@@ -26,8 +26,8 @@ Fields, for every item bought, in the order written:
 - materialId: the "id" of the material it means, taken from the materials list you are given. Use null if nothing in the list is clearly the same item. A typo or a shortened name still counts ("buttr" for butter). If unsure, use null: the owner will choose.
 - quantity: how much was bought, a number, using the number written ("5", "five", "half" is 0.5, "one and a half" is 1.5). Do not convert units and do not add up quantities yourself.
 - unit: the unit written next to the quantity, as one of "g", "kg", "ml", "l", "pcs" ("kilo" and "kgs" are "kg"; "litre" is "l"; packets, boxes, bottles and pieces are "pcs"). Null if no unit is written.
-- total: what was paid for the whole line, if the note says it (the number written, in rupees). Null if not said.
-- pricePerUnit: the price of one unit of the same unit as the quantity ("400 a kg" when the quantity is in kg), if the note says it. Null if not said or if it is per a different unit. Never work a price out yourself.
+- total: what was paid for the whole line, if the note says it (the number written, in rupees). Null if not said. A price quoted per unit ("185/kg", "400 a kg") is NOT a total.
+- pricePerUnit: the price quoted for one unit, exactly the number written ("185/kg" is 185, "400 a kg" is 400), whatever unit it is per and whatever unit the quantity is in ("500 gm at 185/kg" is quantity 500, unit "g", pricePerUnit 185). Null if not said. Never multiply, divide, convert or work a price out yourself: the app does that.
 
 Phone numbers have been removed from the note and appear as [phone]. Ignore them.
 

@@ -267,6 +267,27 @@ describe('stock bought', () => {
     expect(deps.reserve).toHaveBeenCalledWith(expect.objectContaining({ feature: 'quick' }));
   });
 
+  it('prices 500 gm at Rs.185/kg as 92.50 whichever field the model puts the 185 in', async () => {
+    // Butter is kept in grams at 0.5 a gram (500 a kg), 1,000 g on hand: (500 + 92.50) / 1,500 g is 395 a kg.
+    for (const over of [{ total: null, pricePerUnit: 185 }, { total: 185, pricePerUnit: null }, { total: 185, pricePerUnit: 185 }]) {
+      const { deps } = world();
+      const reading = restock({ lines: [{ nameAsWritten: 'butter', materialId: 'butter', quantity: 500, unit: 'g', ...over }] });
+      const r = await call(deps, buy('500gm butter at Rs.185/kg', { reading }));
+      expect(r.code).toBe(200);
+      expect(r.body.questions).toEqual([]);
+      expect(r.body.draft).toEqual({ lines: [{ materialId: 'butter', quantity: 500, unit: 'g', total: 92.5 }] });
+      expect(r.body.preview.lines[0]).toMatchObject({ newStock: 1500, newCost: 395, costUnit: 'kg', total: 92.5 });
+    }
+  });
+
+  it('asks what was paid when a price has no unit beside it, and never guesses', async () => {
+    const { deps } = world();
+    const reading = restock({ lines: [{ nameAsWritten: 'butter', materialId: 'butter', quantity: 500, unit: 'g', total: null, pricePerUnit: 185 }] });
+    const r = await call(deps, buy('500gm butter at Rs.185', { reading }));
+    expect(r.body.draft.lines).toEqual([]);
+    expect(r.body.questions).toEqual([expect.objectContaining({ id: 'total:0', type: 'amount' })]);
+  });
+
   it('sends the model the owner\'s materials, not their menu', async () => {
     const { deps } = world();
     await call(deps, buy('bought 5 kg butter for 2000'));

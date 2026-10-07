@@ -56,6 +56,59 @@ describe('convertAmount', () => {
   });
 });
 
+describe('convertAmount: every supported pair', () => {
+  // Written out by hand (1 g = 1 ml): the amount that 1 of the row unit is in the column unit.
+  const one: Record<string, Record<string, number>> = {
+    g: { g: 1, kg: 0.001, ml: 1, l: 0.001 },
+    kg: { g: 1000, kg: 1, ml: 1000, l: 1 },
+    ml: { g: 1, kg: 0.001, ml: 1, l: 0.001 },
+    l: { g: 1000, kg: 1, ml: 1000, l: 1 },
+  };
+  for (const from of Object.keys(one)) {
+    for (const to of Object.keys(one[from])) {
+      it(`${from} to ${to}`, () => {
+        expect(convertAmount(250, from, to)).toBeCloseTo(250 * one[from][to], 9);
+        expect(convertAmount(1, from, to)).toBeCloseTo(one[from][to], 9);
+      });
+    }
+  }
+
+  it('goes there and back to the same amount', () => {
+    for (const [a, b] of [['g', 'kg'], ['ml', 'l'], ['kg', 'g'], ['l', 'ml']]) {
+      for (const n of [1, 7, 9, 13, 250, 500, 1234.5]) expect(convertAmount(convertAmount(n, a, b), b, a)).toBeCloseTo(n, 9);
+    }
+  });
+
+  it('is exact when a small unit goes to a big one (no 0.009000000000000001)', () => {
+    expect(convertAmount(9, 'g', 'kg')).toBe(0.009);
+    expect(convertAmount(13, 'g', 'kg')).toBe(0.013);
+    expect(convertAmount(26, 'ml', 'l')).toBe(0.026);
+    for (let n = 1; n <= 5000; n++) expect(convertAmount(n, 'g', 'kg')).toBe(Number(`${n / 1000}`));
+  });
+
+  it('ignores case and spaces in a unit name', () => {
+    expect(convertAmount(2, 'KG', 'g')).toBe(2000);
+    expect(convertAmount(500, ' g ', 'Kg')).toBe(0.5);
+    expect(convertAmount(1.5, 'L', 'ML')).toBe(1500);
+  });
+
+  it('passes an unconvertible pair through unchanged (pieces are not weight)', () => {
+    expect(convertAmount(10, 'pcs', 'g')).toBe(10);
+    expect(convertAmount(10, 'kg', 'pcs')).toBe(10);
+  });
+});
+
+describe('enterableUnits', () => {
+  it('offers the other unit of the same kind, and only itself otherwise', () => {
+    expect(enterableUnits('g')).toEqual(['g', 'kg']);
+    expect(enterableUnits('kg')).toEqual(['g', 'kg']);
+    expect(enterableUnits('ml')).toEqual(['ml', 'l']);
+    expect(enterableUnits('l')).toEqual(['ml', 'l']);
+    expect(enterableUnits('pcs')).toEqual(['pcs']);
+    expect(enterableUnits('KG')).toEqual(['g', 'kg']);
+  });
+});
+
 describe('getDefaultRecipeUnit', () => {
   it('defaults to g when no inventory unit is given', () => {
     expect(getDefaultRecipeUnit(undefined)).toBe('g');
