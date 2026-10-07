@@ -17,7 +17,7 @@ import { formatAmount } from './money';
 import { customerLabels, groupOrdersByCustomer } from './customers';
 import { planOrderGroup, planProductionSession, productionRunCost, type OrderGroupCommon, type OrderLineItem, type ProductionRunInput } from './plans';
 import type { ProductionFormFill } from './productionParse';
-import type { OrderFormFill } from './orderParse';
+import type { NotFoundItem, OrderFormFill } from './orderParse';
 import type { Order } from '../types';
 import type { Answer, OrderDraft, OrderPreview, ProductionDraft, ProductionPreview, Question, QuickKind } from './quickApiTypes';
 
@@ -115,6 +115,21 @@ export interface DraftResult<D> {
 const methodOptions = () => PAYMENT_METHODS.map(m => ({ value: m.value as string, label: m.label }));
 
 /**
+ * The question for a line the menu did not settle: which one, when several sizes of the same item fit what was said, else
+ * "not on your menu" with the closest as a suggestion. Either way the owner can leave it out.
+ */
+function itemQuestion(id: string, nf: NotFoundItem): Question {
+  const skip = { value: 'skip', label: 'Leave it out' };
+  if (nf.options && nf.options.length > 0) {
+    return { id, type: 'choice', prompt: `Which "${nf.nameAsWritten}" did you mean?`, options: [...nf.options.map(o => ({ value: o.id, label: o.name })), skip] };
+  }
+  return {
+    id, type: 'choice', prompt: `"${nf.nameAsWritten}" is not on your menu. Which menu item is it?`,
+    options: [...(nf.suggestion ? [{ value: nf.suggestion.id, label: nf.suggestion.name }] : []), skip],
+  };
+}
+
+/**
  * The order the message describes, as the save endpoint takes it, and what is still open. A date after today (or notes, or
  * an advance) makes it a pre-order, as on the web; a pre-order is pay-later unless the message says otherwise.
  *
@@ -138,11 +153,7 @@ export function buildOrderDraft(input: {
     const chosen = answers.get(id);
     if (chosen === 'skip') { notes.push(`Left out ${nf.quantity} × ${nf.nameAsWritten}.`); return; }
     if (chosen && menu.some(m => m.id === chosen)) { quantities.set(chosen, (quantities.get(chosen) ?? 0) + nf.quantity); return; }
-    const options = [
-      ...(nf.suggestion ? [{ value: nf.suggestion.id, label: nf.suggestion.name }] : []),
-      { value: 'skip', label: 'Leave it out' },
-    ];
-    questions.push({ id, type: 'choice', prompt: `"${nf.nameAsWritten}" is not on your menu. Which menu item is it?`, options });
+    questions.push(itemQuestion(id, nf));
   });
   const lineItems: OrderLineItem[] = [...quantities].map(([menuItemId, quantity]) => ({ menuItemId, quantity }));
 
@@ -275,10 +286,7 @@ export function buildProductionDraft(input: {
     const chosen = answers.get(id);
     if (chosen === 'skip') { notes.push(`Left out ${nf.quantity} × ${nf.nameAsWritten}.`); return; }
     if (chosen && menu.some(m => m.id === chosen)) { quantities.set(chosen, (quantities.get(chosen) ?? 0) + nf.quantity); return; }
-    questions.push({
-      id, type: 'choice', prompt: `"${nf.nameAsWritten}" is not on your menu. Which menu item is it?`,
-      options: [...(nf.suggestion ? [{ value: nf.suggestion.id, label: nf.suggestion.name }] : []), { value: 'skip', label: 'Leave it out' }],
-    });
+    questions.push(itemQuestion(id, nf));
   });
 
   let date = fill.date ?? today;

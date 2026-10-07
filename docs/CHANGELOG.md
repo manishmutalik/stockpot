@@ -1,5 +1,16 @@
 # Changelog
 
+## Stockpot Quick: sizes of the same item (small and large)
+
+When the menu has the same thing in several sizes ("Pumpkin Seed Bread (350g)" and "(500g)"), the phone app no longer lets
+the model quietly pick one, and no longer calls "large pumpkin seed bread" an unknown item. The words decide, in code: a
+weight that is said ("500gm") picks the one with that weight; "large" or "big" is the heaviest and "small" or "mini" the
+lightest when every size has a weight (or the size word is in the names, "Chocolate Cake Large"); "medium" is the middle one
+of three; and when the words do not choose, it asks "Which pumpkin seed bread did you mean?" with every size as an option.
+The same for something made. The model is also told to leave a size it was not told to the owner. An item that is the only
+whole match for what was said ("brownie" when there is also a "Brownie Sundae") is still taken without asking; the web
+app's order and production forms are unchanged.
+
 ## Stockpot Quick app: speak an entry
 
 The mic now works. On Today it opens the capture screen already listening; on the capture screen the round mic starts and

@@ -231,6 +231,79 @@ describe('what the message leaves open', () => {
   });
 });
 
+describe('sizes of the same item', () => {
+  // The menu has a small and a large pumpkin seed bread; the model tends to pick one, or none for "large".
+  const withBreads = () => {
+    const w = world();
+    w.mem.seed(UID, 'menu', 'pump350', { name: 'Pumpkin Seed Bread (350g)', sellingPrice: 180, finishedGoodsStock: 4, recipe: [{ materialId: 'flour', amount: 350, unit: 'g' }] });
+    w.mem.seed(UID, 'menu', 'pump500', { name: 'Pumpkin Seed Bread (500g)', sellingPrice: 240, finishedGoodsStock: 4, recipe: [{ materialId: 'flour', amount: 500, unit: 'g' }] });
+    return w;
+  };
+  const bread = (name: string, menuItemId: string | null) => reading({ lineItems: [{ nameAsWritten: name, menuItemId, quantity: 1 }], paymentStatus: 'unpaid' });
+
+  it('asks which one when only "pumpkin seed bread" is said, even though the model picked the small one', async () => {
+    const { deps } = withBreads();
+    deps.orderModel.mockResolvedValue({ raw: bread('pumpkin seed bread', 'pump350') });
+    const r = await call(deps, say('Priya ordered a pumpkin seed bread, pay later'));
+    expect(r.body.questions).toHaveLength(1);
+    expect(r.body.questions[0]).toMatchObject({ id: 'item:0', type: 'choice', prompt: 'Which "pumpkin seed bread" did you mean?' });
+    expect(r.body.questions[0].options).toEqual([
+      { value: 'pump350', label: 'Pumpkin Seed Bread (350g)' }, { value: 'pump500', label: 'Pumpkin Seed Bread (500g)' }, { value: 'skip', label: 'Leave it out' },
+    ]);
+    expect(r.body.draft.lineItems).toEqual([]);
+  });
+
+  it('takes the answer, free, without asking the model again', async () => {
+    const { deps } = withBreads();
+    const model = bread('pumpkin seed bread', 'pump350');
+    const text = 'Priya ordered a pumpkin seed bread, pay later';
+    const r = await call(deps, say(text, { reading: model, answers: [{ questionId: 'item:0', value: 'pump500' }] }));
+    expect(r.body.questions).toEqual([]);
+    expect(r.body.draft.lineItems).toEqual([{ menuItemId: 'pump500', quantity: 1 }]);
+    expect(r.body.preview.total).toBe(240);
+    expect(deps.orderModel).not.toHaveBeenCalled();
+  });
+
+  it('takes "large" as the 500 g one, and "small" as the 350 g one, even when the model found no match', async () => {
+    const { deps } = withBreads();
+    deps.orderModel.mockResolvedValue({ raw: bread('large pumpkin seed bread', null) });
+    const large = await call(deps, say('Priya ordered a large pumpkin seed bread, pay later'));
+    expect(large.body.questions).toEqual([]);
+    expect(large.body.draft.lineItems).toEqual([{ menuItemId: 'pump500', quantity: 1 }]);
+    deps.orderModel.mockResolvedValue({ raw: bread('small pumpkin seed bread', 'pump500') });
+    const small = await call(deps, say('Priya ordered a small pumpkin seed bread, pay later'));
+    expect(small.body.draft.lineItems).toEqual([{ menuItemId: 'pump350', quantity: 1 }]);
+  });
+
+  it('takes a weight that is said, and asks about one that is not on the menu', async () => {
+    const { deps } = withBreads();
+    deps.orderModel.mockResolvedValue({ raw: bread('500gm pumpkin seed bread', null) });
+    const said = await call(deps, say('Priya ordered a 500gm pumpkin seed bread, pay later'));
+    expect(said.body.draft.lineItems).toEqual([{ menuItemId: 'pump500', quantity: 1 }]);
+    deps.orderModel.mockResolvedValue({ raw: bread('750gm pumpkin seed bread', null) });
+    const odd = await call(deps, say('Priya ordered a 750gm pumpkin seed bread, pay later'));
+    expect(odd.body.questions[0].options.map((o: any) => o.value)).toEqual(['pump350', 'pump500', 'skip']);
+  });
+
+  it('asks the same way for something made', async () => {
+    const { deps } = withBreads();
+    deps.productionModel.mockResolvedValue({ raw: production({ lineItems: [{ nameAsWritten: 'pumpkin seed bread', menuItemId: 'pump350', quantity: 12, wasteUnits: null }] }) });
+    const r = await call(deps, { kind: 'production', text: 'made 12 pumpkin seed bread' });
+    expect(r.body.questions[0]).toMatchObject({ id: 'item:0', prompt: 'Which "pumpkin seed bread" did you mean?' });
+    deps.productionModel.mockResolvedValue({ raw: production({ lineItems: [{ nameAsWritten: 'large pumpkin seed bread', menuItemId: null, quantity: 12, wasteUnits: null }] }) });
+    const large = await call(deps, { kind: 'production', text: 'made 12 large pumpkin seed bread' });
+    expect(large.body.questions).toEqual([]);
+    expect(large.body.draft.rows).toEqual([expect.objectContaining({ recipeId: 'pump500', quantityProduced: 12 })]);
+  });
+
+  it('does not ask about an item with a single size, or when the menu has only one of the name', async () => {
+    const { deps } = world();
+    const r = await call(deps, say('2 sourdough, pay later', { reading: reading({ paymentStatus: 'unpaid' }) }));
+    expect(r.body.questions).toEqual([]);
+    expect(r.body.draft.lineItems).toEqual([{ menuItemId: 'sourdough', quantity: 2 }]);
+  });
+});
+
 describe('deciding what the message is about', () => {
   it('works it out from the words when the app does not say, and asks when it cannot', async () => {
     const { deps } = world();

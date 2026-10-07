@@ -23,6 +23,7 @@
 import { redactPhones } from './aiPrivacy';
 import { addDays } from './localDate';
 import { quantityWritten, resolveWhen, squash, suggestMenuItem, type NotFoundItem } from './orderParse';
+import { resolveMenuItem } from './menuVariants';
 
 export const PRODUCTION_TEXT_MAX_CHARS = 1500;
 export const PRODUCTION_MAX_ITEMS = 15;
@@ -205,19 +206,25 @@ export interface ProductionFormFill {
  * For a single item with waste written, the sellable yield is that quantity minus the waste. With several items the
  * form cannot hold per-item waste, so it is listed for the owner to record with Discard in the Production Log.
  */
-export function buildProductionForm(input: { parsed: ParsedProduction; menu: { id: string; name: string }[]; today: string }): ProductionFormFill {
+export function buildProductionForm(input: { parsed: ParsedProduction; menu: { id: string; name: string }[]; today: string; askAboutVariants?: boolean }): ProductionFormFill {
   const { parsed, menu, today } = input;
   const fill: ProductionFormFill = { rows: [], notFound: [], unplacedWaste: [] };
 
   const rows = new Map<string, { quantity: number; waste: number }>();
   for (const li of parsed.lineItems) {
-    if (li.menuItemId && menu.some(m => m.id === li.menuItemId)) {
-      const row = rows.get(li.menuItemId) ?? { quantity: 0, waste: 0 };
+    const resolved = input.askAboutVariants ? resolveMenuItem(li.nameAsWritten, menu) : { kind: 'keep' as const };
+    const matched = resolved.kind === 'item' ? resolved.id : resolved.kind === 'keep' && li.menuItemId && menu.some(m => m.id === li.menuItemId) ? li.menuItemId : null;
+    if (matched) {
+      const row = rows.get(matched) ?? { quantity: 0, waste: 0 };
       row.quantity += li.quantity;
       row.waste += li.wasteUnits ?? 0;
-      rows.set(li.menuItemId, row);
+      rows.set(matched, row);
     } else {
-      fill.notFound.push({ nameAsWritten: li.nameAsWritten, quantity: li.quantity, suggestion: suggestMenuItem(li.nameAsWritten, menu) });
+      fill.notFound.push({
+        nameAsWritten: li.nameAsWritten, quantity: li.quantity,
+        suggestion: resolved.kind === 'ask' ? null : suggestMenuItem(li.nameAsWritten, menu),
+        ...(resolved.kind === 'ask' && { options: resolved.options }),
+      });
       if (li.wasteUnits) fill.unplacedWaste.push({ name: li.nameAsWritten, units: li.wasteUnits });
     }
   }
