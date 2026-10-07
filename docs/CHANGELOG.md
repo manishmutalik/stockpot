@@ -1,5 +1,15 @@
 # Changelog
 
+## Stockpot Quick app: telling it what happened, and confirming (typed)
+
+In the phone app, the Today mic and the four shortcuts open a capture screen: type what happened, tap Read it, answer
+what is unclear one question at a time, check the draft with the figures the server worked out (an order, stock bought,
+something made with a "produce anyway" warning if an ingredient would run short, or a payment), and save. A saved
+summary follows. An unsaved entry is kept on the phone and offered again; saving needs a connection and is safe to
+retry. Speaking it arrives with the next update. Amounts now read as `₹2,350` and `₹1,00,000` (no ".00" when whole, lakh
+grouping) in the phone's status lines and previews. Fixed: the order save reported the whole total as still owed for an
+order paid in full.
+
 ## Stockpot Quick: the phone app begins (`mobile/`)
 
 A new Expo (React Native) app, for Android now and iOS later: sign in with email and password, a "Try the demo

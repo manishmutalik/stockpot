@@ -53,10 +53,10 @@ describe('GET /mobile/today', () => {
 
     expect(r.body.statusLines.map((l: any) => `${l.kind}|${l.tone}|${l.label}`)).toEqual([
       'orders_due|coral|2 orders due today or overdue',
-      'payments_pending|amber|3 payments pending · ₹3,600.00',
+      'payments_pending|amber|3 payments pending · ₹3,600',
       'running_low|amber|Butter running low',
       'use_by_soon|amber|Fresh Cream use by tomorrow',
-      "profit|green|Today's profit ₹2,490.00",
+      "profit|green|Today's profit ₹2,490",
     ]);
     expect(r.body.dueToday).toEqual({ orderCount: 1, items: [{ menuItemId: 'cake', name: 'Chocolate Truffle Cake', quantity: 2 }] });
     expect(r.body.dueTomorrow).toEqual({ orderCount: 1, items: [{ menuItemId: 'muffin', name: 'Muffin', quantity: 12 }] });

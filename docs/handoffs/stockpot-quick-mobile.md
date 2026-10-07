@@ -322,3 +322,16 @@ come from the server.
 - **Placeholders to replace before release:** the app icon and splash are Expo's defaults; the bundle id `com.stockpot.quick` is a proposal (it cannot change once published).
 - **Money shows with two decimals** (`₹2,350.00`) because the server formats it with the web's `formatMoney`; the designs show `₹2,350`. Say if you want the decimals dropped on the phone.
 
+### G. Built so far: the app, step 2 (speak and confirm, typed)
+
+- **Flow:** Today's mic and four chips open **capture**: write (or, later, say) what happened, **Read it**, then one question at a time ("Question 1 of 2", answers as tappable choices, day chips for a date, a number for an amount), then the confirm screen for the kind, **Save**, and a saved summary ("Pre-order booked · ₹1,800 · balance ₹1,300"). Logic is a plain reducer (`mobile/src/lib/capture.ts`) with tests; `useCapture.ts` runs it against the server.
+- **Saving:** every new draft gets a new idempotency key; a retry of the same Save reuses it, so a flaky connection cannot save twice. Without a connection Save fails with "No connection — your draft is kept" and nothing is sent in the background.
+- **Drafts survive:** the words, reading and answers are kept on the device (AsyncStorage, three days) and Today offers "Pick up where you left off"; continuing puts the draft back for free (the kept reading is sent back with the answers).
+- **Answering is free; Read it is not:** Read it always starts a fresh reading (one of the 60 a day). Answering sends the reading back, so it uses none.
+- **Confirm screens are not freely editable (differs from the spec).** They show the draft and the server's figures and offer **Change what I said** (back to the words) and the questions; there are no editable money fields, so a figure on screen is always one the server worked out for exactly what will be saved. Say if you want editable fields (they would need a "recalculate" call to the server for every change).
+- **Production:** an ingredient that would run short shows a warning with a **Produce anyway** box that must be ticked before the run can be logged.
+- **Not built yet:** speech recognition (the mic on the capture screen says it is coming; typed entry works fully), Upcoming and hand over, notification settings and push registration.
+- **Dropped from the designs:** the invented "98% confidence" and the "detected entities" chips (the app does not guess before the server has read it).
+- **Money:** amounts are written without ".00" when whole and with lakh/crore grouping for rupees (`₹1,00,000`), as in the designs. The server's status lines and previews use the same `formatAmount` (`src/utils/money.ts`); the web bill keeps its own two-decimal format.
+- **Server fix found while building this:** the order save said the balance due was the whole total even for an order paid in full; it now says nothing is owed (the preview already did).
+

@@ -60,12 +60,12 @@ describe('the morning summary', () => {
   it('lists what needs attention, leaving out the good-news profit line', () => {
     const t = today({ statusLines: [
       { kind: 'orders_due', tone: 'coral', label: '2 orders due today' },
-      { kind: 'payments_pending', tone: 'amber', label: '3 payments pending · ₹4,200.00' },
-      { kind: 'profit', tone: 'green', label: "Today's profit ₹900.00" },
+      { kind: 'payments_pending', tone: 'amber', label: '3 payments pending · ₹4,200' },
+      { kind: 'profit', tone: 'green', label: "Today's profit ₹900" },
     ] });
     const { notifications, state } = planNotifications({ ...at('08:05'), today: t });
     expect(notifications).toEqual([{
-      kind: 'morning', title: 'Today at Anita Bakes', body: '2 orders due today · 3 payments pending · ₹4,200.00',
+      kind: 'morning', title: 'Today at Anita Bakes', body: '2 orders due today · 3 payments pending · ₹4,200',
       data: { type: 'morning', screen: 'today' },
     }]);
     expect(state.sent.morning).toBe('2026-10-06');
