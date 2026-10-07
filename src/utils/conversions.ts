@@ -30,10 +30,16 @@ export const UNIT_CONVERSIONS: Record<string, Record<string, number>> = {
   pcs: { pcs: 1 }
 };
 
+const normaliseUnit = (unit: string): string => (typeof unit === 'string' ? unit.trim().toLowerCase() : '');
+
 /**
  * Converts a numeric amount from one measurement unit to another using
  * `UNIT_CONVERSIONS`. If the conversion factor is not found (unknown unit
  * pair), the original amount is returned unmodified.
+ *
+ * Unit names are matched ignoring case and surrounding spaces ("KG" is "kg"). A factor below one is applied by
+ * dividing by its reciprocal (g to kg divides by 1000) rather than multiplying by 0.001, so 9 g is exactly 0.009 kg
+ * and not 0.009000000000000001.
  *
  * @param amount   - The quantity to convert.
  * @param fromUnit - The unit the amount is currently expressed in.
@@ -41,9 +47,12 @@ export const UNIT_CONVERSIONS: Record<string, Record<string, number>> = {
  * @returns The converted amount, or `amount` unchanged if conversion is unknown.
  */
 export function convertAmount(amount: number, fromUnit: string, toUnit: string): number {
-  if (!fromUnit || !toUnit || fromUnit === toUnit) return amount;
-  const conversion = UNIT_CONVERSIONS[fromUnit]?.[toUnit];
-  return conversion !== undefined ? amount * conversion : amount;
+  const from = normaliseUnit(fromUnit);
+  const to = normaliseUnit(toUnit);
+  if (!from || !to || from === to) return amount;
+  const conversion = UNIT_CONVERSIONS[from]?.[to];
+  if (conversion === undefined) return amount;
+  return conversion < 1 ? amount / Math.round(1 / conversion) : amount * conversion;
 }
 
 /**
@@ -54,7 +63,8 @@ export function convertAmount(amount: number, fromUnit: string, toUnit: string):
  * one) can only be entered as itself.
  */
 export function enterableUnits(unit: string): string[] {
-  const family = [['g', 'kg'], ['ml', 'l']].find(f => f.includes(unit));
+  const name = normaliseUnit(unit);
+  const family = [['g', 'kg'], ['ml', 'l']].find(f => f.includes(name));
   return family ?? [unit];
 }
 

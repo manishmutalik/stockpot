@@ -8,7 +8,7 @@
  * the cost becomes the moving average of what was on hand and what was just bought.
  */
 import type { RawMaterial } from '../../types';
-import { convertAmount } from '../conversions';
+import { convertAmount, enterableUnits } from '../conversions';
 import { newPriceLogEntry } from '../priceLog';
 import type { PlanContext, PlannedWrite } from './types';
 
@@ -22,7 +22,7 @@ export type RestockPlan =
       previousCostPerUnit: number;
       newCostPerUnit: number;
     }
-  | { ok: false; reason: 'invalid_quantity' };
+  | { ok: false; reason: 'invalid_quantity' | 'unit_mismatch' };
 
 /**
  * Adds a purchase to a material: the new quantity goes onto on-hand stock and the cost per unit is recalculated
@@ -44,6 +44,9 @@ export function planRestock(input: {
   // cost are always held in the material's own unit, so it is converted here, and the price paid then
   // works out per that unit (520 for 500 g is 1,040 a kg).
   const materialUnit = material.unit || 'g';
+  // Only another unit of the same kind converts (g and kg, ml and l). Anything else would be passed through
+  // unchanged and put a wrong quantity, and so a wrong cost, on the material, so it is refused.
+  if (input.quantityUnit && !enterableUnits(materialUnit).includes(input.quantityUnit)) return { ok: false, reason: 'unit_mismatch' };
   const qty = Math.round(convertAmount(input.quantity, input.quantityUnit || materialUnit, materialUnit) * 1e6) / 1e6;
   if (!(qty > 0)) return { ok: false, reason: 'invalid_quantity' };
 

@@ -60,8 +60,13 @@ export interface ParsedRestockLine {
   unit: Unit | null;
   /** What was paid for the whole line, as written. */
   total: number | null;
-  /** The price of one unit of the quantity's unit, as written ("400 a kg"). */
+  /** A price for one unit, as written ("400 a kg", "185/kg"): a rate, not what was paid for the line. */
   pricePerUnit: number | null;
+  /**
+   * The unit that rate is per. Worked out from the message by the code (never taken from the model), and null when the
+   * message does not say it next to the price, in which case the rate is dropped and the total is asked.
+   */
+  priceUnit: Unit | null;
 }
 export interface ParsedRestock { lines: ParsedRestockLine[] }
 
@@ -79,6 +84,22 @@ const UNIT_WORDS: Record<Unit, RegExp> = {
   pcs: /(?<![a-z])(pcs|pc|piece|pieces|packet|packets|pack|packs|box|boxes|bottle|bottles|tin|tins|tray|trays|bag|bags|unit|units|dozen)(?![a-z])/i,
 };
 const unitWritten = (unit: Unit, text: string) => UNIT_WORDS[unit].test(text);
+
+/**
+ * Every place the number is written in digits, with the unit it is quoted "per" when one follows it straight away
+ * ("185/kg", "Rs.185 per kilo", "400 a kg", "0.25 / ml"), else null. "185" in "paid 185 for it" has no unit.
+ */
+export function numberOccurrences(value: number, text: string): { rateUnit: Unit | null }[] {
+  const plain = text.replace(/(?<=\d),(?=\d)/g, '');
+  const found: { rateUnit: Unit | null }[] = [];
+  for (const m of plain.matchAll(/\d+(?:\.\d+)?/g)) {
+    if (Number(m[0]) !== value) continue;
+    const after = plain.slice((m.index ?? 0) + m[0].length);
+    const rateUnit = (UNITS.find(u => new RegExp(`^\\s*(?:rs\\.?|rupees?|inr|\u20b9)?\\s*(?:/-)?\\s*(?:/|per\\b|a\\b|an\\b|each\\b|every\\b)\\s*(?:1\\s*)?${UNIT_WORDS[u].source}`, 'i').test(after)) ?? null) as Unit | null;
+    found.push({ rateUnit });
+  }
+  return found;
+}
 
 /** A quantity is supported when its digits or words are written, or it is "half" / "quarter" / "one and a half". */
 function quantityOk(q: number, text: string): boolean {
@@ -125,10 +146,20 @@ export function validateParsedRestock(raw: unknown, input: { text: string; mater
       else if (!numberWritten(v, text)) problems.push(`${at}: ${field} ${v} is not written in the message`);
     }
     if (problems.length === 0) {
-      lines.push({
-        nameAsWritten: name, materialId: materialId as string | null, quantity: quantity as number, unit: unit as Unit | null,
-        total: (l.total ?? null) as number | null, pricePerUnit: (l.pricePerUnit ?? null) as number | null,
-      });
+      let total = (l.total ?? null) as number | null;
+      let pricePerUnit = (l.pricePerUnit ?? null) as number | null;
+      // A number written only as a rate ("185/kg") is not what was paid for the line, whichever field the model put it in.
+      if (total !== null) {
+        const seen = numberOccurrences(total, text);
+        if (seen.length > 0 && seen.every(o => o.rateUnit !== null)) { if (pricePerUnit === null) pricePerUnit = total; total = null; }
+      }
+      // The unit a rate is per is whatever is written next to it. If none is, the rate is not used: the total is asked.
+      let priceUnit: Unit | null = null;
+      if (pricePerUnit !== null) {
+        priceUnit = numberOccurrences(pricePerUnit, text).find(o => o.rateUnit !== null)?.rateUnit ?? null;
+        if (priceUnit === null) pricePerUnit = null;
+      }
+      lines.push({ nameAsWritten: name, materialId: materialId as string | null, quantity: quantity as number, unit: unit as Unit | null, total, pricePerUnit, priceUnit });
     }
   });
   return problems.length > 0 ? { ok: false, problems: problems.slice(0, 8) } : { ok: true, parsed: { lines } };
@@ -204,7 +235,10 @@ export function buildRestockDraft(input: {
     // What was paid.
     let total: number | null = validAmount(answers.get(`total:${i}`));
     if (total === null && line.total !== null) total = line.total;
-    if (total === null && line.pricePerUnit !== null && line.unit === unit) total = round2(line.pricePerUnit * line.quantity);
+    // A rate is for the unit written beside it (185 a kg), so the quantity is put into that unit first: 500 g at 185 a kg is 0.5 kg, 92.50.
+    if (total === null && line.pricePerUnit !== null && line.priceUnit && line.unit === unit && enterableUnits(line.priceUnit).includes(unit)) {
+      total = round2(line.pricePerUnit * convertAmount(line.quantity, unit, line.priceUnit));
+    }
     if (total === null) {
       questions.push({ id: `total:${i}`, type: 'amount', prompt: `How much did you pay for ${line.quantity} ${unit} of ${material.name}?` });
       return;

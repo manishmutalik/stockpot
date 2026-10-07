@@ -1,5 +1,16 @@
 # Changelog
 
+## Fix: a price per kilo on a quantity in grams (stock bought, phone app)
+
+"500gm khapli flour at Rs.185/kg" was priced as 500 x 185 = 92,500 for the line, so the flour's cost came out at
+Rs.1,68,195 a kg. A price written per unit ("185/kg", "400 a kg", "0.18 per ml") is now read against the unit written
+beside it, by the code and not the model: the quantity is put into that unit first (500 g is 0.5 kg, so 92.50), and a
+price with no unit beside it is not used, the total is asked instead. A rate the model puts in the total field is
+treated as a rate. Also across the app: `convertAmount` now divides for small-to-big conversions (9 g is exactly
+0.009 kg, no 0.009000000000000001) and ignores case in unit names; a restock plan refuses a unit that does not convert
+to the material's (it used to pass the quantity through unchanged). The conversion table itself (g, kg, ml, l, with
+1 g = 1 ml) was checked pair by pair and is correct.
+
 ## Stockpot Quick app: notification settings and push
 
 The phone app's Settings screen now has the notification choices (morning summary and its time, running low, use by
