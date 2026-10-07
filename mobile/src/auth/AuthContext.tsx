@@ -12,6 +12,7 @@ import {
 import { auth } from '../firebase';
 import { createApi, type Api } from '../lib/api';
 import { isDemoEmail } from '../lib/authErrors';
+import { googleSignInAvailable, signInWithGoogle as googleSignIn, signOutGoogle } from '../lib/googleSignIn';
 import { unregisterPush } from '../lib/push';
 
 /** The server the app talks to, from `EXPO_PUBLIC_API_URL` (see .env.example). */
@@ -22,6 +23,9 @@ interface AuthState {
   isDemo: boolean;
   api: Api;
   signIn: (email: string, password: string) => Promise<void>;
+  /** Whether this build offers Google sign-in, and the sign-in itself ('cancelled' when the person closed Google's sheet). */
+  googleAvailable: boolean;
+  signInWithGoogle: () => Promise<'signed_in' | 'cancelled'>;
   resetPassword: (email: string) => Promise<void>;
   openDemo: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -36,12 +40,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const api = useMemo(() => createApi({ baseUrl: API_URL, getToken: async () => (auth.currentUser ? auth.currentUser.getIdToken() : null) }), []);
 
   const signIn = useCallback(async (email: string, password: string) => { await signInWithEmailAndPassword(auth, email.trim(), password); }, []);
+  const signInWithGoogle = useCallback(() => googleSignIn(auth), []);
   const resetPassword = useCallback(async (email: string) => { await sendPasswordResetEmail(auth, email.trim()); }, []);
 
   /** Signs out. This phone stops buzzing for this owner first (best effort, and never more than three seconds). */
   const signOut = useCallback(async () => {
     await Promise.race([unregisterPush(api), new Promise<void>(resolve => setTimeout(resolve, 3000))]);
     await fbSignOut(auth);
+    await signOutGoogle();
   }, [api]);
 
   /** Makes a demo account, as the web's "Explore Demo Sandbox" does, and has the server fill it with the sample kitchen. */
@@ -58,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [api]);
 
-  const value = useMemo<AuthState>(() => ({ user, isDemo: isDemoEmail(user?.email), api, signIn, resetPassword, openDemo, signOut }), [user, api, signIn, resetPassword, openDemo, signOut]);
+  const value = useMemo<AuthState>(() => ({ user, isDemo: isDemoEmail(user?.email), api, signIn, googleAvailable: googleSignInAvailable, signInWithGoogle, resetPassword, openDemo, signOut }), [user, api, signIn, signInWithGoogle, resetPassword, openDemo, signOut]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

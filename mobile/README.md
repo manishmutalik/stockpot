@@ -32,6 +32,28 @@ The server sends the notifications (see the main README, "Phone app notification
 
 The app asks for permission only when the owner taps "Turn on notifications" in Settings, never at launch. It registers the phone for whoever is signed in and switches it off on sign-out.
 
+## Sign in with Google (Android)
+
+"Continue with Google" on the sign-in screen opens the phone's own Google account sheet and signs in to Firebase with the
+result, so it is the same account and the same kitchen as signing in with that Google account on the website (a Google
+account never used with Stockpot makes a new, empty account, as it does on the web). The button only shows when
+`EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` is set. Android only for now; iOS needs its own client ID and URL scheme.
+
+Set it up once:
+1. Firebase console, Authentication, Sign-in method: Google must be enabled (the website already uses it). Open it, and copy
+   the **Web client ID** (ends `.apps.googleusercontent.com`). Put it in `mobile/.env`:
+   `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=<that id>`.
+2. Find the **SHA-1** of the key the APK is signed with. After `npx expo prebuild --platform android`, in the `android`
+   folder run `gradlew.bat signingReport` (Windows) or `./gradlew signingReport` and copy the `SHA1` shown for the `debug`
+   variant (the release build we make for testing is signed with the debug key).
+3. Firebase console, Project settings, Your apps, Add app, Android: package name `com.stockpot.quick` and that SHA-1.
+   Skip downloading `google-services.json` (the app does not use it). This registers the app with Google; it can take a few
+   minutes to start working. Add the SHA-1 of any other key the app is signed with later (a Play Store release key, say).
+4. Build the APK again (the library is native code, so the new button needs a new build).
+
+If Google's sheet says the sign-in is "not set up for this build", the SHA-1 or package name in step 3 does not match the
+key that signed the APK.
+
 ## Build an APK on your own computer (Android, Windows)
 
 For trying the app on a phone without Expo's cloud build. Needs Android Studio (for the SDK and its bundled Java),

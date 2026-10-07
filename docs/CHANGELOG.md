@@ -1,5 +1,15 @@
 # Changelog
 
+## Stockpot Quick app: sign in with Google
+
+The phone app's sign-in screen has a "Continue with Google" button (Android) that opens the phone's Google account sheet
+and signs in to Firebase with it, so it is the same account and kitchen as signing in with that Google account on the
+website. It shows only when `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` is set; signing out forgets the chosen Google account on the
+phone. Cancelling the sheet is not an error, and the failures that can happen (Play services missing, an account that
+already uses a password, the app's signing key not registered with Google) are said in plain words. Uses the
+`@react-native-google-signin/google-signin` library, so the APK needs rebuilding; the one-time setup (Web client ID, then
+the Android app's SHA-1 in Firebase) is in `mobile/README.md`.
+
 ## Stockpot Quick: a faster, explainable reading, and a note on building the APK
 
 Reading a message on the phone no longer waits for the plan check and the owner's data one after the other, and the data
