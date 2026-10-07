@@ -11,12 +11,12 @@ import { noOutline } from '../lib/webInput';
 import { colors, fonts, radius } from '../theme';
 
 export default function SignIn() {
-  const { signIn, resetPassword, openDemo } = useAuth();
+  const { signIn, resetPassword, openDemo, googleAvailable, signInWithGoogle } = useAuth();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [busy, setBusy] = useState<null | 'signIn' | 'demo'>(null);
+  const [busy, setBusy] = useState<null | 'signIn' | 'demo' | 'google'>(null);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
@@ -30,6 +30,11 @@ export default function SignIn() {
     setError(null);
     try { await resetPassword(email); Alert.alert('Check your email', 'If that address has an account, a reset link is on its way.'); }
     catch (err) { setError(describeAuthError(err, 'reset')); }
+  };
+
+  const google = async () => {
+    setError(null); setBusy('google');
+    try { await signInWithGoogle(); } catch (err) { setError(describeAuthError(err, 'google')); } finally { setBusy(null); }
   };
 
   const demo = async () => {
@@ -49,6 +54,17 @@ export default function SignIn() {
         </View>
 
         <Card style={{ gap: 12, padding: 20 }}>
+          {googleAvailable && (
+            <>
+              <Button variant="outline" label="Continue with Google" onPress={google} busy={busy === 'google'} disabled={busy !== null && busy !== 'google'}
+                icon={<Image source={require('../../assets/google-g.png')} style={{ width: 22, height: 22 }} accessibilityIgnoresInvertColors />} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 4 }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.inputFill }} />
+                <Text style={{ fontFamily: fonts.mono, fontSize: 12, color: colors.grey }}>OR WITH EMAIL</Text>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.inputFill }} />
+              </View>
+            </>
+          )}
           <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>Email address</Text>
           <Field icon="mail-outline">
             <TextInput
@@ -73,7 +89,7 @@ export default function SignIn() {
             <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.primary }}>Forgot password?</Text>
           </Pressable>
           {error && <Text accessibilityRole="alert" style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.coral }}>{error}</Text>}
-          <Button label="Sign in" onPress={submit} busy={busy === 'signIn'} disabled={busy === 'demo'} icon={<MaterialIcons name="login" size={22} color={colors.white} />} />
+          <Button label="Sign in" onPress={submit} busy={busy === 'signIn'} disabled={busy === 'demo' || busy === 'google'} icon={<MaterialIcons name="login" size={22} color={colors.white} />} />
         </Card>
 
         {/* Apple restricts apps that send people elsewhere to buy a subscription, so on iOS this link stays out until that is checked. */}
@@ -86,7 +102,7 @@ export default function SignIn() {
           </Text>
         )}
 
-        <Button variant="quiet" label="Try the demo kitchen" onPress={demo} busy={busy === 'demo'} disabled={busy === 'signIn'} icon={<MaterialIcons name="restaurant" size={22} color={colors.primary} />} />
+        <Button variant="quiet" label="Try the demo kitchen" onPress={demo} busy={busy === 'demo'} disabled={busy === 'signIn' || busy === 'google'} icon={<MaterialIcons name="restaurant" size={22} color={colors.primary} />} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
