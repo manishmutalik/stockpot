@@ -15,7 +15,7 @@ Read only what is written. Never guess or invent. If the note does not say somet
 Fields:
 - lineItems: every item that was made, in the order written.
   - nameAsWritten: the item exactly as written (same spelling, copied from the note).
-  - menuItemId: the "id" of the menu item it means, taken from the menu list you are given. Use null if nothing on the menu is clearly the same item. A typo or a shortened name of a menu item still counts ("croisant" for a croissant). If unsure, use null: the owner will choose.
+  - menuItemId: the "id" of the menu item it means, taken from the menu list you are given. Use null if nothing on the menu is clearly the same item. A typo or a shortened name of a menu item still counts ("croisant" for a croissant). If the menu has several sizes or flavours of what was written and the note does not say which, or you are unsure, use null: the owner will choose.
   - quantity: how many were made, a whole number, using the number written ("40", "forty", "2 dozen" is 24, "half a dozen" is 6). If the note does not say how many, do not guess and do not use 1: leave that item out of lineItems. Do not add up or multiply quantities yourself unless the note states the total.
   - wasteUnits: how many of this item the note says were wasted, burnt, dropped, thrown away or unsellable (the number written), otherwise null. Never work it out as the difference between two numbers. It is not how many were sold or taken.
 - when: when it was made, as the exact words written ("this morning", "yesterday", "Saturday", "3 Oct"). Do not turn it into a date. Null if not said.

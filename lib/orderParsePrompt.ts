@@ -14,7 +14,7 @@ Read only what is written. Never guess or invent. If the message does not say so
 Fields:
 - lineItems: every item the customer asks for, in the order written.
   - nameAsWritten: the item exactly as the customer wrote it (same spelling, copied from the message).
-  - menuItemId: the "id" of the menu item it means, taken from the menu list you are given. Use null if nothing on the menu is clearly the same item. A typo or a shortened name of a menu item still counts ("croisant" for a croissant). If unsure, use null: the owner will choose.
+  - menuItemId: the "id" of the menu item it means, taken from the menu list you are given. Use null if nothing on the menu is clearly the same item. A typo or a shortened name of a menu item still counts ("croisant" for a croissant). If the menu has several sizes or flavours of what was written and the message does not say which, or you are unsure, use null: the owner will choose.
   - quantity: a whole number. Use the number the customer wrote ("2", "two", "a dozen" is 12, "half a dozen" is 6). If no number is given for an item, use 1. Do not multiply or add up quantities yourself unless the message states the total.
 - customerLabel: if the message contains a customer label such as C-4F2A (it stands for a customer the business already knows), that label exactly. Otherwise null.
 - customerName: the customer's own name if they gave it and there is no label. Otherwise null. Copy it as written.

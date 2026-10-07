@@ -20,6 +20,7 @@
  * customers and delivery addresses written in the message do reach the model:
  * reading them is the point.
  */
+import { resolveMenuItem } from './menuVariants';
 import { PAYMENT_METHODS, type PaymentMethod } from '../types';
 import { redactPhones, replaceCustomerNames } from './aiPrivacy';
 import { addDays } from './localDate';
@@ -360,6 +361,8 @@ export interface NotFoundItem {
   nameAsWritten: string;
   quantity: number;
   suggestion: { id: string; name: string } | null;
+  /** Set when several menu items fit the words (sizes of the same item) and the words do not choose: the owner picks one of these. */
+  options?: { id: string; name: string }[];
 }
 
 /** Everything the Add Order form is pre-filled with, and what to tell the owner to check. */
@@ -397,6 +400,8 @@ export function buildOrderForm(input: {
   customers: { label: string; name: string; phone?: string }[];
   phones: string[];
   today: string;
+  /** Ask which one when the words fit several sizes of the same item, instead of taking the model's pick (the phone app). */
+  askAboutVariants?: boolean;
 }): OrderFormFill {
   const { parsed, menu, customers, phones, today } = input;
   const fill: OrderFormFill = { lineItems: [], notFound: [], knownCustomer: false };
@@ -404,7 +409,10 @@ export function buildOrderForm(input: {
   // The same item written twice is one row, with the quantities added.
   const rows = new Map<string, number>();
   for (const li of parsed.lineItems) {
-    if (li.menuItemId && menu.some(m => m.id === li.menuItemId)) rows.set(li.menuItemId, (rows.get(li.menuItemId) ?? 0) + li.quantity);
+    const resolved = input.askAboutVariants ? resolveMenuItem(li.nameAsWritten, menu) : { kind: 'keep' as const };
+    if (resolved.kind === 'item') rows.set(resolved.id, (rows.get(resolved.id) ?? 0) + li.quantity);
+    else if (resolved.kind === 'ask') fill.notFound.push({ nameAsWritten: li.nameAsWritten, quantity: li.quantity, suggestion: null, options: resolved.options });
+    else if (li.menuItemId && menu.some(m => m.id === li.menuItemId)) rows.set(li.menuItemId, (rows.get(li.menuItemId) ?? 0) + li.quantity);
     else fill.notFound.push({ nameAsWritten: li.nameAsWritten, quantity: li.quantity, suggestion: suggestMenuItem(li.nameAsWritten, menu) });
   }
   fill.lineItems = [...rows].map(([menuItemId, quantity]) => ({ menuItemId, quantity }));

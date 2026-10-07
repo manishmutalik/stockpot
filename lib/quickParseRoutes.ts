@@ -138,7 +138,7 @@ function orderReader(deps: QuickParseDeps, w: World, raw: string): Reader<any> {
     build: (parsed, answers) => {
       const fill = buildOrderForm({
         parsed, menu: w.menu.map(m => ({ id: m.id, name: m.name, sellingPrice: m.sellingPrice })), today: w.today, phones: prepared.phones,
-        customers: customers.map(c => ({ label: c.label, name: c.name, phone: c.phone })),
+        customers: customers.map(c => ({ label: c.label, name: c.name, phone: c.phone })), askAboutVariants: true,
       });
       const built = buildOrderDraft({ fill, menu: w.menu, today: w.today, answers });
       const questions = [...built.questions];
@@ -164,7 +164,7 @@ function productionReader(deps: QuickParseDeps, w: World, raw: string): Reader<a
     text, options, model: deps.productionModel,
     check: r => validateParsedProduction(r, { text, menuIds: options.map(m => m.id) }),
     build: (parsed, answers) => {
-      const fill = buildProductionForm({ parsed, menu: w.menu, today: w.today });
+      const fill = buildProductionForm({ parsed, menu: w.menu, today: w.today, askAboutVariants: true });
       const built = buildProductionDraft({ fill, menu: w.menu, today: w.today, answers });
       if (built.draft.rows.length === 0 && !built.questions.some(q => q.id.startsWith('item:'))) {
         return { ...bad('no_items', 'I could not find anything from your menu in that. Please say it again.'), notes: built.notes };
