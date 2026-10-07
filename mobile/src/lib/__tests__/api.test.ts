@@ -28,6 +28,14 @@ describe('createApi', () => {
     expect(JSON.parse(init.body)).toEqual({ lineItems: [] });
   });
 
+  it('puts and deletes with a JSON body', async () => {
+    const f = vi.fn().mockResolvedValue(reply(200, { ok: true }));
+    await make(f).put('/api/mobile/notification-settings', { lowStock: false });
+    await make(f).delete('/api/mobile/push-token', { token: 'T' });
+    expect(f.mock.calls[0][1]).toMatchObject({ method: 'PUT', body: JSON.stringify({ lowStock: false }) });
+    expect(f.mock.calls[1][1]).toMatchObject({ method: 'DELETE', body: JSON.stringify({ token: 'T' }) });
+  });
+
   it('does not ask the server anything when nobody is signed in', async () => {
     const f = vi.fn();
     await expect(make(f, null).get('/api/mobile/today')).rejects.toMatchObject({ status: 401, code: 'not_signed_in' });

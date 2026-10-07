@@ -1,5 +1,14 @@
 # Changelog
 
+## Stockpot Quick app: notification settings and push
+
+The phone app's Settings screen now has the notification choices (morning summary and its time, running low, use by
+soon, due tomorrow and its time) and a "Turn on notifications" button that asks for permission and registers the phone.
+The phone is switched off for an owner when they sign out, so a shared phone only buzzes for whoever is signed in, and
+tapping a notification opens the screen it is about. Server: `DELETE /api/mobile/push-token` switches a phone off.
+Trying it on a real phone needs a development build, an EAS project id and (Android) FCM credentials; see
+`mobile/README.md`.
+
 ## Stockpot Quick app: Upcoming and hand over
 
 The phone app's Upcoming tab lists open pre-orders by day, overdue ones first, with what is paid and what is left,

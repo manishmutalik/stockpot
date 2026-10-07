@@ -258,3 +258,17 @@ export interface HandOverSaved {
   whatsappUrl?: string | null;
 }
 
+// ─── Notifications ──────────────────────────────────────────────────────────
+
+/** GET and PUT /api/mobile/notification-settings. Times are HH:MM in the business's time zone. */
+export interface NotificationSettings {
+  /** One summary a day: due today, payments pending, anything low or near its use-by date. */
+  morningSummary: { enabled: boolean; time: string };
+  /** Once, when a material newly drops below its alert level or will run out before it can be restocked. */
+  lowStock: boolean;
+  /** Raw materials and finished batches within two days of their use-by date. */
+  useBy: boolean;
+  /** An evening reminder of tomorrow's pre-orders, as items and quantities. */
+  dueTomorrow: { enabled: boolean; time: string };
+}
+
