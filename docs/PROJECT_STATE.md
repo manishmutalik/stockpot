@@ -285,7 +285,7 @@ Nothing is queued. The AI list in the handoff is complete.
   (`POST /api/internal/notifications/run`, needs `NOTIFICATIONS_CRON_SECRET` and a Render Cron Job every 15 minutes;
   see README). The Expo app is in `mobile/`
   (see `mobile/README.md`): sign-in, the "demo kitchen" (server-seeded), Today, and the whole typed flow (capture, questions, confirm for
-  all four kinds, save, saved summary, unsaved drafts kept) are built; Upcoming with hand over, notification settings and
+  all four kinds, save, saved summary, unsaved drafts kept) are built; Upcoming with hand over (overdue shown, Remind left out) is built; notification settings and
   push registration are still to build, then a development build with speech recognition (the mic on the capture
   screen is a placeholder until then). Not tested against a real Firestore or a real model.
 

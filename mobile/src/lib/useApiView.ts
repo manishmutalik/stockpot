@@ -3,8 +3,8 @@ import type { TodayView } from '../../../src/utils/quickApiTypes';
 import type { Api } from './api';
 import { describeApiError } from './api';
 
-export interface TodayState {
-  data: TodayView | null;
+export interface ViewState<T> {
+  data: T | null;
   /** True for the first load only; a pull to refresh is `refreshing`. */
   loading: boolean;
   refreshing: boolean;
@@ -12,9 +12,9 @@ export interface TodayState {
   refresh: () => Promise<void>;
 }
 
-/** The Today screen's figures, loaded when the screen opens and again on pull to refresh. Keeps the last good answer if a refresh fails. */
-export function useToday(api: Api): TodayState {
-  const [data, setData] = useState<TodayView | null>(null);
+/** A screen's figures from one endpoint, loaded when the screen opens and again on pull to refresh. Keeps the last good answer if a refresh fails. */
+export function useApiView<T>(api: Api, path: string): ViewState<T> {
+  const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,14 +23,14 @@ export function useToday(api: Api): TodayState {
 
   const load = useCallback(async () => {
     try {
-      const view = await api.get<TodayView>('/api/mobile/today');
+      const view = await api.get<T>(path);
       if (!alive.current) return;
       setData(view);
       setError(null);
     } catch (err) {
       if (alive.current) setError(describeApiError(err));
     }
-  }, [api]);
+  }, [api, path]);
 
   useEffect(() => { load().finally(() => { if (alive.current) setLoading(false); }); }, [load]);
 
@@ -42,3 +42,6 @@ export function useToday(api: Api): TodayState {
 
   return { data, loading, refreshing, error, refresh };
 }
+
+export type TodayState = ViewState<TodayView>;
+export const useToday = (api: Api): TodayState => useApiView<TodayView>(api, '/api/mobile/today');

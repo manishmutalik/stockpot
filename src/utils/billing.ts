@@ -189,6 +189,9 @@ export function formatMoney(amount: number, currency: { symbol: string }): strin
   return `${currency.symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** A message with the bill's link on the end, when there is one. */
+export const withBillLink = (base: string, link?: string): string => (link ? `${base} View/pay: ${link}` : base);
+
 /** The short message pre-filled in WhatsApp (it can't carry rich formatting). */
 export function buildBillMessage(bill: Bill, link?: string): string {
   const greeting = bill.customerName ? `Hi ${bill.customerName}, here's` : "Here's";
@@ -198,7 +201,7 @@ export function buildBillMessage(bill: Bill, link?: string): string {
     : bill.advance
       ? `${greeting} your bill from ${bill.business.name} — ${formatMoney(bill.total, bill.currency)}. Advance received: ${formatMoney(bill.advance.amount, bill.currency)}. Balance due: ${formatMoney(balance, bill.currency)}.`
       : `${greeting} your bill from ${bill.business.name} — ${formatMoney(bill.total, bill.currency)}.`;
-  return link ? `${base} View/pay: ${link}` : base;
+  return withBillLink(base, link);
 }
 
 const TOKEN_PATTERN = /^[a-f0-9]{32}$/;

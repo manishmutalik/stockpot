@@ -12,7 +12,7 @@
 import type { BakerySettings, MenuItem, Order, RawMaterial, RecipeExperiment, WastageLog } from '../types';
 import type { ProductionRun } from '../components/ProductionRunModal';
 import { financialsForRange } from './profit';
-import { buildBill, billBalance } from './billing';
+import { buildBill, billBalance, buildPreorderConfirmation, buildWhatsAppUrl } from './billing';
 import { formatAmount } from './money';
 import { groupPendingPayments } from './payments';
 import { clusterOrdersByGroup } from './orderClustering';
@@ -139,18 +139,26 @@ export function buildUpcoming(input: {
     const wanted = new Map<string, number>();
     for (const o of members) wanted.set(o.menuItemId, (wanted.get(o.menuItemId) ?? 0) + o.quantity);
     const nameOf = (o: Order) => menu.find(m => m.id === o.menuItemId)?.name ?? o.itemNameAtSale ?? 'Item';
+    const phone = members.find(o => o.customerPhone)?.customerPhone ?? null;
+    const items = members.map(o => ({ menuItemId: o.menuItemId, name: nameOf(o), quantity: o.quantity }));
+    const confirmationMessage = buildPreorderConfirmation({
+      customerName: named?.customerName, lines: items, date: first.date, dueSlot: members.find(o => o.dueSlot)?.dueSlot,
+      currency, total: round2(bill.total), advance: advance?.amount, businessName: settings.name || undefined,
+    });
     return {
       orderId: first.id,
       orderIds: members.map(o => o.id),
       customerName: named?.customerName ?? null,
-      customerPhone: members.find(o => o.customerPhone)?.customerPhone ?? null,
+      customerPhone: phone,
       date: first.date,
       dueSlot: members.find(o => o.dueSlot)?.dueSlot ?? null,
       notes: members.find(o => o.notes)?.notes ?? null,
-      items: members.map(o => ({ menuItemId: o.menuItemId, name: nameOf(o), quantity: o.quantity })),
+      items,
       total: round2(bill.total),
       advance: advance ? { amount: advance.amount, method: advance.method } : null,
       balanceDue: round2(billBalance(bill)),
+      confirmationMessage,
+      whatsappUrl: buildWhatsAppUrl(phone ?? undefined, confirmationMessage),
       stockShort: [...wanted].flatMap(([id, qty]) => {
         const item = menu.find(m => m.id === id);
         const short = qty - (item?.finishedGoodsStock ?? 0);
