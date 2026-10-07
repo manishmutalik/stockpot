@@ -54,6 +54,21 @@ Set it up once:
 If Google's sheet says the sign-in is "not set up for this build", the SHA-1 or package name in step 3 does not match the
 key that signed the APK.
 
+## Speaking an entry (Android)
+
+The mic on Today opens the capture screen already listening, and the round mic on the capture screen starts and stops it.
+The words appear in the text box as they are heard (English as spoken in India, `en-IN`); the owner checks them, fixes
+anything, and taps Read it, so nothing is read by the server (or counted against the daily limit) unseen. Leaving the screen
+stops the microphone. It uses the phone's own speech recognition through `expo-speech-recognition`: on Android that is
+Google's, which sends the audio to Google unless the phone has the language downloaded for offline use, so the privacy policy
+should say so. It needs the Google app (or "Speech Recognition & Synthesis") installed and enabled; if it is missing, or the
+microphone is refused, the screen says so and typing still works. A new APK is needed (it is native code and adds the
+microphone permission); the demo kitchen shows "not available in the demo" for the mic, as for typing.
+
+Not done yet: Hindi (Hindi speech comes back in Devanagari, and the checks that every unit and name was written in the
+message expect Latin script, so it needs server work first), and biasing the recogniser towards the owner's own menu,
+customer and material names.
+
 ## Build an APK on your own computer (Android, Windows)
 
 For trying the app on a phone without Expo's cloud build. Needs Android Studio (for the SDK and its bundled Java),

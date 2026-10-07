@@ -34,6 +34,16 @@
         {
           "color": "#00797B"
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Stockpot Quick uses the microphone only while you tap the mic, to turn what you say into text.",
+          "speechRecognitionPermission": "Stockpot Quick uses speech recognition only while you tap the mic, to turn what you say into text.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
       ]
     ],
     "experiments": {

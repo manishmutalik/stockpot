@@ -1,5 +1,15 @@
 # Changelog
 
+## Stockpot Quick app: speak an entry
+
+The mic now works. On Today it opens the capture screen already listening; on the capture screen the round mic starts and
+stops listening. The words appear in the text box as they are heard (English as spoken in India), added after anything
+already written, then the owner checks them and taps Read it, so nothing is read or counted unseen. The button turns red with
+a stop square while listening, leaving the screen stops the microphone, and a refused microphone, a missing speech service,
+no connection or silence are each said in plain words, with typing still available. Uses `expo-speech-recognition` (Android's
+recogniser is Google's and sends the audio to Google unless the language is downloaded for offline use, which the privacy
+policy should mention), so the APK needs rebuilding. Hindi and biasing the recogniser to the owner's own names come later.
+
 ## Stockpot Quick app: sign in with Google
 
 The phone app's sign-in screen has a "Continue with Google" button (Android) that opens the phone's Google account sheet
