@@ -12,6 +12,7 @@ import {
 import { auth } from '../firebase';
 import { createApi, type Api } from '../lib/api';
 import { isDemoEmail } from '../lib/authErrors';
+import { unregisterPush } from '../lib/push';
 
 /** The server the app talks to, from `EXPO_PUBLIC_API_URL` (see .env.example). */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
@@ -36,7 +37,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = useCallback(async (email: string, password: string) => { await signInWithEmailAndPassword(auth, email.trim(), password); }, []);
   const resetPassword = useCallback(async (email: string) => { await sendPasswordResetEmail(auth, email.trim()); }, []);
-  const signOut = useCallback(async () => { await fbSignOut(auth); }, []);
+
+  /** Signs out. This phone stops buzzing for this owner first (best effort, and never more than three seconds). */
+  const signOut = useCallback(async () => {
+    await Promise.race([unregisterPush(api), new Promise<void>(resolve => setTimeout(resolve, 3000))]);
+    await fbSignOut(auth);
+  }, [api]);
 
   /** Makes a demo account, as the web's "Explore Demo Sandbox" does, and has the server fill it with the sample kitchen. */
   const openDemo = useCallback(async () => {

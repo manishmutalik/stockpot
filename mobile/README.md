@@ -20,6 +20,18 @@ npx expo start              # then open it in Expo Go, or press a / i for an emu
 Expo Go is enough for sign-in and the Today screen. Voice reading and push notifications use native modules, so from
 that step on the app needs a development build (`npx expo run:android`, or `eas build --profile development`).
 
+## Notifications (what you set up once)
+
+The server sends the notifications (see the main README, "Phone app notifications"); the app only needs to hand it a token.
+
+1. **A development build** (`eas build --profile development`): push notifications do not work in Expo Go.
+2. **An EAS project id.** Run `npx eas-cli@latest init` in this folder once; it writes `extra.eas.projectId` into `app.json`. Without it the Settings screen says notifications are "not set up in this build yet".
+3. **Android only: Firebase Cloud Messaging.** Add a Firebase Android app for `com.stockpot.quick`, download its `google-services.json`, and upload the FCM credentials with `eas credentials` (see Expo's "Push notifications setup").
+4. **iOS later:** an Apple Developer account; EAS creates the push key.
+5. If Expo's "enhanced push security" is on, set `EXPO_ACCESS_TOKEN` on the server.
+
+The app asks for permission only when the owner taps "Turn on notifications" in Settings, never at launch. It registers the phone for whoever is signed in and switches it off on sign-out.
+
 ## Checks
 
 ```bash
@@ -32,7 +44,7 @@ main project's vitest (run `npm install` at the repo root first). They are not p
 
 ## Layout
 
-- `src/app/` the screens (Expo Router): `sign-in`, `capture` (write, questions, confirm, saved), and the tabs `(tabs)/index` (Today), `upcoming` (pre-orders and the hand-over sheet), `settings`.
+- `src/app/` the screens (Expo Router): `sign-in`, `capture` (write, questions, confirm, saved), and the tabs `(tabs)/index` (Today), `upcoming` (pre-orders and the hand-over sheet), `settings` (account, notification choices, sign out).
 - `src/lib/` plain logic with no React Native in it, so it is unit tested: the API client, the capture flow reducer (`capture.ts`), the saved summary, the unsaved-draft store. `useCapture.ts` is the one hook that runs it against the server.
 - `src/auth/` who is signed in, and the API client that speaks as them.
 - `src/theme/` colours, fonts and spacing from the Stitch design system.

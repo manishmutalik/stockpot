@@ -343,3 +343,12 @@ come from the server.
 - **Sharing:** the confirmation and bill texts are written by the server (the web's own `buildPreorderConfirmation` and `buildBillMessage`), and the app only opens WhatsApp to the customer's number (`wa.me`), or the phone's share sheet when there is no number. A bill for an order that has been settled says "Paid in full, thank you!" rather than a balance.
 - **Dropped from the designs:** the "Cooling Rack Shelf B2" card in the hand-over sheet (no shelf data exists), the Weekend Prep List card, search and filter buttons.
 
+### I. Built so far: the app, step 4 (notification settings and push)
+
+- **Settings screen:** the account, the notification choices, "Open Stockpot on the web" and Sign out. The choices are the server's four: a **Morning summary** with a time (6 to 10 am), **Running low**, **Use by soon** and **Due tomorrow** with a time (5 to 9 pm). Every change is shown at once and sent to the server as the whole set; one that is refused is put back with the reason.
+- **Permission is asked for only when the owner taps "Turn on notifications"**, never at launch. Blocked shows "Open phone settings". After that the phone is kept registered silently whenever someone is signed in.
+- **Sign-out switches the phone off for that owner** (`DELETE /api/mobile/push-token`, best effort and never more than three seconds), so a phone shared between two people only buzzes for whoever is signed in. Signing back in switches it on again.
+- **Tapping a notification** opens the screen it is about (`today` and `items`: Today; `upcoming`: Upcoming; `stock-in`: Stock in), also when it is what opened the app. The action buttons in the design ("Stock in", "Dismiss", "See items") are not built: a tap does the useful thing.
+- **Not testable here, and needs setup:** push needs a development build, an EAS project id (`eas init`) and, on Android, FCM credentials; see `mobile/README.md`. Until the project id is there the screen says notifications are "not set up in this build yet".
+- **Left out from the designs' Settings:** language, auto-listen and haptics (they belong with speech recognition), offline sync (decided against), the thermal printer, the daily kitchen reminder, help and feedback.
+

@@ -27,6 +27,7 @@ export interface Api {
   /** Saves need an idempotency key: a fresh unique id for each tap of Save, kept for a retry of the same save. */
   post<T>(path: string, body?: unknown, opts?: { idempotencyKey?: string }): Promise<T>;
   put<T>(path: string, body: unknown): Promise<T>;
+  delete<T>(path: string, body?: unknown): Promise<T>;
 }
 
 export const DEFAULT_TIMEOUT_MS = 20_000;
@@ -71,6 +72,7 @@ export function createApi(deps: ApiDeps): Api {
     get: path => request('GET', path),
     post: (path, body, opts) => request('POST', path, body ?? {}, opts?.idempotencyKey),
     put: (path, body) => request('PUT', path, body),
+    delete: (path, body) => request('DELETE', path, body ?? {}),
   };
 }
 

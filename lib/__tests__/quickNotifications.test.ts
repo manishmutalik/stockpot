@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createQuickPushTokenHandler, createQuickNotificationSettingsGetHandler, createQuickNotificationSettingsPutHandler,
+  createQuickPushTokenHandler, createQuickPushTokenRemoveHandler, createQuickNotificationSettingsGetHandler, createQuickNotificationSettingsPutHandler,
 } from '../quickRoutes';
 import { DEFAULT_NOTIFICATION_SETTINGS, readNotificationSettings, withNotificationDefaults, EXPO_PUSH_TOKEN } from '../../src/utils/quickNotifications';
 import { memoryQuickDb } from './memoryQuickDb';
@@ -11,6 +11,41 @@ const TOKEN = 'ExponentPushToken[abcdefghij0123456789xx]';
 const res = () => { const r: any = { code: 200 }; r.status = (c: number) => { r.code = c; return r; }; r.json = (b: any) => { r.body = b; return r; }; return r; };
 const world = () => { const mem = memoryQuickDb(() => NOW); return { mem, deps: { db: mem.db, now: () => NOW, newId: () => 'x' } }; };
 const call = async (h: any, body?: unknown, uid = UID) => { const r = res(); await h({ uid, body, headers: {} }, r); return r; };
+
+describe('DELETE /mobile/push-token', () => {
+  it('switches the phone off for this owner, so the job skips it, and keeps the record', async () => {
+    const { mem, deps } = world();
+    await call(createQuickPushTokenHandler(deps), { token: TOKEN, platform: 'android' });
+    const r = await call(createQuickPushTokenRemoveHandler(deps), { token: TOKEN });
+    expect(r.body).toEqual({ removed: true });
+    expect(mem.all(UID, 'devices')[0]).toMatchObject({ token: TOKEN, disabled: true, disabledAt: NOW });
+  });
+
+  it('is switched on again when the phone registers again', async () => {
+    const { mem, deps } = world();
+    const save = createQuickPushTokenHandler(deps);
+    await call(save, { token: TOKEN, platform: 'android' });
+    await call(createQuickPushTokenRemoveHandler(deps), { token: TOKEN });
+    await call(save, { token: TOKEN, platform: 'android' });
+    expect(mem.all(UID, 'devices')[0]).not.toHaveProperty('disabled');
+  });
+
+  it('touches only this owner\'s phone, and makes nothing for a token that was never saved', async () => {
+    const { mem, deps } = world();
+    await call(createQuickPushTokenHandler(deps), { token: TOKEN, platform: 'ios' }, 'someone-else');
+    const r = await call(createQuickPushTokenRemoveHandler(deps), { token: TOKEN });
+    expect(r.body).toEqual({ removed: true });
+    expect(mem.all(UID, 'devices')).toEqual([]);
+    expect(mem.all('someone-else', 'devices')[0]).not.toHaveProperty('disabled');
+  });
+
+  it('refuses something that is not a push token', async () => {
+    const { deps } = world();
+    expect((await call(createQuickPushTokenRemoveHandler(deps), { token: 'nope' })).code).toBe(400);
+    expect((await call(createQuickPushTokenRemoveHandler(deps), {})).code).toBe(400);
+    expect((await call(createQuickPushTokenRemoveHandler(deps))).code).toBe(400);
+  });
+});
 
 describe('POST /mobile/push-token', () => {
   it('remembers the phone, in a collection only the server reads, and saving it again changes nothing but the time', async () => {

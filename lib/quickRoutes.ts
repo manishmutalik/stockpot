@@ -504,6 +504,29 @@ export function createQuickPushTokenHandler(deps: QuickRouteDeps) {
   };
 }
 
+/**
+ * DELETE /mobile/push-token: this phone stops getting this owner's notifications (they signed out of the app on it). The
+ * phone is switched off, not deleted, so the job skips it; registering it again (signing back in) switches it on. Never
+ * behind the plan check: someone whose plan has lapsed can still sign out.
+ */
+export function createQuickPushTokenRemoveHandler(deps: QuickRouteDeps) {
+  return async (req: AuthedRequest, res: Response) => {
+    const { token } = req.body ?? {};
+    if (typeof token !== 'string' || !EXPO_PUSH_TOKEN.test(token)) return res.status(400).json({ error: 'That is not a push token.', code: 'bad_request' });
+    try {
+      const id = token.replace(/[^A-Za-z0-9]/g, '_');
+      await deps.db.run(req.uid!, async tx => {
+        // Only a phone this owner registered: nothing is created for a token they never saved.
+        if (await tx.get('devices', id)) tx.apply([{ collection: 'devices', id, merge: true, data: { disabled: true, disabledAt: deps.now() } }]);
+      });
+      return res.json({ removed: true });
+    } catch (err: any) {
+      console.error('Quick push token removal failed:', err?.message);
+      return res.status(500).json({ error: 'Could not remove that.', code: 'save_failed' });
+    }
+  };
+}
+
 /** GET /mobile/notification-settings: what the owner chose, with the defaults for anything not chosen yet. */
 export function createQuickNotificationSettingsGetHandler(deps: QuickRouteDeps) {
   return async (req: AuthedRequest, res: Response) => {

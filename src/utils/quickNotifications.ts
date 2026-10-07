@@ -5,17 +5,9 @@
  * and the job that sends them. A switch per kind and the time of the morning
  * summary; an off switch is always respected.
  */
+import type { NotificationSettings } from './quickApiTypes';
 
-export interface NotificationSettings {
-  /** One summary a day: due today, payments pending, anything low or near its use-by date. */
-  morningSummary: { enabled: boolean; /** HH:MM in the business's time zone. */ time: string };
-  /** Once, when a material newly drops below its alert level or will run out before it can be restocked. */
-  lowStock: boolean;
-  /** Raw materials and finished batches within two days of their use-by date. */
-  useBy: boolean;
-  /** An evening reminder of tomorrow's pre-orders, as items and quantities. */
-  dueTomorrow: { enabled: boolean; time: string };
-}
+export type { NotificationSettings } from './quickApiTypes';
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   morningSummary: { enabled: true, time: '08:00' },
