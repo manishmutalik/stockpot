@@ -1,5 +1,16 @@
 # Changelog
 
+## Stockpot Quick: a faster, explainable reading, and a note on building the APK
+
+Reading a message on the phone no longer waits for the plan check and the owner's data one after the other, and the data
+itself is read in parallel where it does not depend on anything else. The server logs one line per reading,
+`[quick] parse`, with the kind, how many model calls it made (a second one means the first failed the check) and how many
+milliseconds went on the plan check, the data, the daily count, the model and building the draft, with nothing the owner
+wrote, so a slow reading can be explained from the logs. While reading, the capture screen now says "Reading what you
+wrote...", then "Checking the numbers...", then "Still working, nearly there..." instead of a bare spinner. `mobile/.gitignore`
+now ignores the generated `android` and `ios` folders, and `mobile/README.md` has the steps (and the problems met) for
+building an APK on a Windows computer.
+
 ## Fix: a price per kilo on a quantity in grams (stock bought, phone app)
 
 "500gm khapli flour at Rs.185/kg" was priced as 500 x 185 = 92,500 for the line, so the flour's cost came out at

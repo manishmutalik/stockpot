@@ -32,6 +32,39 @@ The server sends the notifications (see the main README, "Phone app notification
 
 The app asks for permission only when the owner taps "Turn on notifications" in Settings, never at launch. It registers the phone for whoever is signed in and switches it off on sign-out.
 
+## Build an APK on your own computer (Android, Windows)
+
+For trying the app on a phone without Expo's cloud build. Needs Android Studio (for the SDK and its bundled Java),
+Node 20+ and Git. Use one Command Prompt window for all of it, because the variables below last only for that window.
+
+```
+set ANDROID_HOME=C:\Users\<you>\AppData\Local\Android\Sdk
+set JAVA_HOME=C:\Program Files\Android\Android Studio\jbr
+set GRADLE_USER_HOME=D:\gradle-home
+cd /d C:\
+git clone https://github.com/manishmutalik/stockpot.git sp
+cd sp\mobile
+npm install
+echo EXPO_PUBLIC_API_URL=https://your-server.example.com>.env
+npx expo prebuild --platform android
+cd android
+gradlew.bat assembleRelease -PreactNativeArchitectures=arm64-v8a --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m"
+```
+
+The APK is `android\app\build\outputs\apk\release\app-release.apk`; copy it to the phone and open it (allow installs from
+that app when asked). It is signed with a debug key, which is fine for testing and not for the Play Store. The `android`
+folder is generated and ignored by Git.
+
+What has gone wrong, and the fix:
+- `%ANDROID_HOME%` prints as itself: the variable is not set in that window (set it there, or open a new window after saving it).
+- Gradle times out downloading itself: a firewall or proxy that Java cannot get through. Try a phone hotspot, or download the
+  `gradle-9.3.1-bin.zip` in a browser and point `distributionUrl` in `android\gradle\wrapper\gradle-wrapper.properties` at the file.
+- "not enough space on the disk" while installing the NDK: the SDK is on C:, which needs about 10 GB free. Then delete the
+  half-installed `Sdk\ndk\<version>` folder (an NDK folder with no `source.properties` is refused) and build again.
+- "Gradle build daemon disappeared" with `Out of Memory` in the `hs_err_pid` log: the machine ran out of memory. Close other
+  programs, give Windows a larger page file, and keep the `arm64-v8a` and `--max-workers=2` flags (the default builds four chip types).
+- `sdkmanager --licenses` printing that it is deprecated is only a notice.
+
 ## Checks
 
 ```bash

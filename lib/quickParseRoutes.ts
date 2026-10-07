@@ -83,15 +83,22 @@ interface World {
   unpaid: Order[];
 }
 
-/** Reads only what this kind of message needs, in one transaction. */
+/** Reads only what this kind of message needs, in one transaction, the independent reads together. */
 async function loadWorld(tx: QuickTx, kind: QuickKind, nowMs: number): Promise<World> {
   const settings = (await loadSettings(tx)) as World['settings'];
   const today = todayInZone(settings.timezone, new Date(nowMs));
-  const menu = (await tx.all('menu')) as unknown as MenuItem[];
   const wantsOrders = kind === 'order' || kind === 'payment';
-  const orders = wantsOrders ? (await tx.range('orders', 'date', addDays(today, -CUSTOMER_LOOKBACK_DAYS), addDays(today, CUSTOMER_LOOKAHEAD_DAYS))) as unknown as Order[] : [];
-  const unpaid = kind === 'payment' ? (await tx.where('orders', 'paymentStatus', 'unpaid')) as unknown as Order[] : [];
-  const materials = kind === 'restock' ? (await tx.all('materials')) as unknown as RawMaterial[] : kind === 'payment' ? [] : await materialsFor(tx, menu);
+  const [menuDocs, orderDocs, unpaidDocs, materialDocs] = await Promise.all([
+    tx.all('menu'),
+    wantsOrders ? tx.range('orders', 'date', addDays(today, -CUSTOMER_LOOKBACK_DAYS), addDays(today, CUSTOMER_LOOKAHEAD_DAYS)) : [],
+    kind === 'payment' ? tx.where('orders', 'paymentStatus', 'unpaid') : [],
+    kind === 'restock' ? tx.all('materials') : null,
+  ]);
+  const menu = menuDocs as unknown as MenuItem[];
+  const orders = orderDocs as unknown as Order[];
+  const unpaid = unpaidDocs as unknown as Order[];
+  // The materials a recipe uses are known once the menu is, so they are the one read that has to wait for it.
+  const materials = materialDocs ? materialDocs as unknown as RawMaterial[] : kind === 'payment' ? [] : await materialsFor(tx, menu);
   return { settings, today, menu, materials, orders, unpaid };
 }
 
@@ -234,6 +241,14 @@ export function createQuickParseHandler(deps: QuickParseDeps) {
   return async (req: AuthedRequest, res: Response) => {
     const uid = req.uid!;
     const who = { uid, email: req.email, emailVerified: req.emailVerified };
+    // Where the time goes, logged once per reading (no message text, names or amounts), so a slow one can be explained.
+    const started = Date.now();
+    const ms: Record<string, number> = {};
+    let lapAt = started;
+    const lap = (name: string) => { const now = Date.now(); ms[name] = now - lapAt; lapAt = now; };
+    let kindRead: QuickKind | null = null;
+    let attempts = 0;
+    const logTimings = (outcome: string) => console.log('[quick] parse', { kind: kindRead, outcome, fresh: attempts > 0, modelCalls: attempts, ...ms, totalMs: Date.now() - started });
     try {
       const request = readParseRequest(req.body);
       if (!request) return res.status(400).json({ error: 'The request was not understood.', code: 'bad_request' });
@@ -242,11 +257,18 @@ export function createQuickParseHandler(deps: QuickParseDeps) {
       const kind = request.kind ?? asKind(answers.get('kind')) ?? detectKind(request.text);
       // Not clear what it is about: ask, rather than guess which save to prepare. Costs nothing.
       if (kind === null) return res.json({ kind: null, draft: null, questions: [kindQuestion()], notes: [] });
+      kindRead = kind;
 
+      // Who may use AI and the owner's data are independent, so they are fetched together. The data of an owner who is then
+      // refused is simply dropped (a failure of that read is only reported if it is awaited below).
+      const worldRead = deps.db.run(uid, tx => loadWorld(tx, kind, deps.now()));
+      worldRead.catch(() => undefined);
       const entitled = await checkAiEntitlement(who, deps);
+      lap('access');
       if (entitled.ok === false) return res.status(entitled.status).json({ error: entitled.message, code: entitled.code });
 
-      const world = await deps.db.run(uid, tx => loadWorld(tx, kind, deps.now()));
+      const world = await worldRead;
+      lap('load');
       if (kind !== 'restock' && kind !== 'payment' && world.menu.length === 0) {
         return res.status(422).json({ error: 'Add something to your menu in the web app first, so there is something to match.', code: 'no_menu' });
       }
@@ -264,16 +286,22 @@ export function createQuickParseHandler(deps: QuickParseDeps) {
         parsed = checked.parsed;
       } else {
         const access = await reserveAiFeature(who, 'quick', deps);
+        lap('reserve');
         if (access.ok === false) return res.status(access.status).json({ error: access.message, code: access.code });
         remaining = Math.max(access.limit - access.used, 0);
         try {
-          const read = await readChecked(reader);
+          const counted: Reader<unknown> = { ...reader, model: input => { attempts++; return reader.model(input); } };
+          const read = await readChecked(counted);
+          lap('model');
           if (read === null) {
+            logTimings('unverified');
             return res.json({ kind, draft: null, questions: [], notes: [], code: 'unverified', error: 'I could not read that reliably. Please say it again, or type it.', remaining });
           }
           parsed = read;
         } catch (err: any) {
           console.error(`Quick ${kind} reading failed:`, err?.message);
+          lap('model');
+          logTimings('model_error');
           const mapped = aiErrorResponse(err);
           return res.status(mapped.status).json({ error: mapped.message, code: 'model_error' });
         }
@@ -289,6 +317,8 @@ export function createQuickParseHandler(deps: QuickParseDeps) {
         if (saveable.ok === false) return res.json({ kind, draft: null, questions: [], notes: built.notes, code: 'unverified', error: saveable.error, ...extra });
       }
 
+      lap('build');
+      logTimings(built.questions.length > 0 ? 'questions' : 'draft');
       res.setHeader('Cache-Control', 'private, no-store');
       return res.json({ kind, draft: built.draft, questions: built.questions, notes: built.notes, preview: built.preview ?? null, ...extra });
     } catch (err: any) {

@@ -514,6 +514,48 @@ describe('who may use it and what can go wrong', () => {
     expect(deps.orderModel).not.toHaveBeenCalled();
   });
 
+  it('still says why an owner is refused when their data could not be read, and reports a failed read otherwise', async () => {
+    const { deps } = world();
+    deps.db = { run: vi.fn().mockRejectedValue(new Error('unavailable')) } as unknown as QuickParseDeps['db'];
+    deps.hasActiveAccess.mockResolvedValue(false);
+    expect((await call(deps, say('2 sourdough'))).code).toBe(402);
+    deps.hasActiveAccess.mockResolvedValue(true);
+    const failed = await call(deps, say('2 sourdough'));
+    expect(failed.code).toBe(500);
+    expect(failed.body.code).toBe('parse_failed');
+    expect(deps.orderModel).not.toHaveBeenCalled();
+  });
+
+  it('logs where the time went, once per reading, with nothing the owner wrote', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const { deps } = world();
+      await call(deps, say('2 sourdough for Priya Sharma'));
+      const lines = log.mock.calls.filter(c => c[0] === '[quick] parse');
+      expect(lines).toHaveLength(1);
+      const timings = lines[0][1] as Record<string, unknown>;
+      expect(timings).toMatchObject({ kind: 'order', outcome: expect.stringMatching(/^(draft|questions)$/), fresh: true, modelCalls: 1 });
+      for (const key of ['access', 'load', 'reserve', 'model', 'build', 'totalMs']) expect(typeof timings[key]).toBe('number');
+      expect(JSON.stringify(lines[0])).not.toMatch(/sourdough|Priya|Sharma/i);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('logs a reading the app sent back as no model call', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    try {
+      const { deps } = world();
+      await call(deps, say('2 sourdough', { reading: reading({ lineItems: [{ nameAsWritten: 'sourdough', menuItemId: 'sourdough', quantity: 2 }] }) }));
+      const timings = log.mock.calls.find(c => c[0] === '[quick] parse')?.[1] as Record<string, unknown>;
+      expect(timings).toMatchObject({ fresh: false, modelCalls: 0 });
+      expect(timings).not.toHaveProperty('model');
+      expect(timings).not.toHaveProperty('reserve');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('stops at the daily limit without calling the model', async () => {
     const { deps } = world();
     deps.reserve.mockResolvedValue({ ok: false, reason: 'user_limit' });

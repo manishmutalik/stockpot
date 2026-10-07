@@ -10,6 +10,7 @@ import { Card } from '../components/Card';
 import { Notes, OrderConfirm, PaymentConfirm, ProductionConfirm, RestockConfirm } from '../components/confirm';
 import { QuestionCard } from '../components/QuestionCard';
 import { canSave, currentQuestion, questionProgress } from '../lib/capture';
+import { useReadingLabel } from '../lib/readingLabel';
 import { useCapture } from '../lib/useCapture';
 import { noOutline } from '../lib/webInput';
 import { colors, fonts, radius } from '../theme';
@@ -33,6 +34,7 @@ export default function Capture() {
   const insets = useSafeAreaInsets();
   const cap = useCapture(api, { kind, resume: params.resume === '1' });
   const { state } = cap;
+  const readingText = useReadingLabel(state.step === 'reading');
   const response = state.response;
   const currency = response?.currency ?? DEFAULT_CURRENCY;
   const shownKind: QuickKind | 'none' = response?.kind ?? kind ?? 'none';
@@ -91,7 +93,7 @@ export default function Capture() {
                 <MaterialIcons name="mic" size={26} color={colors.white} />
               </Pressable>
               <View style={{ flex: 1 }}>
-                <Button label={state.step === 'reading' ? 'Reading…' : 'Read it'} onPress={read} busy={state.step === 'reading'} disabled={!state.text.trim()} icon={<MaterialIcons name="auto-awesome" size={20} color={colors.white} />} />
+                <Button label={state.step === 'reading' ? readingText : 'Read it'} onPress={read} busy={state.step === 'reading'} disabled={!state.text.trim()} icon={<MaterialIcons name="auto-awesome" size={20} color={colors.white} />} />
               </View>
             </View>
             <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.grey, textAlign: 'center' }}>Nothing is saved until you confirm it.</Text>
@@ -120,7 +122,10 @@ export default function Capture() {
         )}
 
         {state.step === 'reading' && state.response === null && state.text.trim() !== '' && (
-          <View style={{ alignItems: 'center', gap: 8 }}><ActivityIndicator color={colors.primary} /></View>
+          <View accessibilityLiveRegion="polite" style={{ alignItems: 'center', gap: 8 }}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={{ fontFamily: fonts.regular, fontSize: 14, color: colors.grey }}>{readingText}</Text>
+          </View>
         )}
 
         {state.step === 'saved' && state.saved && (
