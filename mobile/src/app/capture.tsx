@@ -11,6 +11,7 @@ import { Notes, OrderConfirm, PaymentConfirm, ProductionConfirm, RestockConfirm 
 import { QuestionCard } from '../components/QuestionCard';
 import { canSave, currentQuestion, questionProgress } from '../lib/capture';
 import { useReadingLabel } from '../lib/readingLabel';
+import { useVoiceInput } from '../lib/useVoiceInput';
 import { useCapture } from '../lib/useCapture';
 import { noOutline } from '../lib/webInput';
 import { colors, fonts, radius } from '../theme';
@@ -27,7 +28,7 @@ const HINT: Record<QuickKind | 'none', string> = {
 const DEFAULT_CURRENCY: Currency = { code: 'INR', symbol: '₹' };
 
 export default function Capture() {
-  const params = useLocalSearchParams<{ kind?: string; resume?: string }>();
+  const params = useLocalSearchParams<{ kind?: string; resume?: string; listen?: string }>();
   const kind = (KINDS as string[]).includes(params.kind ?? '') ? (params.kind as QuickKind) : null;
   const { api, isDemo } = useAuth();
   const router = useRouter();
@@ -47,11 +48,14 @@ export default function Capture() {
     Alert.alert('Not available in the demo', 'Voice and typed entry are not available in the demo kitchen. Sign in with your own account to use them.');
     return false;
   };
-  const read = () => { if (requireAccount()) cap.read(); };
-  const mic = () => {
-    if (!requireAccount()) return;
-    Alert.alert('Voice is on its way', 'Speaking your entry arrives with the next update. For now, type it and tap Read it.');
-  };
+  // Speaking fills the text box as the words are heard; the owner checks it and taps Read it, so nothing is read (or counted) unseen.
+  const textRef = React.useRef(state.text);
+  textRef.current = state.text;
+  const voice = useVoiceInput({ getText: () => textRef.current, setText: cap.setText });
+  const read = () => { if (!requireAccount()) return; voice.stop(); cap.read(); };
+  const mic = () => { if (requireAccount()) void voice.toggle(); };
+  // The big mic on Today opens this screen already listening.
+  React.useEffect(() => { if (params.listen === '1') mic(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveLabel = (() => {
     if (!response?.draft) return 'Save';
@@ -82,20 +86,27 @@ export default function Capture() {
           <>
             <Card style={{ gap: 12, borderWidth: 2, borderColor: colors.primary }}>
               <TextInput
-                value={state.text} onChangeText={cap.setText} editable={state.step === 'write'} autoFocus multiline maxLength={2000}
+                value={state.text} onChangeText={cap.setText} editable={state.step === 'write' && !voice.listening} autoFocus={params.listen !== '1'} multiline maxLength={2000}
                 placeholder={HINT[shownKind]} placeholderTextColor={colors.grey} accessibilityLabel="What happened"
                 style={[{ fontFamily: fonts.regular, fontSize: 20, lineHeight: 28, color: colors.ink, minHeight: 140, textAlignVertical: 'top' }, noOutline]}
               />
               <Text style={{ alignSelf: 'flex-end', fontFamily: fonts.mono, fontSize: 12, color: colors.grey }}>{state.text.trim() ? state.text.trim().split(/\s+/).length : 0} words</Text>
             </Card>
             <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-              <Pressable accessibilityRole="button" accessibilityLabel="Speak" onPress={mic} style={({ pressed }) => ({ width: 56, height: 56, borderRadius: 28, backgroundColor: pressed ? colors.primaryPressed : colors.primary, alignItems: 'center', justifyContent: 'center' })}>
-                <MaterialIcons name="mic" size={26} color={colors.white} />
+              <Pressable accessibilityRole="button" accessibilityLabel={voice.listening ? 'Stop listening' : 'Speak'} accessibilityState={{ selected: voice.listening }} onPress={mic}
+                style={({ pressed }) => ({ width: 56, height: 56, borderRadius: 28, backgroundColor: voice.listening ? colors.coral : pressed ? colors.primaryPressed : colors.primary, alignItems: 'center', justifyContent: 'center' })}>
+                <MaterialIcons name={voice.listening ? 'stop' : 'mic'} size={26} color={colors.white} />
               </Pressable>
               <View style={{ flex: 1 }}>
                 <Button label={state.step === 'reading' ? readingText : 'Read it'} onPress={read} busy={state.step === 'reading'} disabled={!state.text.trim()} icon={<MaterialIcons name="auto-awesome" size={20} color={colors.white} />} />
               </View>
             </View>
+            {voice.listening && (
+              <Text accessibilityLiveRegion="polite" style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.coral, textAlign: 'center' }}>Listening… say it, then tap the square to stop.</Text>
+            )}
+            {voice.error && !voice.listening && (
+              <Text accessibilityRole="alert" style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.coral, textAlign: 'center' }}>{voice.error}</Text>
+            )}
             <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.grey, textAlign: 'center' }}>Nothing is saved until you confirm it.</Text>
           </>
         )}

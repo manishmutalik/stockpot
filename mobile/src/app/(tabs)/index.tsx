@@ -25,9 +25,9 @@ export default function Today() {
 
   // Open the capture screen: with a kind from a shortcut chip, or none to let the server work it out from the words.
   // In the demo kitchen it is never available.
-  const capture = (kind?: QuickKind) => {
+  const capture = (kind?: QuickKind, opts?: { listen?: boolean }) => {
     if (isDemo) { Alert.alert('Not available in the demo', 'Voice and typed entry are not available in the demo kitchen. Sign in with your own account to use them.'); return; }
-    router.push(kind ? { pathname: '/capture', params: { kind } } : '/capture');
+    router.push(kind || opts?.listen ? { pathname: '/capture', params: { ...(kind && { kind }), ...(opts?.listen && { listen: '1' }) } } : '/capture');
   };
 
   // An entry that was not saved is offered again, and the figures are refreshed when coming back from saving one.
@@ -91,7 +91,7 @@ export default function Today() {
         </Card>
       )}
 
-      <MicButton onPress={() => capture()} />
+      <MicButton onPress={() => capture(undefined, { listen: true })} />
 
       <View style={{ gap: 12 }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
