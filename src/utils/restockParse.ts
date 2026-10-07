@@ -11,11 +11,14 @@
  */
 import type { RawMaterial } from '../types';
 import { convertAmount, enterableUnits } from './conversions';
-import { formatMoney } from './billing';
+import { formatAmount } from './money';
 import { redactPhones } from './aiPrivacy';
 import { numberWritten, squash, suggestMenuItem } from './orderParse';
 import { planRestock } from './plans';
 import type { DraftResult, Question } from './quickParse';
+import type { RestockDraft, RestockPreviewLine } from './quickApiTypes';
+
+export type { RestockDraft, RestockPreviewLine } from './quickApiTypes';
 
 export const RESTOCK_TEXT_MAX_CHARS = 1500;
 export const RESTOCK_MAX_LINES = 15;
@@ -133,8 +136,7 @@ export function validateParsedRestock(raw: unknown, input: { text: string; mater
 
 // ─── From the reading to a draft ────────────────────────────────────────────
 
-export interface RestockDraftLine { materialId: string; quantity: number; unit: string; total: number }
-export interface RestockDraft { lines: RestockDraftLine[] }
+export type RestockDraftLine = RestockDraft['lines'][number];
 
 const AMOUNT_MAX = 1_000_000_000;
 const validAmount = (v: string | undefined): number | null => {
@@ -215,26 +217,6 @@ export function buildRestockDraft(input: {
 
 // ─── What the save will do ──────────────────────────────────────────────────
 
-export interface RestockPreviewLine {
-  materialId: string;
-  name: string;
-  quantity: number;
-  unit: string;
-  total: number;
-  /** Stock after, in the material's own unit. */
-  newStock: number;
-  stockUnit: string;
-  /** Cost per `costUnit` (kg for grams, l for ml, else the unit itself) before and after: the moving average. */
-  costUnit: string;
-  previousCost: number;
-  newCost: number;
-  /** Percent change in cost per unit; null when there was no cost before. */
-  costChangePct: number | null;
-  /** Menu items whose cost this changes, and by how much each unit now costs to make. */
-  recipesAffected: { menuItemId: string; name: string; costChange: number }[];
-  label: { total: string; previousCost: string; newCost: string };
-}
-
 const displayUnit = (unit: string): { unit: string; factor: number } => (unit === 'g' ? { unit: 'kg', factor: 1000 } : unit === 'ml' ? { unit: 'l', factor: 1000 } : { unit, factor: 1 });
 
 /** The same plan the save runs, line by line from the stock as it stands, so the figures are the ones that will be saved. */
@@ -246,7 +228,7 @@ export function previewRestock(input: {
 }): { ok: true; lines: RestockPreviewLine[]; total: number; label: { total: string } } | { ok: false; message: string } {
   const working = new Map(input.materials.map(m => [m.id, m]));
   const out: RestockPreviewLine[] = [];
-  const money = (n: number) => formatMoney(n, input.currency);
+  const money = (n: number) => formatAmount(n, input.currency);
   let grand = 0;
 
   for (const line of input.draft.lines) {

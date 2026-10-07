@@ -188,7 +188,7 @@ describe('POST /mobile/payments', () => {
     expect(r.code).toBe(422);
     expect(r.body).toMatchObject({
       code: 'amount_mismatch', customerName: 'Priya Sharma', owed: 1300, orderCount: 2, oldestOrderDue: 900,
-      error: "Priya Sharma owes ₹1,300.00 for 2 orders. ₹700.00 doesn't cover a whole order (the oldest is ₹900.00).",
+      error: "Priya Sharma owes ₹1,300 for 2 orders. ₹700 doesn't cover a whole order (the oldest is ₹900).",
     });
     expect(r.body.amountsThatWork).toEqual([900, 1300]);
     expect(mem.read(UID, 'orders', 'o1')!.paymentStatus).toBe('unpaid');
@@ -198,7 +198,7 @@ describe('POST /mobile/payments', () => {
     const { mem, deps } = world(); seed(mem);
     const r = await pay(deps, { customerKey: PRIYA, amount: 2000, method: 'upi' });
     expect(r.code).toBe(422);
-    expect(r.body.error).toBe('Priya Sharma owes ₹1,300.00 for 2 orders. ₹2,000.00 is more than that.');
+    expect(r.body.error).toBe('Priya Sharma owes ₹1,300 for 2 orders. ₹2,000 is more than that.');
   });
 
   it('a pre-order\'s advance is taken off what is owed', async () => {

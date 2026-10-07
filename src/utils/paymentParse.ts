@@ -10,10 +10,13 @@
  *    first (src/utils/quickPayments); anything else is asked about, with the amounts that would work.
  */
 import { PAYMENT_METHODS, type PaymentMethod } from '../types';
-import { formatMoney } from './billing';
+import { formatAmount } from './money';
 import { numberWritten, squash } from './orderParse';
 import { matchingOption, type CustomerDues } from './quickPayments';
 import type { DraftResult, KnownCustomer, Question } from './quickParse';
+import type { PaymentDraft, PaymentPreview } from './quickApiTypes';
+
+export type { PaymentDraft, PaymentPreview } from './quickApiTypes';
 
 const METHOD_IDS = PAYMENT_METHODS.map(m => m.value);
 const nullable = (schema: Record<string, unknown>) => ({ anyOf: [schema, { type: 'null' }] });
@@ -75,7 +78,6 @@ export function validateParsedPayment(raw: unknown, input: { text: string }): Pa
 // ─── From the reading to a draft ────────────────────────────────────────────
 
 /** The body of the payment endpoint, with whatever is not settled yet left out. */
-export interface PaymentDraft { customerKey?: string; amount?: number; method?: PaymentMethod }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const METHOD_OPTIONS = PAYMENT_METHODS.map(m => ({ value: m.value as string, label: m.label }));
@@ -100,7 +102,7 @@ export function buildPaymentDraft(input: {
   currency: { code: string; symbol: string };
 }): DraftResult<PaymentDraft> & { entry: CustomerDues | null; amountQuestionOptions?: number[] } {
   const { parsed, owing, known, answers, currency } = input;
-  const money = (n: number) => formatMoney(n, currency);
+  const money = (n: number) => formatAmount(n, currency);
   const questions: Question[] = [];
   const notes: string[] = [];
   const draft: PaymentDraft = {};
@@ -160,20 +162,6 @@ export function buildPaymentDraft(input: {
   return { draft, questions, notes, entry, amountQuestionOptions: suggestions };
 }
 
-export interface PaymentPreview {
-  customerKey: string;
-  customerName: string;
-  /** What they owed before this payment. */
-  owed: number;
-  amount: number;
-  ordersCovered: number;
-  /** Still owed after this payment. */
-  remainingDue: number;
-  /** The payment settles everything they owe. */
-  clearsAll: boolean;
-  label: { owed: string; amount: string; remainingDue: string };
-}
-
 /** The figures to confirm, from the same sums the save checks. Null until who, how much and a matching amount are settled. */
 export function previewPayment(input: { entry: CustomerDues; amount: number; currency: { code: string; symbol: string } }): PaymentPreview | null {
   const { entry, amount, currency } = input;
@@ -184,6 +172,6 @@ export function previewPayment(input: { entry: CustomerDues; amount: number; cur
   return {
     customerKey: entry.customer.key, customerName: entry.customer.name, owed, amount, ordersCovered: at + 1,
     remainingDue: remaining, clearsAll: remaining <= 0.005,
-    label: { owed: formatMoney(owed, currency), amount: formatMoney(amount, currency), remainingDue: formatMoney(remaining, currency) },
+    label: { owed: formatAmount(owed, currency), amount: formatAmount(amount, currency), remainingDue: formatAmount(remaining, currency) },
   };
 }

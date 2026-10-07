@@ -90,7 +90,8 @@ describe('a clear order', () => {
     });
     expect(r.body.preview).toMatchObject({ total: 400, balanceDue: 0, advance: null });
     expect(r.body.preview.lines).toEqual([{ menuItemId: 'sourdough', name: 'Sourdough', quantity: 2, unitPrice: 200, lineTotal: 400, stockAfter: 1 }]);
-    expect(r.body.preview.label.total).toBe('₹400.00');
+    expect(r.body.preview.label.total).toBe('₹400');
+    expect(r.body.currency).toEqual({ code: 'INR', symbol: '₹' });
     expect(r.body.reading).toMatchObject({ customerName: 'Ravi' });
     expect(r.body.remaining).toBe(26);
     expect(deps.reserve).toHaveBeenCalledWith(expect.objectContaining({ uid: UID, feature: 'quick' }));
@@ -428,7 +429,7 @@ describe('a payment', () => {
     const r = await call(deps, paid('Priya paid 700 by UPI'));
     expect(r.body.questions).toHaveLength(1);
     expect(r.body.questions[0]).toMatchObject({ id: 'amount', type: 'amount' });
-    expect(r.body.questions[0].prompt).toMatch(/owes ₹1,100\.00 for 2 orders\. ₹700\.00 doesn't cover a whole order \(the oldest is ₹900\.00\)/);
+    expect(r.body.questions[0].prompt).toMatch(/owes ₹1,100 for 2 orders\. ₹700 doesn't cover a whole order \(the oldest is ₹900\)/);
     expect(r.body.questions[0].options.map((o: any) => o.value)).toEqual(['900', '1100']);
     expect(r.body.draft.amount).toBeUndefined();
     const fixed = await call(deps, paid('Priya paid 700 by UPI', { reading: payment({ amount: 700 }), answers: [{ questionId: 'amount', value: '900' }] }));
@@ -448,7 +449,7 @@ describe('a payment', () => {
     const r = await call(deps, paid('Ravi paid 900 cash'));
     expect(r.body.questions).toEqual([expect.objectContaining({ id: 'customer', prompt: 'Ravi has nothing pending. Who paid?' })]);
     expect(r.body.questions[0].options).toHaveLength(1);
-    expect(r.body.questions[0].options[0].label).toBe('Priya Sharma · ₹1,100.00');
+    expect(r.body.questions[0].options[0].label).toBe('Priya Sharma · ₹1,100');
     const key = r.body.questions[0].options[0].value;
     const answered = await call(deps, paid('Ravi paid 900 cash', { reading: payment({ customerLabel: null, customerName: 'Ravi' }), answers: [{ questionId: 'customer', value: key }] }));
     expect(answered.body.questions).toEqual([]);

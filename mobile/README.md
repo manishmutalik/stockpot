@@ -6,7 +6,7 @@ Android and iOS. The spec and decisions are in `docs/handoffs/stockpot-quick-mob
 
 The app never works out money and never touches Firestore: everything goes through the Stockpot server's
 `/api/mobile/*` endpoints, and Firebase is used only for signing in. The shapes the server answers with are in
-`../src/utils/quickApiTypes.ts` (types only, imported by both sides).
+`../src/utils/quickApiTypes.ts` (types only, imported by both sides). The one piece of server code the app runs is `../src/utils/money.ts` (how an amount is written), shared so the phone and the server's own labels match; `metro.config.js` lets Metro read that folder, so keep what the app imports from it free of other imports.
 
 ## Run it
 
@@ -32,8 +32,8 @@ main project's vitest (run `npm install` at the repo root first). They are not p
 
 ## Layout
 
-- `src/app/` the screens (Expo Router): `sign-in`, and the tabs `(tabs)/index` (Today), `upcoming`, `settings`.
-- `src/lib/` plain logic with no React Native in it, so it is unit tested: the API client, error messages.
+- `src/app/` the screens (Expo Router): `sign-in`, `capture` (write, questions, confirm, saved), and the tabs `(tabs)/index` (Today), `upcoming`, `settings`.
+- `src/lib/` plain logic with no React Native in it, so it is unit tested: the API client, the capture flow reducer (`capture.ts`), the saved summary, the unsaved-draft store. `useCapture.ts` is the one hook that runs it against the server.
 - `src/auth/` who is signed in, and the API client that speaks as them.
 - `src/theme/` colours, fonts and spacing from the Stitch design system.
 - `bakery-mobile/` at the repo root is an older, unused prototype; it is left alone and goes once this app ships.

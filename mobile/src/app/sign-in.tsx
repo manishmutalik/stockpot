@@ -7,6 +7,7 @@ import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { describeAuthError } from '../lib/authErrors';
 import { describeApiError } from '../lib/api';
+import { noOutline } from '../lib/webInput';
 import { colors, fonts, radius } from '../theme';
 
 export default function SignIn() {
@@ -91,7 +92,7 @@ export default function SignIn() {
   );
 }
 
-const inputText = { flex: 1, fontFamily: fonts.regular, fontSize: 16, color: colors.ink, paddingVertical: 14 } as const;
+const inputText = [{ flex: 1, fontFamily: fonts.regular, fontSize: 16, color: colors.ink, paddingVertical: 14 }, noOutline];
 
 function Field({ icon, right, children }: { icon: React.ComponentProps<typeof MaterialIcons>['name']; right?: React.ReactNode; children: React.ReactNode }) {
   return (

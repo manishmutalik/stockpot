@@ -12,26 +12,19 @@
  */
 import type { MenuItem, PaymentMethod, RawMaterial, BakerySettings } from '../types';
 import { PAYMENT_METHODS } from '../types';
-import { buildBill, billBalance, formatMoney } from './billing';
+import { buildBill, billBalance } from './billing';
+import { formatAmount } from './money';
 import { customerLabels, groupOrdersByCustomer } from './customers';
 import { planOrderGroup, planProductionSession, productionRunCost, type OrderGroupCommon, type OrderLineItem, type ProductionRunInput } from './plans';
 import type { ProductionFormFill } from './productionParse';
 import type { OrderFormFill } from './orderParse';
 import type { Order } from '../types';
+import type { Answer, OrderDraft, OrderPreview, ProductionDraft, ProductionPreview, Question, QuickKind } from './quickApiTypes';
 
-export type QuickKind = 'order' | 'restock' | 'production' | 'payment';
+export type { Answer, OrderDraft, OrderPreview, ProductionDraft, ProductionPreview, Question, QuickKind } from './quickApiTypes';
+
 export const QUICK_KINDS: QuickKind[] = ['order', 'restock', 'production', 'payment'];
 const KIND_LABELS: Record<QuickKind, string> = { order: 'A customer order', restock: 'Stock bought', production: 'Something I made', payment: 'A payment received' };
-
-/** One thing to ask the owner. `choice` is answered with one of `options`' values, `date` with YYYY-MM-DD, `amount` with a number. */
-export interface Question {
-  id: string;
-  type: 'choice' | 'date' | 'amount';
-  prompt: string;
-  options?: { value: string; label: string }[];
-}
-
-export interface Answer { questionId: string; value: string }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const AMOUNT_MAX = 10_000_000;
@@ -111,8 +104,6 @@ export function customerDirectory(orders: Order[]): KnownCustomer[] {
 }
 
 // ─── An order ───────────────────────────────────────────────────────────────
-
-export interface OrderDraft { common: OrderGroupCommon; lineItems: OrderLineItem[] }
 
 export interface DraftResult<D> {
   draft: D;
@@ -206,16 +197,6 @@ export function buildOrderDraft(input: {
   return { draft: { common, lineItems }, questions, notes };
 }
 
-/** The money side of an order draft, worked out by the same plan the save runs, so it is the figure the save will use. */
-export interface OrderPreview {
-  lines: { menuItemId: string; name: string; quantity: number; unitPrice: number; lineTotal: number; stockAfter: number | null }[];
-  /** What the customer pays, with GST and discount. */
-  total: number;
-  advance: number | null;
-  balanceDue: number;
-  label: { total: string; balanceDue: string; advance: string | null };
-}
-
 export function previewOrder(input: {
   draft: OrderDraft;
   menu: MenuItem[];
@@ -255,7 +236,7 @@ export function previewOrder(input: {
   const balance = owes ? Math.round(billBalance(bill) * 100) / 100 : 0;
   const total = Math.round(bill.total * 100) / 100;
   const advance = plan.orders.find(o => o.advance)?.advance?.amount ?? null;
-  const money = (n: number) => formatMoney(n, currency);
+  const money = (n: number) => formatAmount(n, currency);
   return { ok: true, preview: {
     lines: plan.orders.map(o => {
       const item = menu.find(m => m.id === o.menuItemId);
@@ -272,12 +253,6 @@ export function previewOrder(input: {
 }
 
 // ─── What was made ──────────────────────────────────────────────────────────
-
-/** The body of the production endpoint. */
-export interface ProductionDraft {
-  date?: string;
-  rows: { recipeId: string; quantityProduced: number; quantityYield?: number; notes?: string }[];
-}
 
 /**
  * What was made, as the production endpoint takes it, and what is still open. The date is never in the future (it has
@@ -321,15 +296,6 @@ export function buildProductionDraft(input: {
   return { draft: { ...(date !== today && { date }), rows }, questions, notes };
 }
 
-export interface ProductionPreview {
-  date: string;
-  rows: { recipeId: string; name: string; quantityProduced: number; quantityYield: number; costTotal: number; costPerUnit: number; stockAfter: number }[];
-  /** Ingredients this would take below nothing, as the web would let it. The app asks "Produce anyway?". */
-  shortages: { materialId: string; name: string; unit: string; short: number }[];
-  total: number;
-  label: { total: string };
-}
-
 /** The same plan the save runs, so the cost and the shortfall shown are the ones that will be recorded. */
 export function previewProduction(input: {
   draft: ProductionDraft;
@@ -361,5 +327,5 @@ export function previewProduction(input: {
   const shortages = plan.state.materials
     .filter(m => m.initialStock < 0)
     .map(m => ({ materialId: m.id, name: m.name, unit: m.unit, short: Math.round(-m.initialStock * 10000) / 10000 }));
-  return { ok: true, preview: { date: day, rows, shortages, total, label: { total: formatMoney(total, currency) } } };
+  return { ok: true, preview: { date: day, rows, shortages, total, label: { total: formatAmount(total, currency) } } };
 }

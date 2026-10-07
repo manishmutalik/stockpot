@@ -23,7 +23,8 @@ import { planOrderGroup, planRestock, planProductionSession, planHandOver, planM
 import type { OrderGroupCommon, OrderLineItem, PlanError, ProductionRunInput } from '../src/utils/plans';
 import { enterableUnits } from '../src/utils/conversions';
 import { saleAmounts } from '../src/utils/profit';
-import { buildBill, billBalance, formatMoney } from '../src/utils/billing';
+import { buildBill, billBalance } from '../src/utils/billing';
+import { formatAmount } from '../src/utils/money';
 import { isUnpaid } from '../src/utils/payments';
 import { customerDues, matchingOption } from '../src/utils/quickPayments';
 import { billSettingsOf, buildToday, buildUpcoming, USE_BY_SOON_DAYS } from '../src/utils/quickViews';
@@ -230,7 +231,8 @@ export function createQuickOrderHandler(deps: QuickRouteDeps) {
       orderIds: plan.orders.map(o => o.id),
       orderGroupId: plan.orders[0].orderGroupId ?? null,
       preorder: plan.preorder,
-      total, advance, balanceDue: Math.round(Math.max(total - advance, 0) * 100) / 100,
+      // Nothing is owed on an order that was paid in full (the plan marks only an order with a balance unpaid).
+      total, advance, balanceDue: plan.orders.some(o => o.paymentStatus === 'unpaid') ? Math.round(Math.max(total - advance, 0) * 100) / 100 : 0,
     } };
   });
 }
@@ -390,9 +392,9 @@ export function createQuickPaymentHandler(deps: QuickRouteDeps) {
       const owed = round2(customer.dueTotal);
       const orderWord = (n: number) => `${n} order${n === 1 ? '' : 's'}`;
       const why = amount > owed + 0.005
-        ? `${formatMoney(amount, currency)} is more than that.`
-        : `${formatMoney(amount, currency)} doesn't cover ${dues.length === 1 ? 'it' : `a whole order (the oldest is ${formatMoney(dues[0].due, currency)})`}.`;
-      return failure(422, `${customer.name} owes ${formatMoney(owed, currency)} for ${orderWord(customer.orderCount)}. ${why}`, {
+        ? `${formatAmount(amount, currency)} is more than that.`
+        : `${formatAmount(amount, currency)} doesn't cover ${dues.length === 1 ? 'it' : `a whole order (the oldest is ${formatAmount(dues[0].due, currency)})`}.`;
+      return failure(422, `${customer.name} owes ${formatAmount(owed, currency)} for ${orderWord(customer.orderCount)}. ${why}`, {
         code: 'amount_mismatch', customerName: customer.name, owed, orderCount: customer.orderCount, oldestOrderDue: dues[0].due, amountsThatWork: options,
       });
     }

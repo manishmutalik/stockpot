@@ -12,7 +12,8 @@
 import type { BakerySettings, MenuItem, Order, RawMaterial, RecipeExperiment, WastageLog } from '../types';
 import type { ProductionRun } from '../components/ProductionRunModal';
 import { financialsForRange } from './profit';
-import { buildBill, billBalance, formatMoney } from './billing';
+import { buildBill, billBalance } from './billing';
+import { formatAmount } from './money';
 import { groupPendingPayments } from './payments';
 import { clusterOrdersByGroup } from './orderClustering';
 import { isOpenPreorder, summarizeDue } from './preorders';
@@ -55,7 +56,7 @@ export function buildToday(input: {
   productionRuns: ProductionRun[];
 }): TodayView {
   const { today, settings, currency, orders, menu, materials } = input;
-  const money = (n: number) => formatMoney(n, currency);
+  const money = (n: number) => formatAmount(n, currency);
 
   // Stock on hand as the Inventory screen shows it: what is recorded, less experiments' pending draw.
   const usage = getExperimentMaterialUsage(input.experiments, materials);

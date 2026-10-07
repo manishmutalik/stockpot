@@ -280,7 +280,7 @@ export function createQuickParseHandler(deps: QuickParseDeps) {
       }
 
       const built = reader.build(parsed, answers);
-      const extra = { reading: parsed, ...(remaining !== undefined && { remaining }) };
+      const extra = { reading: parsed, currency: currencyOf(world.settings), ...(remaining !== undefined && { remaining }) };
       if (built.fail) return res.json({ kind, draft: null, questions: [], notes: built.notes, code: built.fail.code, error: built.fail.error, ...extra });
 
       // A draft the save endpoint would refuse is never handed over as ready.

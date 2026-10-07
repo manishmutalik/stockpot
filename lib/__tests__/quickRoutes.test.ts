@@ -81,11 +81,19 @@ describe('every save endpoint', () => {
 describe('POST /mobile/orders', () => {
   const order = (over: any = {}) => ({ common: {}, lineItems: [{ menuItemId: 'cake', quantity: 2 }], ...over });
 
+  it('says what is still owed: nothing for an order paid in full, the whole of it when paying later', async () => {
+    const { deps } = world();
+    const later = await call(createQuickOrderHandler(deps), order({ common: { customerName: 'Priya', paymentStatus: 'unpaid' } }), { key: 'b1b2c3d4-e5f6-4789-a012-3456789abcde' });
+    expect(later.body).toMatchObject({ total: 1800, balanceDue: 1800 });
+    const paid = await call(createQuickOrderHandler(deps), order({ common: { paymentStatus: 'paid', paymentMethod: 'cash' }, lineItems: [{ menuItemId: 'sourdough', quantity: 1 }] }), { key: 'c1b2c3d4-e5f6-4789-a012-3456789abcde' });
+    expect(paid.body).toMatchObject({ balanceDue: 0 });
+  });
+
   it('adds an order from stock: the order, stamped, and the stock taken, in one save', async () => {
     const { mem, deps } = world();
     const r = await call(createQuickOrderHandler(deps), order({ common: { customerName: 'Priya', paymentMethod: 'upi' } }));
     expect(r.code).toBe(201);
-    expect(r.body).toMatchObject({ orderIds: ['id1'], preorder: false, total: 1800, advance: 0, balanceDue: 1800, orderGroupId: null });
+    expect(r.body).toMatchObject({ orderIds: ['id1'], preorder: false, total: 1800, advance: 0, balanceDue: 0, orderGroupId: null });
     const saved = mem.read(UID, 'orders', 'id1')!;
     expect(saved).toMatchObject({
       menuItemId: 'cake', quantity: 2, customerName: 'Priya', unitPriceAtSale: 900, itemNameAtSale: 'Chocolate Truffle Cake',
