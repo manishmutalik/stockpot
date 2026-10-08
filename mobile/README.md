@@ -22,15 +22,25 @@ that step on the app needs a development build (`npx expo run:android`, or `eas 
 
 ## Notifications (what you set up once)
 
-The server sends the notifications (see the main README, "Phone app notifications"); the app only needs to hand it a token.
+The server sends the notifications (see the main README, "Phone app notifications"); the app only hands it a token. Any APK
+made with `expo prebuild` can receive them (only Expo Go cannot). Set up, once:
 
-1. **A development build** (`eas build --profile development`): push notifications do not work in Expo Go.
-2. **An EAS project id.** Run `npx eas-cli@latest init` in this folder once; it writes `extra.eas.projectId` into `app.json`. Without it the Settings screen says notifications are "not set up in this build yet".
-3. **Android only: Firebase Cloud Messaging.** Add a Firebase Android app for `com.stockpot.quick`, download its `google-services.json`, and upload the FCM credentials with `eas credentials` (see Expo's "Push notifications setup").
-4. **iOS later:** an Apple Developer account; EAS creates the push key.
-5. If Expo's "enhanced push security" is on, set `EXPO_ACCESS_TOKEN` on the server.
+1. **Firebase file.** Firebase console, Project settings, Your apps, the Android app `com.stockpot.quick` (the one made for
+   Google sign-in), download `google-services.json` into this `mobile` folder. It is ignored by Git, and `app.config.js` points
+   the Android build at it when it is there.
+2. **An Expo project, for its id.** On expo.dev (a free account), create a project named `stockpot-quick` and copy its ID
+   into `mobile/.env` as `EXPO_PUBLIC_EAS_PROJECT_ID=<id>`. Without it the Settings screen says notifications are "not set up
+   in this build yet". (`npx eas-cli init` also works and writes the id into `app.json` instead.)
+3. **Give Expo's push service a key for Firebase.** Firebase console, Project settings, Service accounts, Generate new private
+   key (a `.json` file; keep it private and never commit it). Then on expo.dev, your project, Credentials, Android, add the
+   application identifier `com.stockpot.quick` and upload that file as the "FCM V1 service account key".
+4. **Rebuild the APK** (steps below). The id and the file are read while the app is built.
+5. **The server:** set `NOTIFICATIONS_CRON_SECRET` on Render and add the Render Cron Job (main README, "Phone app
+   notifications"). If Expo's "enhanced push security" is on, also set `EXPO_ACCESS_TOKEN` on the server.
+6. **iOS later:** an Apple Developer account; EAS creates the push key.
 
-The app asks for permission only when the owner taps "Turn on notifications" in Settings, never at launch. It registers the phone for whoever is signed in and switches it off on sign-out.
+The app asks for permission only when the owner taps "Turn on notifications" in Settings, never at launch. It registers the
+phone for whoever is signed in and switches it off on sign-out.
 
 ## Sign in with Google (Android)
 
