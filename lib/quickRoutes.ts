@@ -25,10 +25,10 @@ import { enterableUnits } from '../src/utils/conversions';
 import { speechPhrases } from '../src/utils/speechPhrases';
 import { customerDirectory } from '../src/utils/quickParse';
 import { saleAmounts } from '../src/utils/profit';
-import { buildBill, billBalance, buildBillMessage, buildInvoiceMessage, buildWhatsAppUrl, withBillLink } from '../src/utils/billing';
+import { buildBill, billBalance, buildBillMessage, buildInvoiceMessage, buildStatementMessage, buildWhatsAppUrl, withBillLink } from '../src/utils/billing';
 import { formatAmount } from '../src/utils/money';
 import { isUnpaid } from '../src/utils/payments';
-import { customerDues, matchingOption } from '../src/utils/quickPayments';
+import { buildPaymentsDue, customerDues, matchingOption } from '../src/utils/quickPayments';
 import { billSettingsOf, buildToday, buildUpcoming, USE_BY_SOON_DAYS } from '../src/utils/quickViews';
 import { EXPO_PUSH_TOKEN, readNotificationSettings, withNotificationDefaults } from '../src/utils/quickNotifications';
 import { clusterOrdersByGroup } from '../src/utils/orderClustering';
@@ -41,6 +41,8 @@ export interface QuickRouteDeps {
   newId: () => string;
   /** Makes (or refreshes) the public bill for an order, once it is saved. Absent: answers carry no bill link. */
   bills?: (uid: string, orderId: string) => Promise<{ token: string } | null>;
+  /** Makes (or refreshes) the public statement for several orders, for the "view bill online" link on a statement. */
+  statements?: (uid: string, orderIds: string[]) => Promise<{ token: string } | null>;
   /** The app's public address, for the "view bill online" link. */
   publicUrl?: string;
 }
@@ -468,6 +470,59 @@ export function createQuickPaymentHandler(deps: QuickRouteDeps) {
   });
 }
 
+// ─── POST /mobile/payments/statement ────────────────────────────────────────
+
+/**
+ * What one customer owes, ready to send: a customer with one unpaid order gets that order's invoice, and one with several gets a
+ * single statement listing all of them, so they are asked once rather than once per order. Nothing about any order changes; the
+ * only write is the public bill link (made or refreshed), so it is safe to ask again. `customerKey` is the key the Payments due
+ * list gave, and it is looked up among this owner's unpaid orders only.
+ */
+export function createQuickStatementHandler(deps: QuickRouteDeps) {
+  return async (req: AuthedRequest, res: Response) => {
+    const customerKey = req.body?.customerKey;
+    if (typeof customerKey !== 'string' || customerKey.length === 0 || customerKey.length > 200) {
+      return res.status(400).json({ error: 'Say whose statement it is.', code: 'bad_request' });
+    }
+    try {
+      const read = await deps.db.run(req.uid!, async tx => {
+        const settings = await loadSettings(tx);
+        const unpaid = (await tx.where('orders', 'paymentStatus', 'unpaid')) as Order[];
+        const menu = asMenu(await tx.getMany('menu', unpaid.map(o => o.menuItemId)));
+        const currency = currencyOf(settings);
+        const today = todayInZone(settings.timezone, new Date(deps.now()));
+        const entry = customerDues({ unpaid, menu, settings, currency, today }).find(e => e.customer.key === customerKey);
+        if (!entry) return null;
+        const { customer, dues } = entry;
+        const single = dues.length === 1;
+        const bill = buildBill({
+          orders: single ? dues[0].orders : customer.orders, menu, settings: billSettingsOf(settings), currency,
+          ...(!single && { statement: true, today }),
+        });
+        return { customer, single, bill, balanceDue: round2(billBalance(bill)), orderIds: customer.orders.map(o => o.id) };
+      });
+      if (!read) return res.status(404).json({ error: 'Nothing is pending for that customer.', code: 'no_pending' });
+
+      let billUrl: string | undefined;
+      if (deps.publicUrl) {
+        const made = read.single ? await deps.bills?.(req.uid!, read.orderIds[0]) : await deps.statements?.(req.uid!, read.orderIds);
+        if (made) billUrl = `${deps.publicUrl.replace(/\/$/, '')}/bill/${made.token}`;
+      }
+      const shareMessage = read.single
+        ? buildInvoiceMessage(read.bill, { settled: false, link: billUrl })
+        : buildStatementMessage(read.bill, { link: billUrl });
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.status(200).json({
+        customerName: read.customer.name, orderIds: read.orderIds, balanceDue: read.balanceDue,
+        ...(billUrl && { billUrl }), shareMessage, whatsappUrl: buildWhatsAppUrl(read.customer.phone, shareMessage),
+      });
+    } catch (err: any) {
+      console.error('Quick statement failed:', err?.message);
+      return res.status(500).json({ error: 'Could not prepare the statement. Please try again.', code: 'statement_failed' });
+    }
+  };
+}
+
 // ─── GET /mobile/today and /mobile/upcoming ─────────────────────────────────
 
 /** Whoever reads must be able to read these: they are the owner's own, and nothing here is written. */
@@ -521,6 +576,15 @@ export function createQuickUpcomingHandler(deps: QuickRouteDeps) {
   return readHandler(deps, async (tx, { today, settings }) => {
     const [preorders, menu] = await Promise.all([tx.where('orders', 'preorder', true), tx.all('menu')]);
     return buildUpcoming({ today, settings, currency: currencyOf(settings), orders: preorders as unknown as Order[], menu: menu as unknown as MenuItem[] });
+  });
+}
+
+/** The Payments due list: everyone who owes, largest amount first, with the orders behind it. */
+export function createQuickPaymentsDueHandler(deps: QuickRouteDeps) {
+  return readHandler(deps, async (tx, { today, settings }) => {
+    const unpaid = (await tx.where('orders', 'paymentStatus', 'unpaid')) as unknown as Order[];
+    const menu = asMenu(await tx.getMany('menu', unpaid.map(o => o.menuItemId)));
+    return buildPaymentsDue({ unpaid, menu, settings, currency: currencyOf(settings), today });
   });
 }
 

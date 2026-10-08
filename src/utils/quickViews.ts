@@ -14,10 +14,10 @@ import type { ProductionRun } from '../components/ProductionRunModal';
 import { financialsForRange } from './profit';
 import { buildBill, billBalance, buildPreorderConfirmation, buildWhatsAppUrl } from './billing';
 import { formatAmount } from './money';
-import { groupPendingPayments } from './payments';
+import { groupPendingPayments, type PendingCustomer } from './payments';
 import { clusterOrdersByGroup } from './orderClustering';
 import { isOpenPreorder, summarizeDue } from './preorders';
-import type { Currency, StatusLine, TodayView, UpcomingOrder, UpcomingView } from './quickApiTypes';
+import type { Currency, PaymentDueSummary, StatusLine, TodayView, UpcomingOrder, UpcomingView } from './quickApiTypes';
 
 export type { Currency, DueSummary, StatusKind, StatusLine, TodayView, UpcomingOrder, UpcomingView } from './quickApiTypes';
 import { getExperimentMaterialUsage } from './experimentMaterialUsage';
@@ -40,6 +40,15 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 // ─── Today ──────────────────────────────────────────────────────────────────
+
+/** A customer who owes money, as the app lists them. */
+export const pendingSummary = (c: PendingCustomer, today: string): PaymentDueSummary => ({
+  key: c.key, name: c.name, phone: c.phone ?? null, orderCount: c.orderCount, oldestDate: c.oldestDate,
+  daysOutstanding: Math.max(daysBetween(c.oldestDate, today), 0), dueTotal: round2(c.dueTotal),
+});
+
+/** How many of the people who owe most Today lists by name. */
+export const TOP_OWING = 3;
 
 export function buildToday(input: {
   today: string;
@@ -72,6 +81,7 @@ export function buildToday(input: {
     customers: pending.length,
     orders: pending.reduce((n, c) => n + c.orderCount, 0),
     total: round2(pending.reduce((sum, c) => sum + c.dueTotal, 0)),
+    top: pending.slice(0, TOP_OWING).map(c => pendingSummary(c, today)),
   };
 
   const lowStock = remaining

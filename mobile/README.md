@@ -102,6 +102,23 @@ when there are any, the total, and either "Paid in full" or the advance received
 ID), then a link to the bill online. A multi-item order is one invoice; a cancelled order has none. Nothing about the order
 changes. The hand-over's "Share bill on WhatsApp" is unchanged (it sends the shorter one-line bill).
 
+## Collecting payments
+
+Money owed is shown in three places, all from the same list (`GET /api/mobile/payments-due`: every unpaid order grouped by
+customer, largest amount first; a pre-order is listed once it falls due, and a cancelled order never):
+
+- **Today's "To collect" card** lists the three who owe most, each with a **Send** button, and "See all" for the rest.
+- **Tapping "N payments pending"** on Today opens **Upcoming › Payments due**, the full list. Each card shows what they owe,
+  how long their oldest order has waited (amber from 7 days, coral from 14), the orders behind it, **Send invoice / Send
+  statement** and **Got paid**.
+- **Got paid** opens the Payment screen with "Priya paid 1300" already written (nothing is read, or counted, until **Read it**
+  is tapped); a customer with no name starts empty.
+
+**Send** asks `POST /api/mobile/payments/statement` with the customer's key. A customer with one unpaid order gets that
+order's invoice; one with several gets a single statement (each order's items with its day, the total, any advance, the
+balance due, the UPI ID and a link to the statement online), so they are asked once rather than once per order. It opens
+WhatsApp straight to them when there is a phone number, or the share sheet when not. Nothing about any order changes.
+
 ## Build an APK on your own computer (Android, Windows)
 
 For trying the app on a phone without Expo's cloud build. Needs Android Studio (for the SDK and its bundled Java),

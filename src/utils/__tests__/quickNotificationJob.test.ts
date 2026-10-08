@@ -6,7 +6,7 @@ import type { TodayView } from '../quickViews';
 const settings = (over: Partial<NotificationSettings> = {}): NotificationSettings => ({ ...DEFAULT_NOTIFICATION_SETTINGS, ...over });
 const today = (over: Partial<TodayView> = {}): TodayView => ({
   date: '2026-10-06', businessName: 'Anita Bakes', currency: { code: 'INR', symbol: '₹' }, statusLines: [],
-  dueToday: null, dueTomorrow: null, overdue: null, pendingPayments: { customers: 0, orders: 0, total: 0 }, lowStock: [], useBySoon: [],
+  dueToday: null, dueTomorrow: null, overdue: null, pendingPayments: { customers: 0, orders: 0, total: 0, top: [] }, lowStock: [], useBySoon: [],
   today: { revenue: 0, trueProfit: 0, orderCount: 0 }, ...over,
 });
 const at = (localTime: string, state: NotificationState = emptyNotificationState(), s = settings()) => ({ settings: s, state, localDate: '2026-10-06', localTime });

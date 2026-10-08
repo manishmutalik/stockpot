@@ -25,6 +25,37 @@ export interface DueSummary {
   items: { menuItemId: string; name: string; quantity: number }[];
 }
 
+/** One customer who owes money, without their orders. */
+export interface PaymentDueSummary {
+  /** What POST /api/mobile/payments and /payments/statement take to say who. */
+  key: string;
+  /** "Customer not named" when the orders carry no name. */
+  name: string;
+  phone: string | null;
+  /** A multi-item order counts once. */
+  orderCount: number;
+  /** The date of their oldest unpaid order, YYYY-MM-DD. */
+  oldestDate: string;
+  /** Whole days since that order. */
+  daysOutstanding: number;
+  /** What they owe: items, delivery and GST, less any advance. */
+  dueTotal: number;
+}
+
+/** One customer who owes money, with what they owe it for. */
+export interface PaymentDueCustomer extends PaymentDueSummary {
+  /** One entry per whole order, oldest first. */
+  orders: { orderId: string; date: string; items: { name: string; quantity: number }[]; due: number }[];
+}
+
+/** GET /api/mobile/payments-due: everyone who owes, largest amount first. */
+export interface PaymentsDueView {
+  today: string;
+  currency: Currency;
+  total: number;
+  customers: PaymentDueCustomer[];
+}
+
 /** GET /api/mobile/today */
 export interface TodayView {
   date: string;
@@ -36,7 +67,8 @@ export interface TodayView {
   dueTomorrow: DueSummary | null;
   /** Open pre-orders whose due date has passed. */
   overdue: DueSummary | null;
-  pendingPayments: { customers: number; orders: number; total: number };
+  /** What is owed; `top` is the three who owe most, for the "To collect" card (the full list is GET /api/mobile/payments-due). */
+  pendingPayments: { customers: number; orders: number; total: number; top: PaymentDueSummary[] };
   lowStock: { id: string; name: string; remaining: number; unit: string; threshold: number }[];
   useBySoon: { kind: 'material' | 'batch'; id: string; name: string; date: string; daysLeft: number }[];
   /** Today's takings and what the business really made on them. */
@@ -252,6 +284,21 @@ export interface InvoiceResponse {
   /** The text to send: the bill, with the link when there is one, and "Paid in full" when nothing is owed. */
   shareMessage: string;
   /** A wa.me link that opens WhatsApp to this customer with that text, when the order has a phone number. */
+  whatsappUrl: string | null;
+}
+
+/**
+ * POST /api/mobile/payments/statement (200): what one customer owes, ready to send. One order gets the same invoice as
+ * POST /orders/:id/invoice; several get a single statement listing all of them, so the customer is asked once.
+ */
+export interface StatementResponse {
+  customerName: string;
+  /** The orders it covers. */
+  orderIds: string[];
+  /** What they owe in all. */
+  balanceDue: number;
+  billUrl?: string;
+  shareMessage: string;
   whatsappUrl: string | null;
 }
 

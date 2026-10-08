@@ -9,6 +9,7 @@ import { MicButton } from '../../components/MicButton';
 import { ShortcutChip } from '../../components/ShortcutChip';
 import { AllClear, StatusRow } from '../../components/StatusRow';
 import { Card } from '../../components/Card';
+import { ToCollectCard } from '../../components/ToCollectCard';
 import { draftStore } from '../../lib/useCapture';
 import type { PersistedDraft } from '../../lib/draftStore';
 import type { QuickKind } from '../../../../src/utils/quickApiTypes';
@@ -29,6 +30,9 @@ export default function Today() {
     if (isDemo) { Alert.alert('Not available in the demo', 'Voice and typed entry are not available in the demo kitchen. Sign in with your own account to use them.'); return; }
     router.push(kind || opts?.listen ? { pathname: '/capture', params: { ...(kind && { kind }), ...(opts?.listen && { listen: '1' }) } } : '/capture');
   };
+
+  // Payments due is a view on the Upcoming tab; the parameter opens it there.
+  const openPayments = () => router.navigate({ pathname: '/upcoming', params: { tab: 'payments' } });
 
   // An entry that was not saved is offered again, and the figures are refreshed when coming back from saving one.
   const [kept, setKept] = useState<PersistedDraft | null>(null);
@@ -71,8 +75,9 @@ export default function Today() {
           {today.data && today.data.statusLines.length === 0 && <AllClear />}
           {today.data?.statusLines.map(line => {
             const target = statusTarget(line.kind);
-            return <StatusRow key={line.kind} line={line} onPress={target ? () => router.navigate('/upcoming') : undefined} />;
+            return <StatusRow key={line.kind} line={line} onPress={target ? () => (target === 'payments' ? openPayments() : router.navigate('/upcoming')) : undefined} />;
           })}
+          {today.data && <ToCollectCard pending={today.data.pendingPayments} currency={today.data.currency} onOpen={openPayments} />}
         </View>
       )}
 

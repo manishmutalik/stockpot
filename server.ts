@@ -23,7 +23,7 @@ import { createChatHandler } from "./lib/chatRoutes";
 import { createChatModel } from "./lib/chatModel";
 import { createOrderParseHandler } from "./lib/orderParseRoutes";
 import { createQuickParseHandler } from "./lib/quickParseRoutes";
-import { createQuickInvoiceHandler } from "./lib/quickRoutes";
+import { createQuickInvoiceHandler, createQuickStatementHandler, createQuickPaymentsDueHandler } from "./lib/quickRoutes";
 import { createNotificationRunHandler, listUsersWithDevices } from "./lib/notificationRoutes";
 import { runNotificationJob } from "./lib/notificationJob";
 import { createDemoSeedHandler, seedDemoKitchen } from "./lib/demoSeedRoutes";
@@ -148,7 +148,7 @@ async function startServer() {
   // Bearer-token only, so no CSRF check (see lib/quickRoutes.ts). Every POST needs an Idempotency-Key header.
   const quickDeps = {
     db: createAdminQuickDb(), now: () => Date.now(), newId: randomId,
-    bills: createOrRefreshBill, publicUrl: process.env.APP_URL,
+    bills: createOrRefreshBill, statements: createOrRefreshStatement, publicUrl: process.env.APP_URL,
   };
   // The scheduled job that sends the phone app's notifications (see lib/notificationRoutes.ts). Not behind requireAuth: it has
   // its own shared secret, and is off until NOTIFICATIONS_CRON_SECRET is set.
@@ -181,6 +181,8 @@ async function startServer() {
   api.post("/mobile/orders/:id/hand-over", quickGate, createQuickHandOverHandler(quickDeps));
   api.post("/mobile/orders/:id/invoice", quickGate, createQuickInvoiceHandler(quickDeps));
   api.post("/mobile/payments", quickGate, createQuickPaymentHandler(quickDeps));
+  api.post("/mobile/payments/statement", quickGate, createQuickStatementHandler(quickDeps));
+  api.get("/mobile/payments-due", quickGate, createQuickPaymentsDueHandler(quickDeps));
   api.get("/mobile/today", quickGate, createQuickTodayHandler(quickDeps));
   api.get("/mobile/upcoming", quickGate, createQuickUpcomingHandler(quickDeps));
   api.get("/mobile/speech-phrases", quickGate, createQuickSpeechPhrasesHandler(quickDeps));

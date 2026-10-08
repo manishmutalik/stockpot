@@ -21,8 +21,8 @@ function saveMessage(err: unknown): string {
   return describeApiError(err);
 }
 
-export function useCapture(api: Api, input: { kind: QuickKind | null; resume: boolean }) {
-  const [state, dispatch] = useReducer(captureReducer, undefined, () => initialCapture({ kind: input.kind, idempotencyKey: randomUUID() }));
+export function useCapture(api: Api, input: { kind: QuickKind | null; resume: boolean; text?: string }) {
+  const [state, dispatch] = useReducer(captureReducer, undefined, () => initialCapture({ kind: input.kind, text: input.text, idempotencyKey: randomUUID() }));
   const latest = useRef<CaptureState>(state);
   latest.current = state;
   const alive = useRef(true);

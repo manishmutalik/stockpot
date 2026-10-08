@@ -1,31 +1,67 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { UpcomingOrder, UpcomingView } from '../../../../src/utils/quickApiTypes';
+import type { PaymentDueSummary, PaymentsDueView, UpcomingOrder, UpcomingView } from '../../../../src/utils/quickApiTypes';
+import { formatAmount } from '../../../../src/utils/money';
 import { useAuth } from '../../auth/AuthContext';
 import { Button } from '../../components/Button';
 import { HandOverSheet } from '../../components/HandOverSheet';
+import { PaymentDueCard } from '../../components/PaymentDueCard';
 import { UpcomingCard } from '../../components/UpcomingCard';
+import { ordersLabel, recordPaymentText } from '../../lib/paymentsDue';
 import { countOrders, groupUpcoming } from '../../lib/upcoming';
 import { shareMessage } from '../../lib/share';
 import { useApiView } from '../../lib/useApiView';
-import { colors, fonts } from '../../theme';
+import { colors, fonts, radius } from '../../theme';
+
+type Tab = 'orders' | 'payments';
+
+function Segment({ label, count, active, onPress }: { label: string; count: number; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={onPress}
+      style={{ flex: 1, minHeight: 44, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, backgroundColor: active ? colors.card : 'transparent' }}>
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: active ? colors.primary : colors.grey }}>{label}</Text>
+      {count > 0 && (
+        <View style={{ minWidth: 20, paddingHorizontal: 6, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? colors.primary : colors.outline }}>
+          <Text style={{ fontFamily: fonts.mono, fontSize: 11, color: colors.white }}>{count}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
 
 export default function Upcoming() {
-  const { api } = useAuth();
+  const { api, isDemo } = useAuth();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const view = useApiView<UpcomingView>(api, '/api/mobile/upcoming');
+  const owed = useApiView<PaymentsDueView>(api, '/api/mobile/payments-due');
   const [handing, setHanding] = useState<UpcomingOrder | null>(null);
+  const [tab, setTab] = useState<Tab>('orders');
 
-  // Fresh figures each time the tab is opened (an order may have been booked or handed over since).
+  // Fresh figures each time the tab is opened (an order may have been booked, handed over or paid since).
   const { refresh } = view;
+  const refreshOwed = owed.refresh;
   const first = useRef(true);
   useFocusEffect(useCallback(() => {
     if (first.current) first.current = false; // the first load is already under way
-    else refresh();
-  }, [refresh]));
+    else { refresh(); refreshOwed(); }
+  }, [refresh, refreshOwed]));
+
+  // Today opens this on Payments due with a parameter; it is used once, so choosing Pre-orders afterwards sticks.
+  const wanted = params.tab;
+  useFocusEffect(useCallback(() => {
+    if (wanted === 'payments') { setTab('payments'); router.setParams({ tab: undefined }); }
+  }, [wanted, router]));
+
+  const recordPayment = (c: PaymentDueSummary) => {
+    if (isDemo) { Alert.alert('Not available in the demo', 'Recording a payment is not available in the demo kitchen. Sign in with your own account to use it.'); return; }
+    const text = recordPaymentText(c);
+    router.push({ pathname: '/capture', params: { kind: 'payment', ...(text && { text }) } });
+  };
 
   const sections = view.data ? groupUpcoming(view.data) : [];
   const confirm = (o: UpcomingOrder) => shareMessage({ message: o.confirmationMessage, whatsappUrl: o.whatsappUrl })
@@ -36,14 +72,50 @@ export default function Upcoming() {
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 32, paddingHorizontal: 16, gap: 16 }}
-        refreshControl={<RefreshControl refreshing={view.refreshing} onRefresh={view.refresh} tintColor={colors.primary} colors={[colors.primary]} />}
+        refreshControl={<RefreshControl refreshing={view.refreshing || owed.refreshing} onRefresh={() => { view.refresh(); owed.refresh(); }} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 10 }}>
-          <Text accessibilityRole="header" style={{ fontFamily: fonts.bold, fontSize: 24, color: colors.ink }}>Upcoming</Text>
-          {!!view.data && countOrders(view.data) > 0 && <Text style={{ fontFamily: fonts.mono, fontSize: 12, color: colors.primary }}>{countOrders(view.data)} SCHEDULED</Text>}
+          <Text accessibilityRole="header" style={{ fontFamily: fonts.bold, fontSize: 24, color: colors.ink }}>{tab === 'payments' ? 'Payments due' : 'Upcoming'}</Text>
+          {tab === 'orders' && !!view.data && countOrders(view.data) > 0 && <Text style={{ fontFamily: fonts.mono, fontSize: 12, color: colors.primary }}>{countOrders(view.data)} SCHEDULED</Text>}
+          {tab === 'payments' && !!owed.data && owed.data.total > 0 && <Text style={{ fontFamily: fonts.mono, fontSize: 12, color: colors.coral }}>{formatAmount(owed.data.total, owed.data.currency)} TO COLLECT</Text>}
         </View>
 
-        {view.loading ? (
+        <View accessibilityRole="tablist" style={{ flexDirection: 'row', backgroundColor: colors.inputFill, borderRadius: radius.md, padding: 4, gap: 4 }}>
+          <Segment label="Pre-orders" count={view.data ? countOrders(view.data) : 0} active={tab === 'orders'} onPress={() => setTab('orders')} />
+          <Segment label="Payments due" count={owed.data?.customers.length ?? 0} active={tab === 'payments'} onPress={() => setTab('payments')} />
+        </View>
+
+        {tab === 'payments' ? (
+          owed.loading ? (
+            <View style={{ paddingVertical: 32 }}><ActivityIndicator color={colors.primary} /></View>
+          ) : owed.error && !owed.data ? (
+            <View style={{ gap: 12 }}>
+              <Text accessibilityRole="alert" style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.coral }}>{owed.error}</Text>
+              <Button label="Try again" onPress={owed.refresh} busy={owed.refreshing} />
+            </View>
+          ) : (
+            <>
+              {owed.error && <Text accessibilityRole="alert" style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.coral }}>{owed.error} Showing the last list.</Text>}
+              {owed.data && owed.data.customers.length === 0 && (
+                <View style={{ alignItems: 'center', gap: 8, paddingVertical: 48 }}>
+                  <MaterialIcons name="check-circle" size={48} color={colors.primarySoft} />
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>Nobody owes you anything</Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 14, color: colors.grey, textAlign: 'center' }}>Orders left unpaid will appear here, with a button to send the customer what they owe.</Text>
+                </View>
+              )}
+              {owed.data?.customers.map(c => (
+                <PaymentDueCard key={c.key} customer={c} currency={owed.data!.currency} onRecord={() => recordPayment(c)} />
+              ))}
+              {!!owed.data && owed.data.customers.length > 0 && (
+                <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.grey, textAlign: 'center' }}>
+                  {ordersLabel(owed.data.customers.reduce((n, c) => n + c.orderCount, 0))} · pre-orders are listed here once they fall due
+                </Text>
+              )}
+            </>
+          )
+        ) : null}
+
+        {tab !== 'orders' ? null : view.loading ? (
           <View style={{ paddingVertical: 32 }}><ActivityIndicator color={colors.primary} /></View>
         ) : view.error && !view.data ? (
           <View style={{ gap: 12 }}>
@@ -80,7 +152,7 @@ export default function Upcoming() {
       </ScrollView>
 
       <HandOverSheet order={handing} currency={view.data?.currency ?? { code: 'INR', symbol: '₹' }} api={api}
-        onClose={() => { setHanding(null); view.refresh(); }} onDone={() => { setHanding(null); view.refresh(); }} />
+        onClose={() => { setHanding(null); view.refresh(); }} onDone={() => { setHanding(null); view.refresh(); owed.refresh(); }} />
     </>
   );
 }

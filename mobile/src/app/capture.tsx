@@ -30,12 +30,12 @@ const HINT: Record<QuickKind | 'none', string> = {
 const DEFAULT_CURRENCY: Currency = { code: 'INR', symbol: '₹' };
 
 export default function Capture() {
-  const params = useLocalSearchParams<{ kind?: string; resume?: string; listen?: string }>();
+  const params = useLocalSearchParams<{ kind?: string; resume?: string; listen?: string; text?: string }>();
   const kind = (KINDS as string[]).includes(params.kind ?? '') ? (params.kind as QuickKind) : null;
   const { api, isDemo, user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const cap = useCapture(api, { kind, resume: params.resume === '1' });
+  const cap = useCapture(api, { kind, resume: params.resume === '1', text: typeof params.text === 'string' ? params.text.slice(0, 2000) : undefined });
   const { state } = cap;
   const readingText = useReadingLabel(state.step === 'reading');
   const response = state.response;

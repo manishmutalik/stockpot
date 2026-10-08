@@ -9,7 +9,9 @@ import type { BakerySettings, MenuItem, Order } from '../types';
 import { buildBill, billBalance } from './billing';
 import { clusterOrdersByGroup } from './orderClustering';
 import { groupPendingPayments, type PendingCustomer } from './payments';
-import { billSettingsOf } from './quickViews';
+import { resolveItemName } from './orderPricing';
+import type { Currency, PaymentsDueView } from './quickApiTypes';
+import { billSettingsOf, pendingSummary } from './quickViews';
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -43,3 +45,24 @@ export function customerDues(input: {
 
 /** Which whole-order total the amount is, or -1. */
 export const matchingOption = (options: number[], amount: number): number => options.findIndex(total => Math.abs(total - amount) < 0.005);
+
+/** Who owes what, for the Payments due list: everyone with an unpaid order, largest amount first, with the orders behind it. */
+export function buildPaymentsDue(input: {
+  unpaid: Order[];
+  menu: MenuItem[];
+  settings: Partial<BakerySettings>;
+  currency: Currency;
+  today: string;
+}): PaymentsDueView {
+  const { unpaid, menu, settings, currency, today } = input;
+  const customers = customerDues({ unpaid, menu, settings, currency, today }).map(({ customer, dues }) => ({
+    ...pendingSummary(customer, today),
+    orders: dues.map(d => ({
+      orderId: d.orders[0].id,
+      date: d.orders[0].date,
+      items: d.orders.map(o => ({ name: resolveItemName(o, menu), quantity: o.quantity || 0 })),
+      due: d.due,
+    })),
+  }));
+  return { today, currency, total: round2(customers.reduce((sum, c) => sum + c.dueTotal, 0)), customers };
+}

@@ -1,5 +1,17 @@
 # Changelog
 
+## Stockpot Quick app: payments due
+
+Orders that are owed money are now reachable from the phone. The "N payments pending" line on Today (which did nothing when
+tapped) opens a new **Payments due** view on the Upcoming tab, and Today gets a **To collect** card with the three who owe
+most, each with a **Send** button. Until now only pre-orders were listed in the app, so an ordinary pay-later order had no
+Send invoice button anywhere. Each customer's card shows what they owe, how long their oldest order has waited, and the
+orders behind it, with **Send invoice / Send statement** and **Got paid**, which opens the Payment screen with "Priya paid
+1300" filled in. A customer with several unpaid orders gets one statement listing them all instead of one message per order;
+one order gets the same invoice as before. Two new routes, `GET /api/mobile/payments-due` (read-only) and
+`POST /api/mobile/payments/statement` (changes nothing but the public bill link, so it can be asked again), and
+`pendingPayments.top` on `GET /api/mobile/today`. Needs a new APK and a redeploy.
+
 ## Stockpot Quick app: Send invoice
 
 A **Send invoice** button is now on the screen after an order is saved and on every card in Upcoming. It asks the server
