@@ -82,6 +82,13 @@ describe('bill page HTML', () => {
     expect(html).not.toContain('98450 10101');
     expect(html).toContain('noindex');
   });
+  it('has a preview for WhatsApp: who it is from and what is due, escaped, with no customer name', () => {
+    const html = renderBillHtml(bill);
+    expect(html).toContain('<meta property="og:title" content="Invoice from Asha &lt;b&gt;Bakes&lt;/b&gt;">');
+    expect(html).toContain('<meta property="og:description" content="₹525.00 due. Tap to view the bill and pay.">');
+    expect(html.match(/og:[a-z]+" content="[^"]*"/g)!.join(' ')).not.toContain('alert(1)'); // the customer's name (here a script) is not in the preview
+    expect(renderBillHtml({ ...bill, balanceDue: 0, total: 0 })).toContain('content="Paid in full. Tap to view the bill."');
+  });
   it('has no UPI link when the bill has no UPI ID', () => {
     expect(renderBillHtml({ ...bill, upiId: undefined })).not.toContain('upi://');
   });

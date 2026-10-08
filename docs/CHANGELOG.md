@@ -1,5 +1,14 @@
 # Changelog
 
+## Stockpot Quick app: invoice as a short message and a link
+
+The WhatsApp invoice (Send invoice, and Send statement on Payments due) is now a short summary with the link to the bill online
+on a line of its own, so WhatsApp shows a preview card: who it is from and what is due ("₹1,300.00 due. Tap to view the bill and
+pay."). The message gives the total, any advance and the balance due in bold; the items, the UPI button and, later, a card button
+are on the page. If the link could not be made, the message is still the full itemised invoice, as before, with the UPI ID. A bill
+that is paid in full says so and links only to the bill. The bill page carries `og:title` and `og:description` for the preview (the
+business name and the amount, never the customer's name). Needs a redeploy; no new APK.
+
 ## Security: dependency updates
 
 `npm audit fix` (lockfile only, no version ranges changed in `package.json`) cleared the critical issue (`proxy-addr`, via

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildInvoiceMessage, type Bill } from '../billing';
+import { buildInvoiceMessage, buildStatementMessage, type Bill } from '../billing';
 
 const bill = (over: Partial<Bill> = {}): Bill => ({
   reference: 'AB12CD34', date: '2026-10-10', customerName: 'Priya Sharma',
@@ -24,12 +24,39 @@ describe('buildInvoiceMessage', () => {
     ]);
   });
 
-  it('shows the advance and the balance left, the UPI ID to pay it to, and the link', () => {
+  it('with a link to the bill online, is a short summary and the link on a line of its own', () => {
     const text = buildInvoiceMessage(bill({ advance: { amount: 500 }, balanceDue: 1500, upiId: 'anita@upi' }), { settled: false, link: 'https://x.test/bill/abc' });
+    expect(text.split('\n')).toEqual([
+      'Hi Priya Sharma, here\'s your invoice from Anita\'s Bakery (AB12CD34, 10 Oct 2026).',
+      'Total: ₹2,000.00',
+      'Advance received: ₹500.00',
+      '*Balance due: ₹1,500.00*',
+      '',
+      'View the full bill and pay online:',
+      'https://x.test/bill/abc',
+    ]);
+    expect(text).not.toMatch(/Chocolate|Sourdough|UPI/); // the items and the UPI button are on the page
+  });
+
+  it('without a link, keeps the whole invoice: the advance, the balance and the UPI ID to pay it to', () => {
+    const text = buildInvoiceMessage(bill({ advance: { amount: 500 }, balanceDue: 1500, upiId: 'anita@upi' }), { settled: false });
+    expect(text).toContain('• 2 × Chocolate Truffle Cake: ₹1,800.00');
     expect(text).toContain('Advance received: ₹500.00');
     expect(text).toContain('Balance due: ₹1,500.00');
     expect(text).toContain('Pay by UPI: anita@upi');
-    expect(text.split('\n').at(-1)).toBe('View or pay online: https://x.test/bill/abc');
+    expect(text).not.toMatch(/\*|View/);
+  });
+
+  it('with a link and nothing owed, says paid in full and offers only the bill, not payment', () => {
+    const text = buildInvoiceMessage(bill({ advance: { amount: 500 } }), { settled: true, link: 'https://x.test/bill/abc' });
+    expect(text.split('\n')).toEqual([
+      'Hi Priya Sharma, here\'s your invoice from Anita\'s Bakery (AB12CD34, 10 Oct 2026).',
+      'Total: ₹2,000.00',
+      'Paid in full. Thank you!',
+      '',
+      'View the full bill:',
+      'https://x.test/bill/abc',
+    ]);
   });
 
   it('says paid in full, with no balance, advance or UPI line, once nothing is owed', () => {
@@ -53,5 +80,32 @@ describe('buildInvoiceMessage', () => {
     expect(buildInvoiceMessage(bill({ customerName: undefined }), { settled: false }).split('\n')[0]).toBe('Here\'s your invoice from Anita\'s Bakery (AB12CD34, 10 Oct 2026):');
     expect(buildInvoiceMessage(bill({ date: '2026-01-05' }), { settled: false })).toContain('5 Jan 2026');
     expect(buildInvoiceMessage(bill({ date: 'garbled' }), { settled: false })).toContain('garbled');
+  });
+});
+
+describe('buildStatementMessage', () => {
+  const statement = (over: Partial<Bill> = {}) => bill({
+    kind: 'statement', orderCount: 2, reference: 'ST-AB12CD', balanceDue: 1300, total: 1300,
+    lines: [{ name: 'Cake', quantity: 1, unitPrice: 900, lineTotal: 900, date: '2026-10-01' }, { name: 'Sourdough', quantity: 2, unitPrice: 200, lineTotal: 400, date: '2026-10-03' }],
+    ...over,
+  });
+
+  it('with a link, is a short summary of what is owed and the link on a line of its own', () => {
+    expect(buildStatementMessage(statement(), { link: 'https://x.test/bill/stmt' }).split('\n')).toEqual([
+      'Hi Priya Sharma, here\'s your statement from Anita\'s Bakery (2 orders, as on 10 Oct 2026).',
+      'Total: ₹1,300.00',
+      '*Balance due: ₹1,300.00*',
+      '',
+      'View the full statement and pay online:',
+      'https://x.test/bill/stmt',
+    ]);
+  });
+
+  it('without a link, lists each order with its day and where to pay', () => {
+    const text = buildStatementMessage(statement({ upiId: 'anita@upi' }), {});
+    expect(text).toContain('• Thu 1 Oct: 1 × Cake: ₹900.00');
+    expect(text).toContain('• Sat 3 Oct: 2 × Sourdough: ₹400.00');
+    expect(text).toContain('Balance due: ₹1,300.00');
+    expect(text).toContain('Pay by UPI: anita@upi');
   });
 });

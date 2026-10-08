@@ -212,6 +212,23 @@ function invoiceDate(iso: string): string {
 }
 
 /**
+ * The message when there is a link to the bill online: a short summary and the link on a line of its own, so WhatsApp shows a
+ * preview card of the page (which has every item, the UPI button and, when the business has set one up, the card button).
+ * *Asterisks* make the amount due bold in WhatsApp.
+ */
+function shortMessage(heading: string, bill: Bill, settled: boolean, link: string, linkLabel: string): string {
+  const money = (n: number) => formatMoney(n, bill.currency);
+  const lines = [`${heading}.`, `Total: ${money(bill.total)}`];
+  if (settled) lines.push('Paid in full. Thank you!');
+  else {
+    if (bill.advance) lines.push(`Advance received: ${money(bill.advance.amount)}`);
+    lines.push(`*Balance due: ${money(billBalance(bill))}*`);
+  }
+  lines.push('', linkLabel, link);
+  return lines.join('\n');
+}
+
+/**
  * The invoice as a message to send (WhatsApp, a text): every item with what it came to, delivery, discount and GST when there
  * are any, the total, and then either "Paid in full" or what has been paid in advance and what is still due, with the UPI ID
  * to pay it to and the link to the bill online. The bill's own one-line message is for the hand-over; this is the full invoice.
@@ -220,7 +237,9 @@ function invoiceDate(iso: string): string {
 export function buildInvoiceMessage(bill: Bill, opts: { settled: boolean; link?: string }): string {
   const money = (n: number) => formatMoney(n, bill.currency);
   const greeting = bill.customerName ? `Hi ${bill.customerName}, here's` : "Here's";
-  const lines = [`${greeting} your invoice from ${bill.business.name} (${bill.reference}, ${invoiceDate(bill.date)}):`];
+  const heading = `${greeting} your invoice from ${bill.business.name} (${bill.reference}, ${invoiceDate(bill.date)})`;
+  if (opts.link) return shortMessage(heading, bill, opts.settled, opts.link, opts.settled ? 'View the full bill:' : 'View the full bill and pay online:');
+  const lines = [`${heading}:`];
   for (const l of bill.lines) lines.push(`• ${l.quantity} × ${l.name}: ${money(l.lineTotal)}`);
   if (bill.deliveryCharge > 0) lines.push(`Delivery: ${money(bill.deliveryCharge)}`);
   if (bill.discount > 0) lines.push(`Discount: −${money(bill.discount)}`);
@@ -233,7 +252,6 @@ export function buildInvoiceMessage(bill: Bill, opts: { settled: boolean; link?:
     lines.push(`Balance due: ${money(billBalance(bill))}`);
     if (bill.upiId) lines.push(`Pay by UPI: ${bill.upiId}`);
   }
-  if (opts.link) lines.push(`View or pay online: ${opts.link}`);
   return lines.join('\n');
 }
 
@@ -245,7 +263,9 @@ export function buildStatementMessage(bill: Bill, opts: { link?: string }): stri
   const money = (n: number) => formatMoney(n, bill.currency);
   const greeting = bill.customerName ? `Hi ${bill.customerName}, here's` : "Here's";
   const count = bill.orderCount ?? 1;
-  const lines = [`${greeting} your statement from ${bill.business.name} (${count} order${count === 1 ? '' : 's'}, as on ${invoiceDate(bill.date)}):`];
+  const heading = `${greeting} your statement from ${bill.business.name} (${count} order${count === 1 ? '' : 's'}, as on ${invoiceDate(bill.date)})`;
+  if (opts.link) return shortMessage(heading, bill, false, opts.link, 'View the full statement and pay online:');
+  const lines = [`${heading}:`];
   for (const l of bill.lines) lines.push(`• ${l.date ? `${formatShortDate(l.date)}: ` : ''}${l.quantity} × ${l.name}: ${money(l.lineTotal)}`);
   if (bill.deliveryCharge > 0) lines.push(`Delivery: ${money(bill.deliveryCharge)}`);
   if (bill.discount > 0) lines.push(`Discount: −${money(bill.discount)}`);
@@ -254,7 +274,6 @@ export function buildStatementMessage(bill: Bill, opts: { link?: string }): stri
   if (bill.advance) lines.push(`Advance received: ${money(bill.advance.amount)}`);
   lines.push(`Balance due: ${money(billBalance(bill))}`);
   if (bill.upiId) lines.push(`Pay by UPI: ${bill.upiId}`);
-  if (opts.link) lines.push(`View or pay online: ${opts.link}`);
   return lines.join('\n');
 }
 
