@@ -19,11 +19,24 @@ const PAGE_STYLE = `
   td{padding:10px 0;border-bottom:1px solid #f1f5f9;vertical-align:top}.num{text-align:right;white-space:nowrap}
   .row{display:flex;justify-content:space-between;padding:4px 0}.total{font-size:20px;font-weight:700;border-top:2px solid #2b313d;margin-top:8px;padding-top:12px}
   .pay{display:block;margin-top:20px;text-align:center;background:#00797b;color:#fff;text-decoration:none;font-weight:600;padding:14px;border-radius:12px}
+  .pay.alt{background:#fff;color:#00797b;border:2px solid #00797b;margin-top:12px}
+  .paid,.notice{margin-top:20px;text-align:center;font-weight:600;padding:14px;border-radius:12px}.paid{background:#e6f6f0;color:#14724f}
+  .notice.info{background:#fff4e0;color:#8a4b00;font-weight:500;font-size:14px}.notice.good{background:#e6f6f0;color:#14724f}
   footer{text-align:center;color:#5a5a5a;font-size:12px;margin-top:16px}
-  @media print{body{background:#fff}.card{box-shadow:none}.pay{display:none}}
+  @media print{body{background:#fff}.card{box-shadow:none}.pay,.notice{display:none}}
 `;
 
-export function renderBillHtml(bill: Bill): string {
+/** What the page shows beyond the stored bill: whether it has been paid since, and the ways to pay it. */
+export interface BillPageExtras {
+  /** Everything on the bill has been paid. */
+  paid?: boolean;
+  /** The card or online payment button: where it goes, and what it asks for now (which can be less than the stored bill after a part-payment). */
+  payOnline?: { href: string; amount: number } | null;
+  /** A line above the bill, such as after the customer comes back from the gateway. */
+  notice?: { tone: 'good' | 'info'; text: string };
+}
+
+export function renderBillHtml(bill: Bill, extras: BillPageExtras = {}): string {
   const money = (n: number) => escapeHtml(formatMoney(n, bill.currency));
   const date = new Date(bill.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   const statement = bill.kind === 'statement';
@@ -34,7 +47,12 @@ export function renderBillHtml(bill: Bill): string {
   // The payment link asks for the balance, never the total, so an advance is not charged twice. Bills saved before advances existed have no balance and use the total.
   const balance = billBalance(bill);
   const upiLink = buildBillUpiLink(bill);
-  const upi = upiLink ? `<a class="pay" href="${escapeHtml(upiLink)}">Pay ${money(balance)} with UPI</a>` : '';
+  const upi = upiLink && !extras.paid ? `<a class="pay" href="${escapeHtml(upiLink)}">Pay ${money(balance)} with UPI</a>` : '';
+  // The card button goes first when it is the only way to pay; with UPI as well, UPI stays the main button and card sits under it.
+  const card = extras.payOnline && !extras.paid
+    ? `<a class="pay${upi ? ' alt' : ''}" href="${escapeHtml(extras.payOnline.href)}" rel="noopener noreferrer">Pay ${money(extras.payOnline.amount)} by card or online</a>` : '';
+  const paidBox = extras.paid ? '<div class="paid">Paid in full. Thank you!</div>' : '';
+  const notice = extras.notice ? `<div class="notice ${extras.notice.tone}" role="status">${escapeHtml(extras.notice.text)}</div>` : '';
   const gstLabel = bill.gst
     ? `GST (${escapeHtml(bill.gst.rate)}%${bill.gst.mode === 'inclusive' ? ', included' : ''})`
     : '';
@@ -71,7 +89,10 @@ export function renderBillHtml(bill: Bill): string {
     <div class="row total"><span>${statement && !bill.advance ? 'Total due' : 'Total'}</span><span>${money(bill.total)}</span></div>
     ${bill.advance ? `<div class="row"><span>Advance received${bill.advance.date ? ` (${escapeHtml(shortDate(bill.advance.date))})` : ''}</span><span>-${money(bill.advance.amount)}</span></div>
     <div class="row total"><span>Balance due</span><span>${money(balance)}</span></div>` : ''}
+    ${notice}
+    ${paidBox}
     ${upi}
+    ${card}
   </div>
   <footer>Thank you for your order.</footer>
 </main>
@@ -80,3 +101,7 @@ export function renderBillHtml(bill: Bill): string {
 }
 
 export const NOT_FOUND_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Bill not found</title><style>${PAGE_STYLE}</style></head><body><main><div class="card"><h1>Bill not found</h1><p class="muted">This link is not valid. Please ask the business to send it again.</p></div></main></body></html>`;
+
+/** A short page for something that went wrong on the customer's side of paying, with no detail from the gateway. */
+export const messageHtml = (title: string, text: string, backHref?: string): string =>
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${escapeHtml(title)}</title><style>${PAGE_STYLE}</style></head><body><main><div class="card"><h1>${escapeHtml(title)}</h1><p class="muted">${escapeHtml(text)}</p>${backHref ? `<a class="pay" href="${escapeHtml(backHref)}">Back to the bill</a>` : ''}</div></main></body></html>`;

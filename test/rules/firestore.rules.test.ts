@@ -24,6 +24,7 @@ const seed = () =>
     await setDoc(doc(db, `users/${OWNER}/materials/m1`), { name: 'Flour' });
     await setDoc(doc(db, `users/${OWNER}/priceLog/p1`), { materialId: 'm1', unitCost: 1 });
     await setDoc(doc(db, `users/${OWNER}/integrationCredentials/shopify`), { token: 'secret' });
+    await setDoc(doc(db, `users/${OWNER}/paymentGateway/active`), { provider: 'razorpay', secretEnc: 'v1.x.y.z' });
     await setDoc(doc(db, `users/${OTHER}/materials/m1`), { name: "Bob's flour" });
     await setDoc(doc(db, `users/${OWNER}/briefings/2026-06-30`), { headline: 'x' });
     await setDoc(doc(db, `users/${OWNER}/aiUsage/2026-06-30`), { chat: 3 });
@@ -110,6 +111,18 @@ describe('integration credentials are server-only', () => {
 
   it('cannot be reached by an admin', async () => {
     await assertFails(getDoc(doc(as('support'), `users/${OWNER}/integrationCredentials/shopify`)));
+  });
+});
+
+describe('the payment gateway keys are server-only', () => {
+  it('cannot be read, listed, written or deleted by the owner, or reached by an admin', async () => {
+    const db = as(OWNER);
+    await assertFails(getDoc(doc(db, `users/${OWNER}/paymentGateway/active`)));
+    await assertFails(getDocs(collection(db, `users/${OWNER}/paymentGateway`)));
+    await assertFails(setDoc(doc(db, `users/${OWNER}/paymentGateway/active`), { provider: 'link', link: 'https://evil.example/' }));
+    await assertFails(deleteDoc(doc(db, `users/${OWNER}/paymentGateway/active`)));
+    await assertFails(getDoc(doc(as('support'), `users/${OWNER}/paymentGateway/active`)));
+    await assertFails(getDoc(doc(as(OTHER), `users/${OWNER}/paymentGateway/active`)));
   });
 });
 

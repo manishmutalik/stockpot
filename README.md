@@ -72,6 +72,7 @@ enabled), a Razorpay account.
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | For billing | Razorpay API keys. Without them, the server still boots and every non-billing route works; only billing routes and the paywall fail with a clear error. The Key Id is public (checkout needs it); the Key Secret stays on the server. |
 | `RAZORPAY_PLAN_ID` | For billing | The Razorpay Plan (monthly, INR) customers subscribe to. |
 | `RAZORPAY_WEBHOOK_SECRET` | For billing | The secret you chose for the Razorpay webhook (see below). |
+| `PAYMENT_SECRETS_KEY` | For owners' card payments | 32 random bytes in base64 (make one with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`). Encrypts the Razorpay / Cashfree keys owners save under Settings, Online payments. Keep it safe and do not change it. Without it owners can only paste a payment link. See "Online payments" below. |
 | `NOTIFICATIONS_CRON_SECRET` | For phone notifications | A long random string (16+ characters) that the scheduler sends to `POST /api/internal/notifications/run`. Without it that route answers 503 and no notifications go out. See "Phone app notifications" below. |
 | `EXPO_ACCESS_TOKEN` | No | Only if the Expo project has "enhanced push security" switched on; sent when pushing through Expo. |
 | `AI_QUICK_DAILY_LIMIT` | No | Voice/text readings per user per day for the phone app (default 60), separate from the web's `AI_PARSE_DAILY_LIMIT`. |
@@ -120,6 +121,25 @@ only offered while the account has never approved a mandate (`billing.trialUsed`
 Whether Razorpay accepts a first charge `TRIAL_DAYS` days ahead has to be
 checked in Test Mode: if it refuses, checkout fails with a clear error and the
 trial length must be adjusted.
+
+### Online payments (card, through the owner's own gateway)
+
+An owner can let customers pay a bill by card or online through their **own** Razorpay or Cashfree account (the money goes
+straight to them; this is separate from Stockpot's own subscription billing above). In Settings, Online payments they enter
+the gateway's keys, which are checked with the gateway and kept encrypted with `PAYMENT_SECRETS_KEY` in
+`users/{uid}/paymentGateway/active`, a place only the server can reach. Or they paste a payment link, which is shown on the
+bill as a button but cannot be marked paid automatically.
+
+For a customer, the bill page (`/bill/:token`) then has a **Pay by card or online** button. `GET /bill/:token/pay` makes a
+payment link for what is owed at that moment (worked out on the server from the orders, never from the browser; a link already
+made for the same amount is reused) and sends the customer to it. When they come back (`GET /bill/:token/return`), or open the
+bill again, the server asks the gateway whether the link was paid in full, and only then marks the orders paid by card (with the
+card fee), once. The owner has no webhook to set up. `APP_URL` must be the real public address, because the gateway sends the
+customer back to it.
+
+The Razorpay and Cashfree clients (`lib/gateways/`) were written from their documented APIs and tested against recorded
+replies, not a live gateway. Before relying on them, use **test-mode keys** (Razorpay `rzp_test_…`, Cashfree sandbox) and pay a
+₹1 bill end to end.
 
 ### Phone app notifications
 

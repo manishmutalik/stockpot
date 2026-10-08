@@ -1,5 +1,20 @@
 # Changelog
 
+## Online payments: server (step 1 of 3)
+
+Owners can now have customers pay a bill by card or online through their **own** Razorpay or Cashfree account. This step is the
+server only; the Settings screen (step 2) and the phone app's status (step 3) come next, so nothing changes for anyone until a
+gateway is saved. New: `GET/PUT/DELETE /api/payments/gateway` and `POST /api/payments/gateway/test` (signed in, CSRF-checked;
+the keys are checked with the gateway, kept encrypted with the new `PAYMENT_SECRETS_KEY` setting in a server-only collection,
+and never returned, only the last four characters of the secret); and on the public bill page a **Pay by card or online**
+button, `GET /bill/:token/pay` (makes a payment link for what is owed right now, from the server's own reading of the orders,
+and reuses one already made for the same amount) and `GET /bill/:token/return`. Paying marks the orders paid by card, with the
+card fee, but only after the gateway itself says the link was paid in full; nothing on the customer's return is trusted, and it
+happens once. A bill that is paid in full says so and drops its pay buttons. The owner sets up no webhook. "Other" gateways can
+paste a payment link, shown as a button, which cannot be marked paid automatically. The gateway clients were written without
+access to Razorpay's or Cashfree's docs or test services, so use test-mode keys and a ₹1 bill before relying on it. Needs a
+redeploy and `PAYMENT_SECRETS_KEY` on Render.
+
 ## Stockpot Quick app: invoice as a short message and a link
 
 The WhatsApp invoice (Send invoice, and Send statement on Payments due) is now a short summary with the link to the bill online
