@@ -6,51 +6,14 @@ import {
 } from 'lucide-react';
 import { AppViewProps, FixedCost, PAYMENT_METHODS, PaymentMethod } from '../types';
 import { COMMON_TIME_ZONES, resolveTimeZone } from '../utils/localDate';
+import { FIELD, LABEL, Pill, Section } from '../components/settingsParts';
+import { OnlinePaymentsCard } from '../components/OnlinePaymentsCard';
 
 type SettingsTab = 'bakery' | 'integrations' | 'customisation' | 'account' | 'categories';
-
-const LABEL = 'block font-mono text-[10px] font-semibold uppercase tracking-wider text-muted mb-1.5';
-const FIELD =
-  'w-full bg-stone-50 border border-transparent rounded-lg px-4 py-3 text-sm text-ink placeholder:text-muted/70 outline-none transition-colors focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary';
 
 // Colour is only used on shared nutrition cards, so offer the brand palette
 // (plus the previous default) rather than a wall of earth tones.
 const BRAND_SWATCHES = ['#00797B', '#006143', '#1FA97A', '#10b981', '#2B313D', '#E4536B', '#F59E0B'];
-
-/** A white card with an icon tile, title and subtitle, and the section's fields below. */
-const Section: React.FC<{
-  icon: React.ElementType;
-  title: string;
-  subtitle: string;
-  badge?: React.ReactNode;
-  children: React.ReactNode;
-}> = ({ icon: Icon, title, subtitle, badge, children }) => (
-  <section className="surface-card p-5 sm:p-7 space-y-6">
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
-          <Icon size={20} />
-        </div>
-        <div className="min-w-0">
-          <h3 className="text-lg font-bold tracking-tight text-ink">{title}</h3>
-          <p className="text-sm text-muted">{subtitle}</p>
-        </div>
-      </div>
-      {badge}
-    </div>
-    {children}
-  </section>
-);
-
-const Pill: React.FC<{ tone: 'green' | 'coral' | 'slate'; children: React.ReactNode }> = ({ tone, children }) => (
-  <span
-    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-mono text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap ${
-      tone === 'green' ? 'bg-margin/10 text-[#006143]' : tone === 'coral' ? 'bg-coral/10 text-coral' : 'bg-stone-100 text-muted'
-    }`}
-  >
-    {children}
-  </span>
-);
 
 const Toggle: React.FC<{ checked: boolean; onChange: () => void; label: string }> = ({ checked, onChange, label }) => (
   <button
@@ -325,6 +288,9 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
                   ))}
                 </div>
               </Section>
+
+              {/* Online payments: the owner's own Razorpay / Cashfree, so customers can pay a bill by card */}
+              <OnlinePaymentsCard />
 
               {/* Pricing: the margin to aim for, when to flag a slip, and how suggested prices are rounded */}
               <Section

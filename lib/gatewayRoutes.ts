@@ -10,6 +10,7 @@ import type { AuthedRequest } from './auth';
 import { decryptSecret, encryptSecret } from './secretBox';
 import { getGateway, isGatewayId, type FetchLike, type GatewayCredentials } from './gateways';
 import type { GatewayRecord, GatewayStore } from './gatewayStore';
+import type { GatewayStatus } from '../src/utils/onlinePayments';
 
 export interface GatewayRouteDeps {
   store: GatewayStore;
@@ -19,20 +20,7 @@ export interface GatewayRouteDeps {
   now: () => number;
 }
 
-/** What the settings screen is told. Never the secret. */
-export interface GatewayStatus {
-  /** False when the server has no encryption key, so keys cannot be kept yet. */
-  serverReady: boolean;
-  configured: boolean;
-  provider?: GatewayRecord['provider'];
-  keyId?: string;
-  secretLast4?: string;
-  environment?: GatewayRecord['environment'];
-  test?: boolean;
-  link?: string;
-  updatedAt?: number;
-}
-
+export type { GatewayStatus } from '../src/utils/onlinePayments';
 export const statusOf = (record: GatewayRecord | null, serverReady: boolean): GatewayStatus => record
   ? { serverReady, configured: true, provider: record.provider, keyId: record.keyId, secretLast4: record.secretLast4, environment: record.environment, test: record.test, link: record.link, updatedAt: record.updatedAt }
   : { serverReady, configured: false };

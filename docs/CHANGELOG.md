@@ -1,5 +1,17 @@
 # Changelog
 
+## Online payments: Settings screen (step 2 of 3)
+
+Settings, Business & GST now has an **Online payments** card, next to Payment fees. The owner chooses Razorpay, Cashfree or
+"another gateway (payment link)", enters the gateway's keys (the secret is a password field, with a note on where in the
+gateway's dashboard to find them) and taps **Save and check keys**: the server checks them with the gateway before keeping them.
+After that the card shows which gateway, whether the keys are for its test service ("Test mode", with a reminder to try a ₹1
+bill and then swap in live keys) and only the last four characters of the secret. It has **Test connection**, **Replace keys**
+and **Remove** (with a confirmation). The secret is cleared from the screen the moment it is saved and is never filled back in.
+On a server with no `PAYMENT_SECRETS_KEY` the key forms say so and stay off, while a pasted payment link still works. The card
+saves on its own, not with the page's Save button. The shared Settings building blocks moved to `components/settingsParts.tsx`.
+Web app only; needs the step 1 server change and a redeploy; no new APK.
+
 ## Online payments: server (step 1 of 3)
 
 Owners can now have customers pay a bill by card or online through their **own** Razorpay or Cashfree account. This step is the
