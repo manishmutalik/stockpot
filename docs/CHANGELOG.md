@@ -1,5 +1,15 @@
 # Changelog
 
+## Stockpot Quick app: Send invoice
+
+A **Send invoice** button is now on the screen after an order is saved and on every card in Upcoming. It asks the server
+(`POST /api/mobile/orders/:id/invoice`, read-only apart from making or refreshing the public bill link, as the hand-over does)
+for the invoice and opens WhatsApp to the customer when the order has a phone number, or the phone's share sheet when not.
+The text is a proper invoice: each item with what it came to, delivery, discount and GST when there are any, the total, then
+"Paid in full. Thank you!" or the advance received and the balance due with the business's UPI ID, and the link to the bill
+online. A multi-item order is one invoice, a cancelled order has none, and the hand-over's one-line bill is unchanged. Needs a
+new APK and a redeploy.
+
 ## Stockpot Quick app: voice listens for your own words
 
 When the owner speaks, the phone's recogniser is now told which words to expect: the menu items (as people say them, "Pumpkin
