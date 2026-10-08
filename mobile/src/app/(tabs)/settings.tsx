@@ -10,6 +10,7 @@ import { Card } from '../../components/Card';
 import { EVENING_TIMES, MORNING_TIMES, timeLabel, withSwitch, withTime } from '../../lib/notifications';
 import { pushFailureMessage, pushPermission, registerForPush, type PushPermission } from '../../lib/push';
 import { useNotificationSettings } from '../../lib/useNotificationSettings';
+import { useVoicePrefs } from '../../lib/useVoiceHints';
 import { colors, fonts, radius } from '../../theme';
 
 const caption = { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1, color: colors.grey } as const;
@@ -54,6 +55,7 @@ export default function Settings() {
   const { user, isDemo, api, signOut } = useAuth();
   const insets = useSafeAreaInsets();
   const prefs = useNotificationSettings(api, !isDemo);
+  const voice = useVoicePrefs();
   const [permission, setPermission] = useState<PushPermission | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
   const [turningOn, setTurningOn] = useState(false);
@@ -134,6 +136,16 @@ export default function Settings() {
           </Card>
         )}
       </View>
+
+      {!isDemo && (
+        <View style={{ gap: 8 }}>
+          <Text style={caption}>VOICE</Text>
+          <Card style={{ gap: 12, padding: 16 }}>
+            <Row title="Recognise my customers' names" hint="Helps voice get names right. Their names are sent to Google's speech service along with what you say, so it is off unless you switch it on. Your menu and ingredients are always used."
+              value={voice.prefs.customerNames} onChange={voice.setCustomerNames} disabled={!voice.loaded} />
+          </Card>
+        </View>
+      )}
 
       <Pressable accessibilityRole="link" onPress={() => { if (API_URL) Linking.openURL(API_URL).catch(() => {}); }}
         style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderRadius: radius.lg, padding: 16, opacity: pressed ? 0.8 : 1 })}>
