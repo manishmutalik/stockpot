@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  createAccessGate, createQuickOrderHandler, createQuickRestockHandler, createQuickProductionHandler,
+  createAccessGate, createQuickOrderHandler, createQuickRestockHandler, createQuickProductionHandler, createQuickSpeechPhrasesHandler,
   readOrderBody, readRestockBody, readProductionBody,
 } from '../quickRoutes';
 import { parseIdempotencyKey } from '../quickDb';
@@ -336,5 +336,47 @@ describe('access gate', () => {
     expect(nexted).toBe(false);
     expect(r.code).toBe(402);
     expect(r.body.code).toBe('subscription_required');
+  });
+});
+
+describe('speech phrases', () => {
+  const get = async (deps: any, query: Record<string, string> = {}, uid = UID) => {
+    const r = res();
+    await createQuickSpeechPhrasesHandler(deps)({ uid, query } as any, r);
+    return r;
+  };
+
+  it('gives the menu as it is spoken and as written, then the materials, and no customers by default', async () => {
+    const { mem, deps } = world();
+    mem.seed(UID, 'menu', 'pump', { name: 'Pumpkin Seed Bread (500g)', sellingPrice: 240, finishedGoodsStock: 1, recipe: [] });
+    mem.seed(UID, 'orders', 'o1', { menuItemId: 'cake', quantity: 1, date: '2026-10-01', customerName: 'Priya Sharma', unitPriceAtSale: 900, paymentStatus: 'paid' });
+    const r = await get(deps);
+    expect(r.code).toBe(200);
+    expect(r.headers['Cache-Control']).toBe('private, no-store');
+    expect(r.body.phrases).toEqual(expect.arrayContaining(['Pumpkin Seed Bread', 'Pumpkin Seed Bread (500g)', 'Butter Croissant', 'Flour', 'Maida']));
+    expect(r.body.phrases.indexOf('Butter Croissant')).toBeLessThan(r.body.phrases.indexOf('Flour'));
+    expect(r.body.phrases).not.toContain('Priya Sharma');
+    expect(r.body.phrases).not.toContain('Priya');
+  });
+
+  it('adds customers\' names only when asked, from recent orders', async () => {
+    const { mem, deps } = world();
+    mem.seed(UID, 'orders', 'o1', { menuItemId: 'cake', quantity: 1, date: '2026-10-01', customerName: 'Priya Sharma', unitPriceAtSale: 900, paymentStatus: 'paid' });
+    mem.seed(UID, 'orders', 'old', { menuItemId: 'cake', quantity: 1, date: '2024-01-01', customerName: 'Long Ago', unitPriceAtSale: 900, paymentStatus: 'paid' });
+    const r = await get(deps, { customers: '1' });
+    expect(r.body.phrases).toEqual(expect.arrayContaining(['Priya Sharma', 'Priya']));
+    expect(r.body.phrases).not.toContain('Long Ago');
+  });
+
+  it('only ever reads the caller\'s own business', async () => {
+    const { mem, deps } = world();
+    mem.seed('other', 'menu', 'x', { name: 'Someone Else\'s Cake', sellingPrice: 1, finishedGoodsStock: 0, recipe: [] });
+    expect((await get(deps)).body.phrases).not.toContain('Someone Else\'s Cake');
+  });
+
+  it('says so when it cannot read', async () => {
+    const r = await get({ db: { run: async () => { throw new Error('down'); } }, now: () => NOW, newId: () => 'x' });
+    expect(r.code).toBe(500);
+    expect(r.body.code).toBe('read_failed');
   });
 });

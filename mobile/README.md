@@ -75,9 +75,14 @@ should say so. It needs the Google app (or "Speech Recognition & Synthesis") ins
 microphone is refused, the screen says so and typing still works. A new APK is needed (it is native code and adds the
 microphone permission); the demo kitchen shows "not available in the demo" for the mic, as for typing.
 
+To hear the owner's own words, the capture screen asks the server (`GET /api/mobile/speech-phrases`) for the menu items
+(as they are spoken, without the weight in brackets, and as written) and the materials, and gives them to the recogniser as
+hints. They are kept for ten minutes and emptied on sign-out; if they cannot be fetched voice just listens without them. On
+Android the hints only take effect on Android 13 and later. Customers' names are a separate switch in Settings (Voice),
+off by default, because the hints go to the speech service along with the audio.
+
 Not done yet: Hindi (Hindi speech comes back in Devanagari, and the checks that every unit and name was written in the
-message expect Latin script, so it needs server work first), and biasing the recogniser towards the owner's own menu,
-customer and material names.
+message expect Latin script, so it needs server work first).
 
 ## Build an APK on your own computer (Android, Windows)
 

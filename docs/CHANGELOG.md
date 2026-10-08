@@ -1,5 +1,14 @@
 # Changelog
 
+## Stockpot Quick app: voice listens for your own words
+
+When the owner speaks, the phone's recogniser is now told which words to expect: the menu items (as people say them, "Pumpkin
+Seed Bread", and as written, "Pumpkin Seed Bread (500g)") and the materials, from the new `GET /api/mobile/speech-phrases`
+(read-only, the caller's own business). Customers' names are a separate switch in Settings, Voice, off by default, because
+the hints are sent to the speech service with the audio; with it on, full and first names from the last year's orders are
+added after the menu. The list is capped at 100, kept for ten minutes on the phone and emptied on sign-out. On Android the
+hints take effect from Android 13. Needs a new APK; the server part needs a redeploy.
+
 ## Stockpot Quick app: notifications can be set up without editing committed files
 
 `mobile/app.config.js` adds, to what `app.json` says, the Firebase file Android needs for push (`google-services.json`, put in

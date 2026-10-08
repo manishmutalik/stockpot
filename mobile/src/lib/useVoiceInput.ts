@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { VOICE_LANG, applyResult, describeVoiceError, dictatedText, finishDictation, startDictation, type Dictation } from './voice';
 
-export function useVoiceInput(io: { getText: () => string; setText: (text: string) => void }) {
+export function useVoiceInput(io: { getText: () => string; setText: (text: string) => void; getHints?: () => string[] }) {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dictation = useRef<Dictation>(startDictation(''));
@@ -43,7 +43,9 @@ export function useVoiceInput(io: { getText: () => string; setText: (text: strin
     const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
     if (!permission.granted) { setError(describeVoiceError('not-allowed')); return; }
     dictation.current = startDictation(ioRef.current.getText());
-    ExpoSpeechRecognitionModule.start({ lang: VOICE_LANG, interimResults: true, continuous: true });
+    // The owner's own menu and materials (and customers, if they asked), so what they say is heard as those words.
+    const hints = ioRef.current.getHints?.() ?? [];
+    ExpoSpeechRecognitionModule.start({ lang: VOICE_LANG, interimResults: true, continuous: true, ...(hints.length > 0 && { contextualStrings: hints }) });
   }, []);
 
   const stop = useCallback(() => { if (listeningRef.current) ExpoSpeechRecognitionModule.stop(); }, []);
