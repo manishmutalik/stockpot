@@ -9,6 +9,13 @@ the hints are sent to the speech service with the audio; with it on, full and fi
 added after the menu. The list is capped at 100, kept for ten minutes on the phone and emptied on sign-out. On Android the
 hints take effect from Android 13. Needs a new APK; the server part needs a redeploy.
 
+## Stockpot Quick app: app icon, splash screen and notification icon
+
+The phone app now has Stockpot's own icon (the pot mark in white on the brand teal, with Android's adaptive and themed
+layers kept inside the safe area), a splash screen (the dark pot on the canvas colour; there was no splash setting before, so
+Android showed a default one) and a proper small notification icon (a white shape; before, the status bar showed the app icon
+as a plain square). Made from `logo-full.png` by `mobile/scripts/generate-icons.py`. Needs a new APK.
+
 ## Stockpot Quick app: notifications can be set up without editing committed files
 
 `mobile/app.config.js` adds, to what `app.json` says, the Firebase file Android needs for push (`google-services.json`, put in

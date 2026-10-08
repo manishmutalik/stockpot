@@ -14,7 +14,7 @@
     "android": {
       "package": "com.stockpot.quick",
       "adaptiveIcon": {
-        "backgroundColor": "#EAF4F3",
+        "backgroundColor": "#00797B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -30,9 +30,19 @@
       "expo-router",
       "expo-font",
       [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 288,
+          "resizeMode": "contain",
+          "backgroundColor": "#EAF4F3"
+        }
+      ],
+      [
         "expo-notifications",
         {
-          "color": "#00797B"
+          "color": "#00797B",
+          "icon": "./assets/notification-icon.png"
         }
       ],
       [
