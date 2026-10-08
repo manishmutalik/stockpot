@@ -79,6 +79,15 @@ Not done yet: Hindi (Hindi speech comes back in Devanagari, and the checks that 
 message expect Latin script, so it needs server work first), and biasing the recogniser towards the owner's own menu,
 customer and material names.
 
+## Icons and splash screen
+
+All of them are made from the pot mark in `assets/logo-full.png` by `python3 scripts/generate-icons.py` (Pillow and numpy);
+run it again after changing the logo and commit the results. `icon.png` is a white pot on the brand teal; the Android adaptive
+icon is `android-icon-background.png` (teal), `-foreground.png` and `-monochrome.png` (the layer Android 13 tints), with the mark
+kept inside the central circle every phone's icon shape keeps. `notification-icon.png` is the white shape shown in the
+status bar. `splash-icon.png` is the dark pot, shown on the canvas colour by `expo-splash-screen` (configured in `app.json`);
+Android 12 and later show it inside a circle, so the mark is kept small. A new APK is needed to see any change.
+
 ## Build an APK on your own computer (Android, Windows)
 
 For trying the app on a phone without Expo's cloud build. Needs Android Studio (for the SDK and its bundled Java),
