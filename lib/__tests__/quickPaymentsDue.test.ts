@@ -87,11 +87,10 @@ describe('POST /mobile/payments/statement', () => {
     expect(r.body).toMatchObject({ customerName: 'Priya', balanceDue: 1300, billUrl: 'https://stockpot.example.com/bill/stmt456' });
     expect(r.body.orderIds.sort()).toEqual(['p1', 'p2']);
     expect(r.body.shareMessage).toContain('your statement from Anita (2 orders');
-    expect(r.body.shareMessage).toContain('• Thu 24 Sep: 1 × Chocolate Truffle Cake: ₹900.00');
-    expect(r.body.shareMessage).toContain('• Sat 3 Oct: 2 × Sourdough: ₹400.00');
-    expect(r.body.shareMessage).toContain('Balance due: ₹1,300.00');
-    expect(r.body.shareMessage).toContain('Pay by UPI: anita@upi');
-    expect(r.body.shareMessage).toContain('View or pay online: https://stockpot.example.com/bill/stmt456');
+    expect(r.body.shareMessage).toContain('*Balance due: ₹1,300.00*');
+    expect(r.body.shareMessage.split('\n').slice(-2)).toEqual(['View the full statement and pay online:', 'https://stockpot.example.com/bill/stmt456']);
+    // The dated lines are on the page; without the link they are in the message (see the no-link test below).
+    expect(r.body.shareMessage).not.toContain('Sourdough');
     expect(r.body.whatsappUrl).toMatch(/^https:\/\/wa\.me\/919876543210\?text=/);
     expect(statements).toHaveBeenCalledWith(UID, expect.arrayContaining(['p1', 'p2']));
     expect(bills).not.toHaveBeenCalled();
@@ -132,8 +131,10 @@ describe('POST /mobile/payments/statement', () => {
     const r = await statement(deps, { customerKey: 'name:priya' });
     expect(r.code).toBe(200);
     expect(r.body.billUrl).toBeUndefined();
+    expect(r.body.shareMessage).toContain('• Thu 1 Oct: 1 × Chocolate Truffle Cake: ₹900.00');
+    expect(r.body.shareMessage).toContain('• Fri 2 Oct: 1 × Chocolate Truffle Cake: ₹900.00');
     expect(r.body.shareMessage).toContain('Balance due: ₹1,800.00');
-    expect(r.body.shareMessage).not.toMatch(/View or pay online/);
+    expect(r.body.shareMessage).not.toMatch(/View the full/);
   });
 
   it('changes no order, can be asked again, and says so when it fails', async () => {

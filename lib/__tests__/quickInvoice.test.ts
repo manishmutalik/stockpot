@@ -42,11 +42,16 @@ describe('POST /mobile/orders/:id/invoice', () => {
     expect(r.body.orderIds).toEqual(['o1']);
     expect(r.body.balanceDue).toBe(1300);
     expect(r.body.billUrl).toBe('https://stockpot.example.com/bill/tok123');
-    expect(r.body.shareMessage).toContain('2 × Chocolate Truffle Cake: ₹1,800.00');
-    expect(r.body.shareMessage).toContain('Total: ₹1,800.00');
-    expect(r.body.shareMessage).toContain('Advance received: ₹500.00');
-    expect(r.body.shareMessage).toContain('Balance due: ₹1,300.00');
-    expect(r.body.shareMessage).toContain('View or pay online: https://stockpot.example.com/bill/tok123');
+    // With a link the message is a short summary and the link; the items, UPI button and card button are on the page.
+    expect(r.body.shareMessage.split('\n')).toEqual([
+      'Hi Priya Sharma, here\'s your invoice from Anita (O1, 10 Oct 2026).',
+      'Total: ₹1,800.00',
+      'Advance received: ₹500.00',
+      '*Balance due: ₹1,300.00*',
+      '',
+      'View the full bill and pay online:',
+      'https://stockpot.example.com/bill/tok123',
+    ]);
     expect(r.body.shareMessage).not.toMatch(/Paid in full/);
     expect(r.body.whatsappUrl).toMatch(/^https:\/\/wa\.me\/919876543210\?text=/);
     expect(bills).toHaveBeenCalledWith(UID, 'o1');
@@ -71,8 +76,11 @@ describe('POST /mobile/orders/:id/invoice', () => {
     const r = await invoice(deps, 'b');
     expect(r.body.orderIds.sort()).toEqual(['a', 'b']);
     expect(r.body.balanceDue).toBe(1300);
-    expect(r.body.shareMessage).toContain('Chocolate Truffle Cake');
-    expect(r.body.shareMessage).toContain('Sourdough');
+    expect(r.body.shareMessage).toContain('*Balance due: ₹1,300.00*');
+    // Without a link the whole invoice is in the message, every item of the order.
+    const plain = await invoice({ ...deps, publicUrl: '' }, 'b');
+    expect(plain.body.shareMessage).toContain('Chocolate Truffle Cake');
+    expect(plain.body.shareMessage).toContain('Sourdough');
   });
 
   it('leaves out a cancelled item of the group, and refuses an order that is wholly cancelled', async () => {

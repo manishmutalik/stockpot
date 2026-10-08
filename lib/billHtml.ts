@@ -47,6 +47,9 @@ export function renderBillHtml(bill: Bill): string {
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
 <title>${statement ? 'Statement' : 'Bill'} from ${escapeHtml(bill.business.name)}</title>
+<meta property="og:type" content="website">
+<meta property="og:title" content="${statement ? 'Statement' : 'Invoice'} from ${escapeHtml(bill.business.name)}">
+<meta property="og:description" content="${escapeHtml(balance > 0 ? `${formatMoney(balance, bill.currency)} due. Tap to view the bill and pay.` : 'Paid in full. Tap to view the bill.')}">
 <style>${PAGE_STYLE}</style>
 </head>
 <body>
