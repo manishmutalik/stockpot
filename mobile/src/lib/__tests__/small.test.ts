@@ -44,8 +44,9 @@ describe('isDemoEmail', () => {
 });
 
 describe('statusTarget', () => {
-  it('opens Upcoming for orders due and nothing else yet', () => {
+  it('opens Upcoming for orders due, Payments due for pending payments, and nothing else yet', () => {
     expect(statusTarget('orders_due')).toBe('upcoming');
-    for (const k of ['payments_pending', 'running_low', 'use_by_soon', 'profit'] as const) expect(statusTarget(k)).toBeNull();
+    expect(statusTarget('payments_pending')).toBe('payments');
+    for (const k of ['running_low', 'use_by_soon', 'profit'] as const) expect(statusTarget(k)).toBeNull();
   });
 });

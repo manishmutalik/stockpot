@@ -62,7 +62,10 @@ describe('GET /mobile/today', () => {
     expect(r.body.dueTomorrow).toEqual({ orderCount: 1, items: [{ menuItemId: 'muffin', name: 'Muffin', quantity: 12 }] });
     expect(r.body.overdue).toMatchObject({ orderCount: 1 });
     expect(r.body.today).toEqual({ revenue: 2700, trueProfit: 2490, orderCount: 2 }); // 900 + 1,800 less 70 + 140 of ingredients
-    expect(r.body.pendingPayments).toEqual({ customers: 3, orders: 3, total: 3600 }); // Priya 1,800, Rohan 900, Kavya 900
+    expect(r.body.pendingPayments).toMatchObject({ customers: 3, orders: 3, total: 3600 }); // Priya 1,800, Rohan 900, Kavya 900
+    // The biggest first, the longer wait first among equals (Kavya's order is from 2 Oct, 4 days ago).
+    expect(r.body.pendingPayments.top.map((c: any) => [c.name, c.dueTotal, c.orderCount, c.daysOutstanding])).toEqual([['Priya', 1800, 1, 0], ['Kavya', 900, 1, 4], ['Rohan', 900, 1, 1]]);
+    expect(r.body.pendingPayments.top[0]).toMatchObject({ key: 'name:priya', phone: null, oldestDate: '2026-10-06' });
     expect(r.body.lowStock).toEqual([{ id: 'butter', name: 'Butter', remaining: 150, unit: 'g', threshold: 200 }]);
     expect(r.body.useBySoon).toEqual([{ kind: 'material', id: 'cream', name: 'Fresh Cream', date: '2026-10-07', daysLeft: 1 }]);
   });
@@ -72,8 +75,16 @@ describe('GET /mobile/today', () => {
     mem.seed(UID, 'orders', 'later', order('later', { preorder: true, date: '2026-10-20', paymentStatus: 'unpaid' }));
     mem.seed(UID, 'orders', 'gone', order('gone', { date: '2026-10-06', cancelledOn: '2026-10-06' }));
     const r = await get(createQuickTodayHandler(deps));
-    expect(r.body.pendingPayments).toEqual({ customers: 0, orders: 0, total: 0 });
+    expect(r.body.pendingPayments).toEqual({ customers: 0, orders: 0, total: 0, top: [] });
     expect(r.body.today.orderCount).toBe(0);
+  });
+
+  it('lists only the three who owe most by name, but counts everyone', async () => {
+    const { mem, deps } = world();
+    ['A', 'B', 'C', 'D', 'E'].forEach((n, i) => mem.seed(UID, 'orders', `o${n}`, order(`o${n}`, { date: '2026-10-05', customerName: n, quantity: i + 1, paymentStatus: 'unpaid' })));
+    const r = await get(createQuickTodayHandler(deps));
+    expect(r.body.pendingPayments).toMatchObject({ customers: 5, orders: 5, total: 13500 });
+    expect(r.body.pendingPayments.top.map((c: any) => c.name)).toEqual(['E', 'D', 'C']);
   });
 
   it('a finished batch near its use-by date is listed, one with nothing left is not, and one long past is left out', async () => {

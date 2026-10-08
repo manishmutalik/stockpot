@@ -237,6 +237,27 @@ export function buildInvoiceMessage(bill: Bill, opts: { settled: boolean; link?:
   return lines.join('\n');
 }
 
+/**
+ * A customer's statement as a message to send: each unpaid order's items with the day it was made, delivery, discount and GST
+ * when there are any, the total, any advance received, what is due and where to pay it. One message instead of one per order.
+ */
+export function buildStatementMessage(bill: Bill, opts: { link?: string }): string {
+  const money = (n: number) => formatMoney(n, bill.currency);
+  const greeting = bill.customerName ? `Hi ${bill.customerName}, here's` : "Here's";
+  const count = bill.orderCount ?? 1;
+  const lines = [`${greeting} your statement from ${bill.business.name} (${count} order${count === 1 ? '' : 's'}, as on ${invoiceDate(bill.date)}):`];
+  for (const l of bill.lines) lines.push(`• ${l.date ? `${formatShortDate(l.date)}: ` : ''}${l.quantity} × ${l.name}: ${money(l.lineTotal)}`);
+  if (bill.deliveryCharge > 0) lines.push(`Delivery: ${money(bill.deliveryCharge)}`);
+  if (bill.discount > 0) lines.push(`Discount: −${money(bill.discount)}`);
+  if (bill.gst && bill.gst.amount > 0) lines.push(bill.gst.mode === 'inclusive' ? `Includes GST (${bill.gst.rate}%): ${money(bill.gst.amount)}` : `GST (${bill.gst.rate}%): ${money(bill.gst.amount)}`);
+  lines.push(`Total: ${money(bill.total)}`);
+  if (bill.advance) lines.push(`Advance received: ${money(bill.advance.amount)}`);
+  lines.push(`Balance due: ${money(billBalance(bill))}`);
+  if (bill.upiId) lines.push(`Pay by UPI: ${bill.upiId}`);
+  if (opts.link) lines.push(`View or pay online: ${opts.link}`);
+  return lines.join('\n');
+}
+
 const TOKEN_PATTERN = /^[a-f0-9]{32}$/;
 
 export const isValidBillToken = (token: unknown): token is string => typeof token === 'string' && TOKEN_PATTERN.test(token);
