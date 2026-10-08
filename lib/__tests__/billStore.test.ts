@@ -20,13 +20,18 @@ function collectionAt(path: string): any {
     }),
   };
 }
+// Firestore's Admin SDK refuses a document with `undefined` anywhere in it (unless ignoreUndefinedProperties is on, which it is not here).
+function refuseUndefined(value: any, path = ''): void {
+  if (value === undefined) throw new Error(`Cannot use "undefined" as a Firestore value (found in field "${path}")`);
+  if (value && typeof value === 'object') for (const [k, v] of Object.entries(value)) refuseUndefined(v, path ? `${path}.${k}` : k);
+}
 const fakeDb = {
   collection: (name: string) => collectionAt(name),
   getAll: async (...refs: any[]) => Promise.all(refs.map(r => r.get())),
   batch: () => {
     const ops: (() => void)[] = [];
     return {
-      set: (r: any, data: any, opts?: any) => ops.push(() => store.set(r.path, opts?.merge ? { ...store.get(r.path), ...data } : data)),
+      set: (r: any, data: any, opts?: any) => { refuseUndefined(data); ops.push(() => store.set(r.path, opts?.merge ? { ...store.get(r.path), ...data } : data)); },
       update: (r: any, data: any) => ops.push(() => store.set(r.path, { ...store.get(r.path), ...data })),
       commit: async () => { ops.forEach(op => op()); },
     };
@@ -110,6 +115,21 @@ describe('getPublicBill', () => {
     const { token, bill } = (await createOrRefreshBill('u1', 'single'))!;
     expect(await getPublicBill(token)).toEqual(bill);
     expect(await getPublicBill('f'.repeat(32))).toBeNull();
+  });
+});
+
+describe('a bill with nothing optional filled in', () => {
+  it('is stored without the missing fields, since Firestore refuses undefined (no logo, no UPI ID, no customer name)', async () => {
+    store.set(`${U}/settings/bakery`, { name: 'Asha Bakes', address: '', phone: '', currency: { code: 'INR', symbol: '₹' } });
+    store.set(`${U}/orders/walkin`, { menuItemId: 'cake', quantity: 1, date: '2026-03-10' });
+    const single = await createOrRefreshBill('u1', 'walkin');
+    expect(single).not.toBeNull();
+    const stored = store.get(`bills/${single!.token}`).bill;
+    expect('logo' in stored.business).toBe(false);
+    expect('upiId' in stored).toBe(false);
+    expect('customerName' in stored).toBe(false);
+    expect(stored.total).toBe(500);
+    expect(await createOrRefreshStatement('u1', ['walkin', 'single'])).not.toBeNull();
   });
 });
 

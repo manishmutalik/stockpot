@@ -1,5 +1,12 @@
 # Changelog
 
+## Fix: Send invoice failed for a business with no logo
+
+Send invoice (and Send statement, and "view bill online" generally) answered "Stockpot had a problem" for any business without a
+logo, a UPI ID or a customer name on the order. The stored bill left those fields `undefined`, which Firestore's Admin SDK
+refuses to save, so making the bill link threw. The snapshot is now stored without missing fields, and the bill tests'
+stand-in database refuses `undefined` as the real one does, so this cannot slip past them again. Needs a redeploy; no new APK.
+
 ## Stockpot Quick app: payments due
 
 Orders that are owed money are now reachable from the phone. The "N payments pending" line on Today (which did nothing when

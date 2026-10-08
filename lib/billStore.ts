@@ -23,6 +23,12 @@ import { buildBill, resolveBillToken, type Bill } from '../src/utils/billing';
 
 const DEFAULT_CURRENCY = { code: 'INR', symbol: '₹' };
 
+/**
+ * A bill has optional fields that are simply left undefined (no logo, no UPI ID, no customer name). Firestore's Admin SDK refuses
+ * a document with an `undefined` anywhere in it, so the snapshot is stored without them.
+ */
+const withoutUndefined = <T>(value: T): T => JSON.parse(JSON.stringify(value));
+
 export async function createOrRefreshBill(uid: string, orderId: string): Promise<{ token: string; bill: Bill } | null> {
   return writeBill(uid, [orderId], false);
 }
@@ -83,7 +89,7 @@ async function writeBill(uid: string, orderIds: string[], statement: boolean): P
 
   const now = Date.now();
   const batch = db.batch();
-  batch.set(db.collection('bills').doc(token), { uid, orderIds: members.map(o => o.id), bill, updatedAt: now }, { merge: true });
+  batch.set(db.collection('bills').doc(token), { uid, orderIds: members.map(o => o.id), bill: withoutUndefined(bill), updatedAt: now }, { merge: true });
   for (const m of members) {
     if (m[tokenField] !== token) batch.update(ordersCol.doc(m.id), { [tokenField]: token });
   }
