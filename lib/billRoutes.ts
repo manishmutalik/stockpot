@@ -14,15 +14,17 @@ import type { AuthedRequest } from './auth';
  * and a missing bill all give the same 404 page, so the response never
  * reveals whether an order or bill exists.
  */
+export const PUBLIC_BILL_HEADERS = {
+  'Cache-Control': 'private, no-store',
+  'Referrer-Policy': 'no-referrer',
+  'X-Robots-Tag': 'noindex, nofollow',
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+} as const;
+
 export function createPublicBillHandler(getBill: (token: string) => Promise<Bill | null>) {
   return async (req: Request, res: Response) => {
-    res.set({
-      'Cache-Control': 'private, no-store',
-      'Referrer-Policy': 'no-referrer',
-      'X-Robots-Tag': 'noindex, nofollow',
-      'X-Content-Type-Options': 'nosniff',
-      'Content-Security-Policy': "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
-    });
+    res.set(PUBLIC_BILL_HEADERS);
     const token = req.params.token;
     if (!isValidBillToken(token)) return res.status(404).type('html').send(NOT_FOUND_HTML);
     try {

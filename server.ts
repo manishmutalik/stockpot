@@ -37,8 +37,13 @@ import { createBriefingModel } from "./lib/briefingModel";
 import { beginGeneration, clearGeneration, getBriefing, saveBriefing } from "./lib/briefingStore";
 import { globalDay, peekAiUsage, reserveAiUse, usageDayFor } from "./lib/aiUsage";
 import { searchUsda, searchOpenFoodFacts } from "./lib/nutritionSearch";
-import { createOrRefreshBill, createOrRefreshStatement, getPublicBill } from "./lib/billStore";
-import { createBillHandler, createPublicBillHandler } from "./lib/billRoutes";
+import { createOrRefreshBill, createOrRefreshStatement } from "./lib/billStore";
+import { createBillHandler } from "./lib/billRoutes";
+import { createAdminBillRecords } from "./lib/billStore";
+import { createBillPageHandler, createPayHandler, createReturnHandler } from "./lib/payOnline";
+import { createGatewayHandlers } from "./lib/gatewayRoutes";
+import { createAdminGatewayStore } from "./lib/gatewayStore";
+import { readSecretKey } from "./lib/secretBox";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -511,13 +516,32 @@ async function startServer() {
   // Stockpot's own subscription billing.)
   api.post("/bills", requireCsrf, createBillHandler(createOrRefreshBill, createOrRefreshStatement));
 
+  // --- Online payments (the owner's own payment gateway) ---
+  // Settings for the owner's Razorpay / Cashfree keys, which are checked with the gateway and kept encrypted (lib/secretBox.ts,
+  // needs PAYMENT_SECRETS_KEY). The customer's side is the public /bill/:token routes below.
+  const gatewayStore = createAdminGatewayStore();
+  const paymentSecretKey = readSecretKey();
+  if (!paymentSecretKey) console.warn("PAYMENT_SECRETS_KEY is missing or not 32 bytes of base64: owners cannot save payment gateway keys yet.");
+  const gatewayHandlers = createGatewayHandlers({ store: gatewayStore, secretKey: paymentSecretKey, fetch: fetch as any, now: Date.now });
+  api.get("/payments/gateway", gatewayHandlers.get);
+  api.put("/payments/gateway", requireCsrf, gatewayHandlers.put);
+  api.post("/payments/gateway/test", requireCsrf, gatewayHandlers.test);
+  api.delete("/payments/gateway", requireCsrf, gatewayHandlers.remove);
+
   app.use("/api", api);
 
   // The public, read-only bill a customer opens from the QR code or WhatsApp
   // link. No sign-in: the unguessable token in the URL is the access check.
   // Registered before the Vite/static handlers below so the SPA never
   // swallows it.
-  app.get("/bill/:token", createPublicBillHandler(getPublicBill));
+  const payOnlineDeps = {
+    db: quickDeps.db, records: createAdminBillRecords(), gateways: gatewayStore, secretKey: paymentSecretKey,
+    fetch: fetch as any, now: Date.now, publicUrl: process.env.APP_URL,
+  };
+  app.get("/bill/:token", createBillPageHandler(payOnlineDeps));
+  // Where a customer pays by card or online (opened from the bill page), and where the gateway sends them back.
+  app.get("/bill/:token/pay", createPayHandler(payOnlineDeps));
+  app.get("/bill/:token/return", createReturnHandler(payOnlineDeps));
 
   // --- Vite Middleware ---
 

@@ -103,3 +103,53 @@ export async function getPublicBill(token: string): Promise<Bill | null> {
   const snap = await getFirestore().collection('bills').doc(token).get();
   return snap.exists ? ((snap.data()?.bill as Bill | undefined) ?? null) : null;
 }
+
+/** A card or online payment started for a bill. The link is asked about afterwards; nothing on the customer's return is trusted. */
+export interface PaymentAttempt {
+  provider: 'razorpay' | 'cashfree';
+  linkId: string;
+  /** Where the customer pays. */
+  url: string;
+  /** What the link asks for, in rupees. */
+  amount: number;
+  /** The orders it settles. */
+  orderIds: string[];
+  createdAt: number;
+  status: 'created' | 'settled';
+  /** When the gateway was last asked, so a page that is opened again and again does not ask each time. */
+  checkedAt?: number;
+  settledAt?: number;
+  paymentId?: string;
+  /** The customer paid but the orders had already been marked paid (by hand), so nothing was marked: the owner has been paid twice. */
+  note?: 'orders_already_paid';
+}
+
+/** The stored bill for a token with whose it is and any payment started. */
+export interface BillRecord {
+  uid: string;
+  orderIds: string[];
+  bill: Bill;
+  payment?: PaymentAttempt;
+}
+
+export interface BillRecords {
+  get(token: string): Promise<BillRecord | null>;
+  savePayment(token: string, payment: PaymentAttempt): Promise<void>;
+}
+
+export function createAdminBillRecords(): BillRecords {
+  const ref = (token: string) => getFirestore().collection('bills').doc(token);
+  return {
+    async get(token) {
+      const snap = await ref(token).get();
+      if (!snap.exists) return null;
+      const d = snap.data() as Partial<BillRecord>;
+      if (!d.bill) return null;
+      // A bill made before these were stored still opens; it just has no payment side.
+      return { uid: typeof d.uid === 'string' ? d.uid : '', orderIds: Array.isArray(d.orderIds) ? d.orderIds : [], bill: d.bill, ...(d.payment && { payment: d.payment }) };
+    },
+    async savePayment(token, payment) {
+      await ref(token).set({ payment: withoutUndefined(payment) }, { merge: true });
+    },
+  };
+}
