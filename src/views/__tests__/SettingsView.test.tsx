@@ -2,6 +2,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { SettingsView } from '../SettingsView';
 
+// The Online payments card loads its own state from the server; here it just sees "nothing set up".
+vi.mock('../../utils/apiClient', () => ({
+  apiFetch: vi.fn(async () => ({ ok: true, json: async () => ({ serverReady: true, configured: false }) })),
+}));
+
 const makeProps = (over: Record<string, any> = {}) => ({
   settings: { name: 'Test Bakery', phone: '555', address: '1 Main St', logo: '', primaryColor: '#10b981', gstApplicable: false, gstRate: 5 },
   activeSettingsTab: 'bakery',
