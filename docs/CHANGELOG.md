@@ -1,5 +1,12 @@
 # Changelog
 
+## Stockpot Quick app: notifications can be set up without editing committed files
+
+`mobile/app.config.js` adds, to what `app.json` says, the Firebase file Android needs for push (`google-services.json`, put in
+`mobile/`, ignored by Git) and the Expo project id the push service needs (`EXPO_PUBLIC_EAS_PROJECT_ID` in `.env`). With
+neither present the app builds exactly as before, so CI is unaffected. `mobile/README.md` now has the notification setup for
+a local build (Firebase file, Expo project, FCM key uploaded to Expo, rebuild, then the server's secret and cron job).
+
 ## Stockpot Quick: sizes of the same item (small and large)
 
 When the menu has the same thing in several sizes ("Pumpkin Seed Bread (350g)" and "(500g)"), the phone app no longer lets
