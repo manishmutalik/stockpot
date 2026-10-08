@@ -10,7 +10,7 @@ import { saveCredentials, getCredentials, deleteCredentials } from "./lib/integr
 import { readRazorpayConfig, createRazorpayApi } from "./lib/razorpay";
 import { setBillingInfo, getBillingInfo, findUidByRazorpaySubscriptionId, hasActiveAccess } from "./lib/subscriptionStore";
 import { createAdminQuickDb } from "./lib/quickDb";
-import { createAccessGate, createQuickOrderHandler, createQuickRestockHandler, createQuickProductionHandler, createQuickHandOverHandler, createQuickPaymentHandler, createQuickTodayHandler, createQuickUpcomingHandler,
+import { createAccessGate, createQuickOrderHandler, createQuickRestockHandler, createQuickProductionHandler, createQuickHandOverHandler, createQuickPaymentHandler, createQuickTodayHandler, createQuickUpcomingHandler, createQuickSpeechPhrasesHandler,
   createQuickPushTokenHandler, createQuickPushTokenRemoveHandler, createQuickNotificationSettingsGetHandler, createQuickNotificationSettingsPutHandler } from "./lib/quickRoutes";
 import { randomId } from "./src/utils/plans";
 import {
@@ -183,6 +183,7 @@ async function startServer() {
   api.post("/mobile/payments", quickGate, createQuickPaymentHandler(quickDeps));
   api.get("/mobile/today", quickGate, createQuickTodayHandler(quickDeps));
   api.get("/mobile/upcoming", quickGate, createQuickUpcomingHandler(quickDeps));
+  api.get("/mobile/speech-phrases", quickGate, createQuickSpeechPhrasesHandler(quickDeps));
   api.post("/mobile/push-token", quickGate, createQuickPushTokenHandler(quickDeps));
   api.delete("/mobile/push-token", createQuickPushTokenRemoveHandler(quickDeps));
   api.get("/mobile/notification-settings", quickGate, createQuickNotificationSettingsGetHandler(quickDeps));

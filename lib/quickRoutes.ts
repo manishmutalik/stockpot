@@ -22,6 +22,8 @@ import { parseIdempotencyKey, withIdempotency, type QuickDb, type QuickDoc, type
 import { planOrderGroup, planRestock, planProductionSession, planHandOver, planMarkPaid, collapseWrites, productionRunCost } from '../src/utils/plans';
 import type { OrderGroupCommon, OrderLineItem, PlanError, ProductionRunInput } from '../src/utils/plans';
 import { enterableUnits } from '../src/utils/conversions';
+import { speechPhrases } from '../src/utils/speechPhrases';
+import { customerDirectory } from '../src/utils/quickParse';
 import { saleAmounts } from '../src/utils/profit';
 import { buildBill, billBalance, buildBillMessage, buildInvoiceMessage, buildWhatsAppUrl, withBillLink } from '../src/utils/billing';
 import { formatAmount } from '../src/utils/money';
@@ -520,6 +522,36 @@ export function createQuickUpcomingHandler(deps: QuickRouteDeps) {
     const [preorders, menu] = await Promise.all([tx.where('orders', 'preorder', true), tx.all('menu')]);
     return buildUpcoming({ today, settings, currency: currencyOf(settings), orders: preorders as unknown as Order[], menu: menu as unknown as MenuItem[] });
   });
+}
+
+/**
+ * GET /mobile/speech-phrases[?customers=1]: the owner's menu and materials, as they are spoken, for the phone's speech
+ * recogniser to listen for. Customers' names only come when the app asks (the owner switched it on): they go to the speech
+ * service with the audio. Read-only.
+ */
+export function createQuickSpeechPhrasesHandler(deps: QuickRouteDeps) {
+  return async (req: AuthedRequest, res: Response) => {
+    const withCustomers = req.query?.customers === '1';
+    try {
+      const phrases = await deps.db.run(req.uid!, async tx => {
+        const settings = (await loadSettings(tx)) as Partial<BakerySettings>;
+        const today = todayInZone(settings.timezone, new Date(deps.now()));
+        const [menu, materials, orders] = await Promise.all([
+          tx.all('menu'), tx.all('materials'),
+          withCustomers ? tx.range('orders', 'date', addDays(today, -365), addDays(today, 60)) : [],
+        ]);
+        return speechPhrases({
+          menu: menu as { name?: string }[], materials: materials as { name?: string }[],
+          customers: withCustomers ? customerDirectory(orders as unknown as Order[]).map(c => c.name) : [],
+        });
+      });
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.status(200).json({ phrases });
+    } catch (err: any) {
+      console.error('Quick speech phrases failed:', err?.message);
+      return res.status(500).json({ error: 'Could not load that.', code: 'read_failed' });
+    }
+  };
 }
 
 // ─── Push token and notification settings ───────────────────────────────────

@@ -14,6 +14,8 @@ import { createApi, type Api } from '../lib/api';
 import { isDemoEmail } from '../lib/authErrors';
 import { googleSignInAvailable, signInWithGoogle as googleSignIn, signOutGoogle } from '../lib/googleSignIn';
 import { unregisterPush } from '../lib/push';
+import { voiceHintsCache } from '../lib/useVoiceHints';
+import { clearVoiceHints } from '../lib/voiceHints';
 
 /** The server the app talks to, from `EXPO_PUBLIC_API_URL` (see .env.example). */
 export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
@@ -46,6 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /** Signs out. This phone stops buzzing for this owner first (best effort, and never more than three seconds). */
   const signOut = useCallback(async () => {
     await Promise.race([unregisterPush(api), new Promise<void>(resolve => setTimeout(resolve, 3000))]);
+    clearVoiceHints(voiceHintsCache);
     await fbSignOut(auth);
     await signOutGoogle();
   }, [api]);

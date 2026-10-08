@@ -12,6 +12,7 @@ import { QuestionCard } from '../components/QuestionCard';
 import { SendInvoiceButton } from '../components/SendInvoiceButton';
 import { canSave, currentQuestion, questionProgress } from '../lib/capture';
 import { useReadingLabel } from '../lib/readingLabel';
+import { useVoiceHints } from '../lib/useVoiceHints';
 import { useVoiceInput } from '../lib/useVoiceInput';
 import { useCapture } from '../lib/useCapture';
 import { noOutline } from '../lib/webInput';
@@ -31,7 +32,7 @@ const DEFAULT_CURRENCY: Currency = { code: 'INR', symbol: '₹' };
 export default function Capture() {
   const params = useLocalSearchParams<{ kind?: string; resume?: string; listen?: string }>();
   const kind = (KINDS as string[]).includes(params.kind ?? '') ? (params.kind as QuickKind) : null;
-  const { api, isDemo } = useAuth();
+  const { api, isDemo, user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const cap = useCapture(api, { kind, resume: params.resume === '1' });
@@ -52,7 +53,10 @@ export default function Capture() {
   // Speaking fills the text box as the words are heard; the owner checks it and taps Read it, so nothing is read (or counted) unseen.
   const textRef = React.useRef(state.text);
   textRef.current = state.text;
-  const voice = useVoiceInput({ getText: () => textRef.current, setText: cap.setText });
+  const hints = useVoiceHints(api, user?.uid, !isDemo);
+  const hintsRef = React.useRef(hints);
+  hintsRef.current = hints;
+  const voice = useVoiceInput({ getText: () => textRef.current, setText: cap.setText, getHints: () => hintsRef.current });
   const read = () => { if (!requireAccount()) return; voice.stop(); cap.read(); };
   const mic = () => { if (requireAccount()) void voice.toggle(); };
   // The big mic on Today opens this screen already listening.

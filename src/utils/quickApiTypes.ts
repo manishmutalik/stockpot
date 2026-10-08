@@ -272,6 +272,9 @@ export interface HandOverSaved {
   whatsappUrl?: string | null;
 }
 
+/** GET /api/mobile/speech-phrases: what the phone's speech recogniser is told to expect (see speechPhrases.ts). */
+export interface SpeechPhrasesResponse { phrases: string[] }
+
 // ─── Notifications ──────────────────────────────────────────────────────────
 
 /** GET and PUT /api/mobile/notification-settings. Times are HH:MM in the business's time zone. */
