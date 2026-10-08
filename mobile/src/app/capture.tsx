@@ -9,6 +9,7 @@ import { Button } from '../components/Button';
 import { Card } from '../components/Card';
 import { Notes, OrderConfirm, PaymentConfirm, ProductionConfirm, RestockConfirm } from '../components/confirm';
 import { QuestionCard } from '../components/QuestionCard';
+import { SendInvoiceButton } from '../components/SendInvoiceButton';
 import { canSave, currentQuestion, questionProgress } from '../lib/capture';
 import { useReadingLabel } from '../lib/readingLabel';
 import { useVoiceHints } from '../lib/useVoiceHints';
@@ -157,6 +158,7 @@ export default function Capture() {
                 <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.amber }}>{state.saved.warning}</Text>
               </View>
             )}
+            {!!state.saved.orderId && <View style={{ alignSelf: 'stretch' }}><SendInvoiceButton orderId={state.saved.orderId} /></View>}
             <View style={{ alignSelf: 'stretch' }}><Button label="Done" onPress={leave} /></View>
           </View>
         )}

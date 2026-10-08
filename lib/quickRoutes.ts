@@ -25,7 +25,7 @@ import { enterableUnits } from '../src/utils/conversions';
 import { speechPhrases } from '../src/utils/speechPhrases';
 import { customerDirectory } from '../src/utils/quickParse';
 import { saleAmounts } from '../src/utils/profit';
-import { buildBill, billBalance, buildBillMessage, buildWhatsAppUrl, withBillLink } from '../src/utils/billing';
+import { buildBill, billBalance, buildBillMessage, buildInvoiceMessage, buildWhatsAppUrl, withBillLink } from '../src/utils/billing';
 import { formatAmount } from '../src/utils/money';
 import { isUnpaid } from '../src/utils/payments';
 import { customerDues, matchingOption } from '../src/utils/quickPayments';
@@ -371,6 +371,51 @@ export function createQuickHandOverHandler(deps: QuickRouteDeps) {
     const shareMessage = withBillLink(body.billMessage, billUrl);
     return { billUrl, shareMessage, whatsappUrl: buildWhatsAppUrl(body.customerPhone ?? undefined, shareMessage) };
   });
+}
+
+// ─── POST /mobile/orders/:id/invoice ────────────────────────────────────────
+
+/**
+ * The bill for an order (all of a multi-item order), ready to send: the text, the link to the bill online, and a WhatsApp
+ * link to the customer when the order has a phone number. Nothing about the order changes; the only write is the public bill
+ * link itself (made or refreshed, as the hand-over does), so it is safe to ask again. A cancelled order has no invoice.
+ */
+export function createQuickInvoiceHandler(deps: QuickRouteDeps) {
+  return async (req: AuthedRequest, res: Response) => {
+    const id = req.params.id;
+    if (typeof id !== 'string' || !ID.test(id)) return res.status(400).json({ error: 'That is not an order id.', code: 'bad_request' });
+    try {
+      const read = await deps.db.run(req.uid!, async tx => {
+        const order = (await tx.get('orders', id)) as Order | null;
+        if (!order) return { error: 'not_found' as const };
+        const all = order.orderGroupId ? ((await tx.where('orders', 'orderGroupId', order.orderGroupId)) as Order[]) : [order];
+        const orders = all.filter(o => !o.cancelledOn);
+        if (orders.length === 0) return { error: 'cancelled' as const };
+        const menu = asMenu(await tx.getMany('menu', orders.map(o => o.menuItemId)));
+        const settings = await loadSettings(tx);
+        const bill = buildBill({ orders, menu, settings: billSettingsOf(settings), currency: currencyOf(settings) });
+        // What is still owed: the total less any advance, unless it is all paid (a bill alone does not know an advance has since been settled).
+        const balanceDue = orders.some(isUnpaid) ? round2(billBalance(bill)) : 0;
+        return { orderIds: orders.map(o => o.id), balanceDue, bill, customerPhone: orders.find(o => o.customerPhone)?.customerPhone ?? null };
+      });
+      if ('error' in read) {
+        return read.error === 'not_found'
+          ? res.status(404).json({ error: 'Order not found.', code: 'not_found' })
+          : res.status(409).json({ error: 'That order was cancelled, so there is no invoice to send.', code: 'cancelled' });
+      }
+      let billUrl: string | undefined;
+      if (deps.bills && deps.publicUrl) {
+        const made = await deps.bills(req.uid!, read.orderIds[0]);
+        if (made) billUrl = `${deps.publicUrl.replace(/\/$/, '')}/bill/${made.token}`;
+      }
+      const shareMessage = buildInvoiceMessage(read.bill, { settled: read.balanceDue === 0, link: billUrl });
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.status(200).json({ orderIds: read.orderIds, balanceDue: read.balanceDue, ...(billUrl && { billUrl }), shareMessage, whatsappUrl: buildWhatsAppUrl(read.customerPhone ?? undefined, shareMessage) });
+    } catch (err: any) {
+      console.error('Quick invoice failed:', err?.message);
+      return res.status(500).json({ error: 'Could not prepare the invoice. Please try again.', code: 'invoice_failed' });
+    }
+  };
 }
 
 // ─── POST /mobile/payments ──────────────────────────────────────────────────

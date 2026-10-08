@@ -93,6 +93,15 @@ kept inside the central circle every phone's icon shape keeps. `notification-ico
 status bar. `splash-icon.png` is the dark pot, shown on the canvas colour by `expo-splash-screen` (configured in `app.json`);
 Android 12 and later show it inside a circle, so the mark is kept small. A new APK is needed to see any change.
 
+## Sending an invoice
+
+A **Send invoice** button is on the screen shown after an order is saved and on every card in Upcoming. It asks the server
+(`POST /api/mobile/orders/:id/invoice`) for the invoice and opens WhatsApp straight to the customer when the order has a phone
+number, or the phone's share sheet when it has not. The text lists each item with what it came to, delivery, discount and GST
+when there are any, the total, and either "Paid in full" or the advance received and the balance due (with the business's UPI
+ID), then a link to the bill online. A multi-item order is one invoice; a cancelled order has none. Nothing about the order
+changes. The hand-over's "Share bill on WhatsApp" is unchanged (it sends the shorter one-line bill).
+
 ## Build an APK on your own computer (Android, Windows)
 
 For trying the app on a phone without Expo's cloud build. Needs Android Studio (for the SDK and its bundled Java),

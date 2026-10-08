@@ -7,8 +7,14 @@ const resp = { kind: 'order', draft: null, questions: [], notes: [], currency: {
 describe('summarizeSaved', () => {
   it('says the balance of an order that still owes, and paid in full when it does not', () => {
     expect(summarizeSaved('order', { orderIds: ['a'], orderGroupId: null, preorder: false, total: 1800, advance: 500, balanceDue: 1300 }, resp))
-      .toEqual({ kind: 'order', title: 'Order saved', lines: ['₹1,800 · balance ₹1,300', 'Advance received: ₹500'] });
+      .toEqual({ kind: 'order', title: 'Order saved', lines: ['₹1,800 · balance ₹1,300', 'Advance received: ₹500'], orderId: 'a' });
     expect(summarizeSaved('order', { orderIds: ['a'], orderGroupId: null, preorder: false, total: 400, advance: 0, balanceDue: 0 }, resp).lines).toEqual(['₹400 · paid in full']);
+  });
+
+  it('keeps the first order id of an order, for sending its invoice, and has none for the other kinds', () => {
+    expect(summarizeSaved('order', { orderIds: ['x', 'y'], orderGroupId: 'g', preorder: false, total: 100, advance: 0, balanceDue: 100 }, resp).orderId).toBe('x');
+    expect(summarizeSaved('order', { orderIds: [], orderGroupId: null, preorder: false, total: 0, advance: 0, balanceDue: 0 }, resp)).not.toHaveProperty('orderId');
+    expect(summarizeSaved('production', { runIds: ['1'], sessionId: null, shortages: [] }, resp)).not.toHaveProperty('orderId');
   });
 
   it('calls a booked order a pre-order', () => {

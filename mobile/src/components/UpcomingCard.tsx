@@ -7,6 +7,7 @@ import { slotLabel } from '../lib/dates';
 import { overdueLabel, paymentPill } from '../lib/upcoming';
 import { stockProblem } from '../lib/handOver';
 import { Card } from './Card';
+import { SendInvoiceButton } from './SendInvoiceButton';
 import { colors, fonts, radius, toneColor } from '../theme';
 
 const tiny = { fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1, color: colors.grey } as const;
@@ -33,7 +34,7 @@ function ActionButton({ label, icon, primary, grow = 1, onPress }: { label: stri
   );
 }
 
-/** One pre-order: who, what, when, how much is paid and what is left, with Hand over and Send confirmation. */
+/** One pre-order: who, what, when, how much is paid and what is left, with Hand over, Send confirmation and Send invoice. */
 export function UpcomingCard({ order, today, currency, overdue, onHandOver, onConfirm }: {
   order: UpcomingOrder; today: string; currency: Currency; overdue: boolean; onHandOver: () => void; onConfirm: () => void;
 }) {
@@ -95,6 +96,7 @@ export function UpcomingCard({ order, today, currency, overdue, onHandOver, onCo
         <ActionButton label="Hand over" icon="inventory-2" primary onPress={onHandOver} />
         <ActionButton label="Send confirmation" icon="send" grow={1.6} onPress={onConfirm} />
       </View>
+      <SendInvoiceButton orderId={order.orderId} />
     </Card>
   );
 }

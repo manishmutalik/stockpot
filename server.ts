@@ -23,6 +23,7 @@ import { createChatHandler } from "./lib/chatRoutes";
 import { createChatModel } from "./lib/chatModel";
 import { createOrderParseHandler } from "./lib/orderParseRoutes";
 import { createQuickParseHandler } from "./lib/quickParseRoutes";
+import { createQuickInvoiceHandler } from "./lib/quickRoutes";
 import { createNotificationRunHandler, listUsersWithDevices } from "./lib/notificationRoutes";
 import { runNotificationJob } from "./lib/notificationJob";
 import { createDemoSeedHandler, seedDemoKitchen } from "./lib/demoSeedRoutes";
@@ -178,6 +179,7 @@ async function startServer() {
   api.post("/mobile/restocks", quickGate, createQuickRestockHandler(quickDeps));
   api.post("/mobile/production-runs", quickGate, createQuickProductionHandler(quickDeps));
   api.post("/mobile/orders/:id/hand-over", quickGate, createQuickHandOverHandler(quickDeps));
+  api.post("/mobile/orders/:id/invoice", quickGate, createQuickInvoiceHandler(quickDeps));
   api.post("/mobile/payments", quickGate, createQuickPaymentHandler(quickDeps));
   api.get("/mobile/today", quickGate, createQuickTodayHandler(quickDeps));
   api.get("/mobile/upcoming", quickGate, createQuickUpcomingHandler(quickDeps));

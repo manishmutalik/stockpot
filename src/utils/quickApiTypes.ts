@@ -241,6 +241,20 @@ export interface PaymentSaved {
   remainingDue: number;
 }
 
+/** POST /api/mobile/orders/:id/invoice (200): the bill for an order, ready to send to the customer. */
+export interface InvoiceResponse {
+  /** The orders the bill covers: every item of a multi-item order. */
+  orderIds: string[];
+  /** What the customer still owes (nothing when it is paid). */
+  balanceDue: number;
+  /** The link to the bill online, when it could be made. */
+  billUrl?: string;
+  /** The text to send: the bill, with the link when there is one, and "Paid in full" when nothing is owed. */
+  shareMessage: string;
+  /** A wa.me link that opens WhatsApp to this customer with that text, when the order has a phone number. */
+  whatsappUrl: string | null;
+}
+
 /** POST /api/mobile/orders/:id/hand-over (200) */
 export interface HandOverSaved {
   /** False when the order had already been handed over (nothing was changed). */

@@ -204,6 +204,39 @@ export function buildBillMessage(bill: Bill, link?: string): string {
   return withBillLink(base, link);
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** 2026-10-10 as "10 Oct 2026" (the same in every locale, so the text is the same on every phone). */
+function invoiceDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return y && m >= 1 && m <= 12 && d ? `${d} ${MONTHS[m - 1]} ${y}` : iso;
+}
+
+/**
+ * The invoice as a message to send (WhatsApp, a text): every item with what it came to, delivery, discount and GST when there
+ * are any, the total, and then either "Paid in full" or what has been paid in advance and what is still due, with the UPI ID
+ * to pay it to and the link to the bill online. The bill's own one-line message is for the hand-over; this is the full invoice.
+ * `settled` is true when nothing is owed (a bill alone does not know an advance has since been settled).
+ */
+export function buildInvoiceMessage(bill: Bill, opts: { settled: boolean; link?: string }): string {
+  const money = (n: number) => formatMoney(n, bill.currency);
+  const greeting = bill.customerName ? `Hi ${bill.customerName}, here's` : "Here's";
+  const lines = [`${greeting} your invoice from ${bill.business.name} (${bill.reference}, ${invoiceDate(bill.date)}):`];
+  for (const l of bill.lines) lines.push(`• ${l.quantity} × ${l.name}: ${money(l.lineTotal)}`);
+  if (bill.deliveryCharge > 0) lines.push(`Delivery: ${money(bill.deliveryCharge)}`);
+  if (bill.discount > 0) lines.push(`Discount: −${money(bill.discount)}`);
+  if (bill.gst && bill.gst.amount > 0) lines.push(bill.gst.mode === 'inclusive' ? `Includes GST (${bill.gst.rate}%): ${money(bill.gst.amount)}` : `GST (${bill.gst.rate}%): ${money(bill.gst.amount)}`);
+  lines.push(`Total: ${money(bill.total)}`);
+  if (opts.settled) {
+    lines.push('Paid in full. Thank you!');
+  } else {
+    if (bill.advance) lines.push(`Advance received: ${money(bill.advance.amount)}`);
+    lines.push(`Balance due: ${money(billBalance(bill))}`);
+    if (bill.upiId) lines.push(`Pay by UPI: ${bill.upiId}`);
+  }
+  if (opts.link) lines.push(`View or pay online: ${opts.link}`);
+  return lines.join('\n');
+}
+
 const TOKEN_PATTERN = /^[a-f0-9]{32}$/;
 
 export const isValidBillToken = (token: unknown): token is string => typeof token === 'string' && TOKEN_PATTERN.test(token);

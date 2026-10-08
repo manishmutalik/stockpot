@@ -13,6 +13,8 @@ export interface SavedSummary {
   lines: string[];
   /** Something to look at after saving (a production run that used more than was in stock). */
   warning?: string;
+  /** For an order: its id, so the invoice can be sent from the saved screen. */
+  orderId?: string;
 }
 
 const DEFAULT_CURRENCY: Currency = { code: 'INR', symbol: '₹' };
@@ -26,7 +28,7 @@ export function summarizeSaved(kind: QuickKind, saved: unknown, response: ParseR
     const s = saved as OrderSaved;
     const lines = [s.balanceDue > 0 ? `${money(s.total)} · balance ${money(s.balanceDue)}` : `${money(s.total)} · paid in full`];
     if (s.advance > 0) lines.push(`Advance received: ${money(s.advance)}`);
-    return { kind, title: s.preorder ? 'Pre-order booked' : 'Order saved', lines };
+    return { kind, title: s.preorder ? 'Pre-order booked' : 'Order saved', lines, ...(s.orderIds[0] && { orderId: s.orderIds[0] }) };
   }
 
   if (kind === 'restock') {
