@@ -1,5 +1,13 @@
 # Changelog
 
+## Security: dependency updates
+
+`npm audit fix` (lockfile only, no version ranges changed in `package.json`) cleared the critical issue (`proxy-addr`, via
+Express) and all nine moderate ones (`qs`, `body-parser`, `uuid` and the Google Cloud client chain behind `firebase-admin`, among
+others), plus `undici`, `brace-expansion` and `source-map-js`. Express is now 4.22.3. Five high findings remain, all in the
+browser `firebase` package's `@grpc/grpc-js` and the dev-only rules test helper; the only offered fix downgrades `firebase` to 9.14,
+which is not a safe change, and `@grpc/grpc-js` is not used by the browser build. Typecheck, the 2,115 tests and the production build pass.
+
 ## Fix: Send invoice failed for a business with no logo
 
 Send invoice (and Send statement, and "view bill online" generally) answered "Stockpot had a problem" for any business without a
