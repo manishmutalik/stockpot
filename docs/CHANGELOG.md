@@ -1,5 +1,22 @@
 # Changelog
 
+## Landing page: new copy and four infographics
+
+The landing page follows the website content update. The words are shorter: the feature bullet lists are gone, each feature is a
+title and one line, and four infographics now do the explaining. They are built as HTML and CSS (not images), so the text stays
+sharp and the layout reflows: **Same price. Smaller margin.** (a Butter Croissant's margin falls from 62% to 53% when butter rises
+30% and is back to 62% at the suggested ₹185) under the problem headline; **From a WhatsApp message to paid in full** (Anita's
+₹2,520 pre-order, ₹500 advance, a UPI QR for the ₹2,020 balance) and **₹1,200 in sales. ₹603 made.** (the costs of one order, bar by
+bar) in the features; and the four steps as a flow, with what passes between them and a line on re-costing when a price changes. Every
+bar width is worked out from its figures and checked in tests, and each picture has a text alternative that states the figures.
+They adapt to the width of the space they sit in, so the same graphic works full width, in half a row and on a phone. New wording:
+the hero eyebrow and supporting line, "See how it works" instead of "Explore Kitchen Tour", the problem headline ("Still not sure
+what you made?"), the three feature rows, two short cards and a line about India, and the closing headline. The two phone
+screenshots are retired (the first infographic tells that story), so `phone-order.webp` and `phone-bill.webp` are removed. The trial
+length on the page is always the shared `TRIAL_DAYS` setting (45), not the 14 days in the content brief, so the page matches what
+checkout gives. The hero photo and the laptop screenshot are the existing ones until new demo-kitchen captures are supplied. Web
+only; needs a redeploy.
+
 ## Landing page: new layout
 
 The landing page has the layout of the Stitch redesign; every word on it is unchanged. What moved: a warm tinted hero with a

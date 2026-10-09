@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import {
-  ArrowRight, Boxes, ChevronDown, CircleCheck, IndianRupee, MessageCircle, Receipt, Send, Sun, TrendingUp
-} from 'lucide-react';
+import { ArrowRight, Boxes, ChevronDown, CircleCheck, IndianRupee, Sun } from 'lucide-react';
 import { TRIAL_DAYS } from './utils/trial';
+import { OrderJourneyGraphic, PriceCreepGraphic, WhereMoneyGoesGraphic, WorkflowGraphic } from './components/landing/Infographics';
 
 /**
  * The public landing page. Every screenshot below is a real capture of the
@@ -23,6 +22,11 @@ import { TRIAL_DAYS } from './utils/trial';
  *
  * Fonts and colours are the app's own (src/index.css): Manrope for text and
  * JetBrains Mono for figures and labels.
+ *
+ * Copy and images follow the website content update (Oct 2026): the headline and one promise, short lines instead of bullet
+ * lists, and four infographics (src/components/landing) that explain the price creep, the order-to-payment journey, where an
+ * order's money goes and the four-step workflow. Every figure in them is a demo figure or a labelled worked example. The trial
+ * length is always TRIAL_DAYS, never typed in, so the page can never promise a trial checkout does not give.
  *
  * The layout follows the Stitch landing page redesign (warm bands between white
  * sections, a tilting hero photo and pricing card, boxed feature steps beside
@@ -77,32 +81,16 @@ const FAQS: { q: string; a: string }[] = [
   },
 ];
 
-const PROBLEMS = [
-  {
-    icon: TrendingUp, accent: 'border-t-coral', chip: 'bg-coral/10 text-coral',
-    title: 'Prices go up quietly',
-    body: "Butter, cream and boxes cost a little more each month. Your menu prices don't move, and the margin slips without anyone noticing.",
-    left: 'Unsalted Butter, demo kitchen', right: '+30%', rightTone: 'bg-coral/10 text-coral',
-  },
-  {
-    icon: MessageCircle, accent: 'border-t-primary', chip: 'bg-primary/10 text-primary',
-    title: 'Money gets lost between chats, cash and UPI',
-    body: "Orders arrive on WhatsApp, advances by UPI, balances in cash. By month-end, nobody's sure who still owes what.",
-    left: 'Pending balances', right: 'Untracked advances', rightTone: 'bg-[#EAF4F3] text-ink',
-  },
-  {
-    icon: Receipt, accent: 'border-t-ink', chip: 'bg-ink/10 text-ink',
-    title: "Sales aren't profit",
-    body: 'Delivery, discounts, card fees, a spoiled batch and the rent all come out of the same money. Most tools stop counting at sales.',
-    left: 'Gross revenue', right: '≠ cash in hand', rightTone: 'bg-coral/10 text-coral',
-  },
+/** The two leaks the infographic above them does not show, one line each. */
+const PROBLEM_LINES = [
+  { lead: 'Money gets lost between chats, cash and UPI.', rest: "Nobody's sure who still owes what.", accent: 'border-t-primary' },
+  { lead: "Sales aren't profit.", rest: 'Delivery, discounts and fees all come out of the same money.', accent: 'border-t-ink' },
 ];
 
-const STEPS = [
-  { title: 'Add your ingredients', body: 'What you have and what you paid, in grams, kilos or pieces.', chip: 'g · kg · ml · l · pcs' },
-  { title: 'Build your recipes', body: 'Each one is costed for you, with a suggested price.', chip: 'Suggested price' },
-  { title: 'Take orders and log bakes', body: 'Paste orders from WhatsApp, book ahead, bill with a UPI QR.', chip: 'WhatsApp + UPI' },
-  { title: 'Read your morning briefing', body: 'True profit, and what to fix today.', chip: 'True profit' },
+/** The two cards after the three feature rows. They carry no picture. */
+const FEATURE_CARDS = [
+  { icon: Sun, title: 'A briefing every morning.', body: "Yesterday's true profit, and what needs your attention today.", chip: 'bg-primary/10 text-primary' },
+  { icon: Boxes, title: 'Stock that keeps itself up to date.', body: 'Log a bake and the ingredients come off. Stockpot tells you what to reorder.', chip: 'bg-margin/15 text-[#0E7A57]' },
 ];
 
 const PLAN_FEATURES = [
@@ -123,29 +111,6 @@ const Reveal: React.FC<{ children: React.ReactNode; className?: string; delay?: 
   >
     {children}
   </motion.div>
-);
-
-const Bullets: React.FC<{ items: string[]; tone?: string }> = ({ items, tone = 'text-primary' }) => (
-  <ul className="space-y-2.5 text-sm text-ink">
-    {items.map(item => (
-      <li key={item} className="flex items-start gap-2.5">
-        <CircleCheck size={18} className={`${tone} shrink-0 mt-0.5`} />
-        <span>{item}</span>
-      </li>
-    ))}
-  </ul>
-);
-
-/** A step tag in the style of the app's column headers: "Step 01". */
-const StepTag: React.FC<{ n: string; tone?: string }> = ({ n, tone = 'bg-[#EAF4F3] text-primary' }) => (
-  <span className={`${MONO} inline-block px-2.5 py-1 rounded-md text-[11px] font-semibold uppercase tracking-[0.08em] mb-3 ${tone}`}>{n}</span>
-);
-
-/** A phone shown in the dark device frame the page draws in CSS: no frame images are needed. */
-const Phone: React.FC<{ src: string; alt: string; className?: string }> = ({ src, alt, className = '' }) => (
-  <div className={`rounded-[2rem] border-[7px] border-ink bg-ink shadow-[0_24px_48px_-12px_rgba(43,49,61,0.4)] overflow-hidden ${className}`}>
-    <img src={src} alt={alt} width={780} height={1688} loading="lazy" decoding="async" className="w-full h-auto block rounded-[1.5rem]" />
-  </div>
 );
 
 /** True when the visitor asked for less motion. A browser that cannot say gets the motion. */
@@ -219,9 +184,15 @@ const Tilt: React.FC<{ children: React.ReactNode; className?: string; max?: numb
   return <div ref={ref} onMouseMove={move} onMouseLeave={leave} className={`landing-tilt ${className}`}>{children}</div>;
 };
 
-/** A white card with a step tag, a heading, its words and a tick list: one feature, boxed. */
-const StepCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <div className={`${CARD_LIFT} p-6 sm:p-7 ${className}`}>{children}</div>
+/** One feature: a title and one line on one side, its picture on the other. The picture drops under the copy on a phone. */
+const FeatureRow: React.FC<{ title: string; line: string; flip?: boolean; children: React.ReactNode }> = ({ title, line, flip = false, children }) => (
+  <div className="grid lg:grid-cols-12 gap-8 lg:gap-14 items-center">
+    <Reveal className={`lg:col-span-4 ${flip ? 'lg:order-2' : ''}`}>
+      <h3 className="text-2xl sm:text-3xl font-bold tracking-tight mb-3">{title}</h3>
+      <p className="text-lg text-muted leading-relaxed">{line}</p>
+    </Reveal>
+    <Reveal className={`lg:col-span-8 min-w-0 ${flip ? 'lg:order-1' : ''}`}>{children}</Reveal>
+  </div>
 );
 
 const LandingPage: React.FC = () => {
@@ -290,7 +261,7 @@ const LandingPage: React.FC = () => {
             >
               <span className="w-2 h-2 rounded-full bg-margin animate-pulse shrink-0" aria-hidden="true" />
               <span className={`${MONO} text-[10px] sm:text-xs font-bold uppercase tracking-wider text-primary`}>
-                For home bakers, chefs, tiffin services &amp; cloud kitchens
+                For home bakers, home chefs, tiffin services and small cloud kitchens
               </span>
             </motion.div>
             <motion.h1
@@ -315,7 +286,7 @@ const LandingPage: React.FC = () => {
               transition={{ duration: 0.5, delay: 0.14 }}
               className="text-lg md:text-xl text-muted max-w-2xl leading-relaxed mb-8"
             >
-              Stockpot tracks your ingredients, orders, and fluctuating costs. It calculates what every single order actually earns you — after packaging, delivery, discounts, payment fees, and GST.
+              Stockpot tracks your ingredients, orders and costs, and shows what every order actually earns you — after packaging, delivery, discounts, payment fees and GST.
             </motion.p>
             <motion.div
               initial={{ opacity: 0, y: 14 }}
@@ -327,11 +298,11 @@ const LandingPage: React.FC = () => {
                 Start your {TRIAL_DAYS}-day free trial
               </Link>
               <a href="#how" className={`${BTN_SECONDARY} w-full sm:w-auto`}>
-                Explore Kitchen Tour <ArrowRight size={16} />
+                See how it works <ArrowRight size={16} />
               </a>
             </motion.div>
             <p className={`${MONO} mt-4 mb-12 sm:mb-16 flex flex-col sm:flex-row items-center justify-center gap-x-2 gap-y-1 text-xs md:text-sm text-muted`}>
-              <span><span className="font-semibold text-ink">{PRICE.symbol}{PRICE.amount}</span> /{PRICE.period} after trial</span>
+              <span><span className="font-semibold text-ink">{PRICE.symbol}{PRICE.amount}</span>/{PRICE.period} after the trial</span>
               <span className="hidden sm:inline text-[#D0E4E2]" aria-hidden="true">•</span>
               <span className="inline-flex items-center gap-2">
                 Card required to start
@@ -393,95 +364,48 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        {/* 2. Problem */}
+        {/* 2. Problem: the price creep, then two leaks in a line each */}
         <section className={`${BAND_WARM} ${SECTION}`}>
           <div className={WRAP}>
-            <Reveal className="max-w-2xl mx-auto text-center mb-12 sm:mb-14">
+            <Reveal className="max-w-2xl mx-auto text-center mb-10 sm:mb-12">
               <span className={`${EYEBROW} block mb-2`}>The profit leak audit</span>
               <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em]">
-                Busy every day. Still not sure how much money you made?
+                Busy every day. Still not sure what you made?
               </h2>
             </Reveal>
-            <div className="grid md:grid-cols-3 gap-5 lg:gap-6">
-              {PROBLEMS.map(({ icon: Icon, accent, chip, title, body, left, right, rightTone }, i) => (
-                <Reveal key={title} delay={i * 0.08} className={`landing-lift bg-white rounded-2xl shadow-[0_2px_6px_rgba(43,49,61,0.05)] border-t-4 ${accent} p-6 lg:p-7 flex flex-col justify-between`}>
-                  <div>
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-5 ${chip}`}>
-                      <Icon size={22} />
-                    </div>
-                    <h3 className="text-lg lg:text-xl font-bold mb-2">{title}</h3>
-                    <p className="text-muted leading-relaxed">{body}</p>
-                  </div>
-                  <div className="mt-6 pt-3.5 border-t border-[#D0E4E2]/70 flex items-center justify-between gap-3 text-xs">
-                    <span className="text-muted">{left}</span>
-                    <span className={`${MONO} font-semibold px-2 py-0.5 rounded ${rightTone}`}>{right}</span>
-                  </div>
+            <Reveal>
+              <PriceCreepGraphic />
+            </Reveal>
+            <div className="grid md:grid-cols-2 gap-5 lg:gap-6 mt-6 lg:mt-8 max-w-[1080px] mx-auto">
+              {PROBLEM_LINES.map(({ lead, rest, accent }, i) => (
+                <Reveal key={lead} delay={i * 0.08} className={`landing-lift bg-white rounded-2xl shadow-[0_2px_6px_rgba(43,49,61,0.05)] border-t-4 ${accent} p-6 lg:p-7`}>
+                  <p className="text-lg leading-snug"><strong className="font-bold">{lead}</strong> <span className="text-muted">{rest}</span></p>
                 </Reveal>
               ))}
             </div>
           </div>
         </section>
 
-        {/* 3. Features */}
+        {/* 3. Features: three rows, alternating sides, then two cards and a line about India */}
         <section id="features" className={`scroll-mt-20 ${SECTION}`}>
           <div className={`${WRAP} flex flex-col gap-16 sm:gap-20 lg:gap-24`}>
             <Reveal className="max-w-3xl">
               <span className={`${EYEBROW} block mb-2`}>What&apos;s inside</span>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] mb-4">Everything between the order and the profit</h2>
-              <p className="text-lg text-muted leading-relaxed">
-                Built around how a home food business actually runs: WhatsApp orders, UPI payments, made-to-order cakes and prices that change every month.
-              </p>
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em]">Everything between the order and the profit</h2>
             </Reveal>
 
-            {/* Row 1: take orders, get paid, beside two phones */}
-            <div className="grid lg:grid-cols-12 gap-10 lg:gap-14 items-center">
-              <div className="lg:col-span-6 flex flex-col gap-6 sm:gap-8">
-                <Reveal>
-                  <StepCard>
-                    <StepTag n="01" />
-                    <h3 className="text-2xl font-bold tracking-tight mb-3">Take orders the way customers send them</h3>
-                    <p className="text-muted leading-relaxed mb-4">
-                      Paste a customer&apos;s WhatsApp message and Stockpot fills in the order for you: items, quantities, date, address and any advance. You check it and save. Booking ahead for a birthday cake? Make it a pre-order — no baked stock needed until the day.
-                    </p>
-                    <Bullets items={[
-                      'Past customers suggested as you type a name or number',
-                      'Pre-orders with a time slot, notes and an advance',
-                      '"Due today" and "Due tomorrow" waiting on your dashboard',
-                      'Shopify and Odoo orders imported too',
-                    ]} />
-                  </StepCard>
-                </Reveal>
-                <Reveal delay={0.08}>
-                  <StepCard>
-                    <StepTag n="02" tone="bg-margin/15 text-[#0E7A57]" />
-                    <h3 className="text-2xl font-bold tracking-tight mb-3">Get paid without chasing</h3>
-                    <p className="text-muted leading-relaxed mb-4">
-                      Send a clean bill on WhatsApp in a tap, with a UPI QR for exactly what&apos;s due — the balance, if they&apos;ve paid an advance. Customers who pay later get one statement for everything they owe.
-                    </p>
-                    <Bullets tone="text-margin" items={[
-                      'Itemised bill with discount and GST',
-                      'UPI QR and a view-online link on every bill',
-                      'Pending payments, customer by customer',
-                      'Your menu as a branded PDF, ready to share',
-                    ]} />
-                  </StepCard>
-                </Reveal>
-              </div>
-              <Reveal className="lg:col-span-6 flex justify-center">
-                <div className="grid grid-cols-2 gap-4 sm:gap-5 w-full max-w-md sm:max-w-lg">
-                  <Phone
-                    src="/landing/phone-order.webp"
-                    alt="Stockpot's Add Order form on a phone, filled in from a pasted WhatsApp message: 12 butter croissants and 6 chocolate muffins, set as a pre-order"
-                    className="transition-transform duration-300 hover:-rotate-1"
-                  />
-                  <Phone
-                    src="/landing/phone-bill.webp"
-                    alt="The bill for that order on a phone: items, an advance received, the balance due and a UPI QR code for the balance"
-                    className="mt-8 sm:mt-12 transition-transform duration-300 hover:rotate-1"
-                  />
-                </div>
-              </Reveal>
-            </div>
+            <FeatureRow
+              title="Take orders the way customers send them"
+              line="Paste a WhatsApp message and Stockpot fills in the order, advance and all. The bill's UPI QR asks only for what's still due."
+            >
+              <OrderJourneyGraphic />
+            </FeatureRow>
+
+            <FeatureRow title="Know what every order made" flip
+              line="Ingredients, packaging, delivery, discounts and fees come off every order, so the profit you see is the profit you keep."
+            >
+              <WhereMoneyGoesGraphic />
+            </FeatureRow>
 
             {/* A food photo between the rows, drifting a little as it crosses the screen */}
             <Reveal className="relative h-60 sm:h-72 lg:h-80 rounded-3xl overflow-hidden border border-[#dfd5c6] shadow-lg">
@@ -503,142 +427,60 @@ const LandingPage: React.FC = () => {
               </div>
             </Reveal>
 
-            {/* Row 2: what an order made, when a price needs to go up, beside the laptop */}
-            <div className="grid lg:grid-cols-12 gap-10 lg:gap-14 items-center">
-              <Reveal className="lg:col-span-7 order-2 lg:order-1">
-                <div className="landing-lift rounded-2xl bg-ink p-2.5 sm:p-4 shadow-2xl border border-ink">
-                  <div className="flex items-center gap-2 mb-2 px-2" aria-hidden="true">
-                    <span className="w-2.5 h-2.5 rounded-full bg-coral" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
-                    <span className="w-2.5 h-2.5 rounded-full bg-margin" />
-                  </div>
-                  <div className="rounded-xl overflow-hidden border border-white/10">
-                    <img
-                      src="/landing/laptop-pricing.webp"
-                      alt="Stockpot's Menu on a laptop with Needs repricing on: Butter Croissant's margin has slipped from 62% to 53% because Unsalted Butter is up 30%, with a button to use a price that brings the margin back"
-                      width={1440}
-                      height={900}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-auto block"
-                    />
-                  </div>
+            <FeatureRow title="Know when a price needs to go up"
+              line="When an ingredient gets dearer, Stockpot tells you which items slipped and suggests a price that wins the margin back."
+            >
+              <div className="landing-lift rounded-2xl bg-ink p-2.5 sm:p-4 shadow-2xl border border-ink">
+                <div className="flex items-center gap-2 mb-2 px-2" aria-hidden="true">
+                  <span className="w-2.5 h-2.5 rounded-full bg-coral" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-margin" />
                 </div>
-              </Reveal>
-              <Reveal className="lg:col-span-5 order-1 lg:order-2">
-                <StepCard className="flex flex-col gap-8">
-                  <div>
-                    <StepTag n="03" />
-                    <h3 className="text-2xl font-bold tracking-tight mb-3">Know how much money every order made</h3>
-                    <p className="text-muted leading-relaxed mb-4">
-                      Every order shows what you made on it after ingredients, packaging, delivery, discounts, payment fees and GST. Your dashboard then takes off wastage and your rent, gas and salaries, so the profit you see is the profit you keep.
-                    </p>
-                    <Bullets items={[
-                      'Prices and costs locked in when the order is taken — a price change never rewrites last month',
-                      'Profit for each product, not just the total',
-                      'GST-inclusive or exclusive pricing, handled either way',
-                      'Fixed costs spread across any day, week or month',
-                    ]} />
-                  </div>
-                  <div className="pt-8 border-t border-[#D0E4E2]">
-                    <StepTag n="04" tone="bg-coral/10 text-coral" />
-                    <h3 className="text-2xl font-bold tracking-tight mb-3">Know when a price needs to go up</h3>
-                    <p className="text-muted leading-relaxed mb-4">
-                      Stockpot remembers what each item cost when you priced it. When an ingredient gets dearer, it tells you which items slipped and why — &ldquo;Butter +30%&rdquo; — and suggests a price that gets your margin back.
-                    </p>
-                    <Bullets items={[
-                      'Suggested prices for the margin you want, GST included',
-                      '"What if I raise prices 8%?" answered before you change anything',
-                      'Price history for every ingredient',
-                    ]} />
-                  </div>
-                </StepCard>
-              </Reveal>
-            </div>
+                <div className="rounded-xl overflow-hidden border border-white/10">
+                  <img
+                    src="/landing/laptop-pricing.webp"
+                    alt="Stockpot's Menu on a laptop with Needs repricing on: Butter Croissant's margin has slipped from 62% to 53% because Unsalted Butter is up 30%, with a button to use a price that brings the margin back"
+                    width={1440}
+                    height={900}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-auto block"
+                  />
+                </div>
+              </div>
+            </FeatureRow>
 
-            {/* Briefing and stock, as cards */}
-            <div className="grid md:grid-cols-2 gap-5 lg:gap-6">
-              <Reveal className={`${CARD_LIFT} p-7 flex flex-col`}>
-                <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-5"><Sun size={22} /></div>
-                <h3 className="text-xl font-bold mb-3">A business briefing every morning</h3>
-                <p className="text-muted leading-relaxed mb-6">
-                  Open Stockpot to yesterday&apos;s sales and true profit, why they moved, and what needs your attention today. Ask in plain words — &ldquo;What should I stop selling?&rdquo; — and get answers from your own numbers.
-                </p>
-                <ul className="mt-auto space-y-2 text-sm pt-4 border-t border-[#D0E4E2]/70">
-                  {[
-                    'Repricing, price rises, low stock and customers due, flagged for you',
-                    'Stockpot does the maths; the AI explains it',
-                    "Your customers' phone numbers are never sent to the AI",
-                  ].map(t => (
-                    <li key={t} className="flex items-start gap-2.5"><span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-2" />{t}</li>
-                  ))}
-                </ul>
-              </Reveal>
-              <Reveal delay={0.08} className={`${CARD_LIFT} p-7 flex flex-col`}>
-                <div className="w-11 h-11 rounded-xl bg-margin/15 text-[#0E7A57] flex items-center justify-center mb-5"><Boxes size={22} /></div>
-                <h3 className="text-xl font-bold mb-3">Stock that keeps itself up to date</h3>
-                <p className="text-muted leading-relaxed mb-6">
-                  Restock in grams or kilos. Log a bake and the ingredients come off by themselves. Stockpot warns you before something runs out and tells you how much to order.
-                </p>
-                <ul className="mt-auto space-y-2 text-sm pt-4 border-t border-[#D0E4E2]/70">
-                  {[
-                    'Reorder suggestions from your last four weeks',
-                    'Batches with expiry dates, and what\'s left after orders',
-                    'Wastage and recipe trials tracked separately',
-                    'Nutrition and allergens per serving',
-                  ].map(t => (
-                    <li key={t} className="flex items-start gap-2.5"><span className="w-1.5 h-1.5 rounded-full bg-margin shrink-0 mt-2" />{t}</li>
-                  ))}
-                </ul>
-              </Reveal>
-            </div>
-
-            {/* Two small tiles */}
-            <div className="grid sm:grid-cols-2 gap-5 lg:gap-6 -mt-4 lg:-mt-8">
-              <Reveal className="landing-lift p-5 rounded-2xl bg-[#faf7f2] border border-[#ebdcc8] flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl bg-[#fae8d4] text-[#8e4b10] flex items-center justify-center shrink-0"><Send size={18} /></div>
-                <div>
-                  <h4 className="font-bold mb-1">Customers worth a message</h4>
-                  <p className="text-sm text-muted leading-relaxed">See who&apos;s due for their usual order and who&apos;s gone quiet, then nudge them on WhatsApp with their favourite item.</p>
-                </div>
-              </Reveal>
-              <Reveal delay={0.08} className="landing-lift p-5 rounded-2xl bg-[#EAF4F3] border border-[#d2ebe7] flex items-start gap-4">
-                <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0"><IndianRupee size={18} /></div>
-                <div>
-                  <h4 className="font-bold mb-1">Built for India</h4>
-                  <p className="text-sm text-muted leading-relaxed">Rupees, GST, UPI, and ingredient names like maida, besan and ragi. Weigh in grams, kilos, millilitres, litres or pieces.</p>
-                </div>
+            {/* Two short cards, no picture */}
+            <div>
+              <div className="grid md:grid-cols-2 gap-5 lg:gap-6">
+                {FEATURE_CARDS.map(({ icon: Icon, title, body, chip }, i) => (
+                  <Reveal key={title} delay={i * 0.08} className={`${CARD_LIFT} p-6 sm:p-7 flex items-start gap-4`}>
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${chip}`}><Icon size={22} /></div>
+                    <div>
+                      <h3 className="text-xl font-bold mb-1.5">{title}</h3>
+                      <p className="text-muted leading-relaxed">{body}</p>
+                    </div>
+                  </Reveal>
+                ))}
+              </div>
+              <Reveal className="mt-6 flex items-center justify-center gap-2.5 text-center text-muted">
+                <IndianRupee size={18} className="text-primary shrink-0" aria-hidden="true" />
+                <p><strong className="font-bold text-ink">Built for India:</strong> rupees, GST, UPI, WhatsApp, and grams to litres.</p>
               </Reveal>
             </div>
           </div>
         </section>
 
-        {/* 4. How it works */}
+        {/* 4. How it works: the four steps as a flow */}
         <section id="how" className={`scroll-mt-20 ${BAND_COOL} ${SECTION}`}>
           <div className={WRAP}>
-            <Reveal className="text-center max-w-2xl mx-auto mb-12 sm:mb-16">
+            <Reveal className="text-center max-w-2xl mx-auto mb-10 sm:mb-12">
               <span className={`${EYEBROW} block mb-2`}>Simple workflow</span>
               <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em]">From ingredients to true profit in four steps</h2>
             </Reveal>
-            <ol className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
-              {STEPS.map((step, i) => {
-                const last = i === STEPS.length - 1;
-                return (
-                  <li key={step.title} className="flex">
-                    <Reveal delay={i * 0.07} className={`landing-lift bg-white p-6 rounded-2xl border-2 ${last ? 'border-margin/30 hover:border-margin' : 'border-primary/20 hover:border-primary'} shadow-[0_2px_6px_rgba(43,49,61,0.04)] flex flex-col w-full`}>
-                      <span className={`${MONO} text-3xl font-extrabold mb-4 ${last ? 'text-margin' : 'text-primary'}`}>
-                        {String(i + 1).padStart(2, '0')}
-                      </span>
-                      <h3 className="text-lg font-bold mb-1.5">{step.title}</h3>
-                      <p className="text-sm text-muted leading-relaxed mb-6">{step.body}</p>
-                      <span className={`${MONO} mt-auto self-start px-2.5 py-1 rounded-md text-xs font-semibold ${last ? 'bg-margin/15 text-[#0E7A57]' : 'bg-[#EAF4F3] text-primary'}`}>
-                        {step.chip}
-                      </span>
-                    </Reveal>
-                  </li>
-                );
-              })}
-            </ol>
+            <Reveal>
+              <WorkflowGraphic showHeading={false} />
+            </Reveal>
           </div>
         </section>
 
@@ -730,7 +572,7 @@ const LandingPage: React.FC = () => {
           />
           <div className="absolute inset-0 bg-ink/75" />
           <Reveal className={`${WRAP} relative max-w-4xl text-center text-white flex flex-col items-center`}>
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] leading-tight mb-4">Know exactly how much money you made this week.</h2>
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] leading-tight mb-4">Know exactly how much money your food business makes.</h2>
             <p className="text-lg text-white/90 mb-8 max-w-xl">
               Start your {TRIAL_DAYS}-day free trial and see your true profit by tomorrow morning.
             </p>

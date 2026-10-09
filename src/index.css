@@ -106,3 +106,129 @@
   .landing-lift:hover { translate: none; }
   .landing-shimmer::after { display: none; }
 }
+
+/*
+ * The landing page's four infographics (src/components/landing/Infographics.tsx). Layout, colours and type follow the reference in
+ * the website content update. They respond to the width of the space they are in (container queries), so the same graphic works
+ * full width, in half a row and on a phone. Colours are written out (not theme variables) so they never depend on what else the
+ * page uses.
+ */
+.ig-frame { container-type: inline-size; width: 100%; }
+.ig {
+  --ig-primary: #00797B; --ig-primary-dark: #006365; --ig-primary-light: #7BD5D7; --ig-surface: #EAF4F3;
+  --ig-ink: #2B313D; --ig-muted: #5A5A5A; --ig-line: #D5E4E2; --ig-coral: #E4536B; --ig-margin: #1FA97A;
+  max-width: 1080px; margin: 0 auto; text-align: left; color: var(--ig-ink);
+  background: #fff; border: 1px solid var(--ig-line); border-radius: 20px; padding: 40px 44px;
+  box-shadow: 0 2px 6px rgba(43, 49, 61, 0.04);
+}
+.ig b { font-weight: 700; }
+.ig-eyebrow { font: 600 12px/1 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--ig-primary); }
+.ig-title { font-weight: 800; font-size: 30px; line-height: 1.15; letter-spacing: -0.02em; margin: 12px 0 8px; }
+.ig-lede { color: var(--ig-muted); font-size: 16px; line-height: 1.5; max-width: 620px; margin: 0; }
+.ig-foot { color: var(--ig-muted); font-size: 13px; line-height: 1.5; margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--ig-line); }
+.ig-foot b { color: var(--ig-ink); }
+.ig-key { display: flex; gap: 20px; margin-top: 22px; font-size: 13px; color: var(--ig-muted); }
+.ig-key span { display: inline-flex; align-items: center; gap: 8px; }
+.ig-key i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+
+/* 1. Same price, smaller margin */
+.ig-creep { margin-top: 30px; display: grid; gap: 22px; }
+.ig-crow { display: grid; grid-template-columns: 200px 1fr; gap: 20px; align-items: center; }
+.ig-clabel-t { font-weight: 700; font-size: 15px; }
+.ig-clabel-s { color: var(--ig-muted); font-size: 13px; margin-top: 3px; }
+.ig-ctrack { padding-right: 76px; }
+.ig-cin { position: relative; }
+.ig-cbar { display: flex; height: 44px; gap: 2px; }
+.ig-cbar > div { height: 100%; display: flex; align-items: center; padding: 0 12px; color: #fff; font: 600 13px/1 var(--font-mono); white-space: nowrap; overflow: hidden; }
+.ig-cbar .cost { background: var(--ig-coral); border-radius: 6px 0 0 6px; flex: none; }
+.ig-cbar .mar { background: var(--ig-margin); border-radius: 0 6px 6px 0; flex: 1; justify-content: space-between; }
+.ig-cprice { position: absolute; top: 50%; transform: translateY(-50%); font: 700 18px/1 var(--font-mono); padding-left: 12px; white-space: nowrap; }
+.ig-cnote { margin: -8px 0 -8px 220px; display: flex; align-items: center; gap: 10px; color: var(--ig-coral); font-weight: 700; font-size: 14px; }
+.ig-cnote .pill { background: #FCE8EC; border-radius: 999px; padding: 5px 12px; }
+.ig-cnote.good { color: var(--ig-primary-dark); }
+.ig-cnote.good .pill { background: var(--ig-surface); }
+
+/* 2. From a WhatsApp message to paid in full */
+.ig-tl { margin: 30px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; position: relative; }
+.ig-tl::before { content: ""; position: absolute; left: 12.5%; right: 12.5%; top: 17px; height: 2px; background: var(--ig-primary-light); }
+.ig-step { position: relative; text-align: center; }
+.ig-step .dot { width: 36px; height: 36px; border-radius: 50%; background: var(--ig-margin); border: 2px solid var(--ig-margin); margin: 0 auto; display: grid; place-items: center; font: 700 13px/1 var(--font-mono); color: #fff; position: relative; }
+.ig-step h5 { font-weight: 800; font-size: 16px; margin: 14px 0 0; }
+.ig-step .card { margin-top: 10px; background: var(--ig-surface); border-radius: 12px; padding: 12px; font-size: 13px; line-height: 1.45; text-align: left; min-height: 84px; }
+.ig-step .card.wa { background: #E7F6EC; }
+.ig-step .card .k { font: 600 12px/1.5 var(--font-mono); }
+.ig-money { margin-top: 28px; }
+.ig-money .lbl { display: flex; justify-content: space-between; font-size: 13px; color: var(--ig-muted); margin-bottom: 8px; }
+.ig-money .lbl b { color: var(--ig-ink); font: 700 15px/1 var(--font-mono); }
+.ig-mbar { display: flex; gap: 2px; height: 40px; }
+.ig-mbar div { display: flex; align-items: center; padding: 0 12px; color: #fff; font: 600 13px/1 var(--font-mono); white-space: nowrap; }
+.ig-mbar .adv { background: var(--ig-primary); border-radius: 6px 0 0 6px; flex: none; }
+.ig-mbar .bal { background: var(--ig-margin); border-radius: 0 6px 6px 0; flex: 1; justify-content: space-between; }
+
+/* 3. ₹1,200 in sales, ₹603 made */
+.ig-wf { margin-top: 30px; display: grid; gap: 10px; }
+.ig-wrow { display: grid; grid-template-columns: 230px 1fr 110px; gap: 18px; align-items: center; }
+.ig-wrow .wname { font-weight: 600; font-size: 15px; }
+.ig-wrow .wname small { display: block; color: var(--ig-muted); font-weight: 500; font-size: 12px; margin-top: 2px; }
+.ig-wrow .wtrack { position: relative; height: 36px; background: repeating-linear-gradient(90deg, transparent 0 calc(25% - 1px), var(--ig-line) calc(25% - 1px) 25%); }
+.ig-wrow .wbar { position: absolute; top: 0; bottom: 0; border-radius: 6px; }
+.ig-wrow .wval { font: 600 15px/1 var(--font-mono); text-align: right; }
+.ig-wrow.neg .wbar { background: var(--ig-coral); }
+.ig-wrow.neg .wval { color: var(--ig-coral); }
+.ig-wrow.tot .wbar { background: var(--ig-ink); }
+.ig-wrow.made .wbar { background: var(--ig-margin); }
+.ig-wrow.made .wval { color: var(--ig-margin); font-size: 18px; font-weight: 700; }
+.ig-wrow.made .wname { font-weight: 800; }
+.ig-wrow.made { margin-top: 6px; padding-top: 12px; border-top: 1px dashed var(--ig-line); }
+
+/* 4. The four steps as a flow */
+.ig-flow { margin: 34px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: 1fr 74px 1fr 74px 1fr 74px 1fr; align-items: stretch; }
+.ig-node { background: var(--ig-surface); border-radius: 16px; padding: 20px 18px; position: relative; }
+.ig-node .n { font: 600 12px/1 var(--font-mono); color: var(--ig-primary); }
+.ig-node .ic { width: 40px; height: 40px; border-radius: 12px; background: var(--ig-primary); display: grid; place-items: center; margin: 12px 0 14px; }
+.ig-node .ic svg { width: 22px; height: 22px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ig-node h5 { font-weight: 800; font-size: 17px; line-height: 1.2; margin: 0; }
+.ig-node p { color: var(--ig-muted); font-size: 13px; line-height: 1.45; margin: 6px 0 0; }
+.ig-node .ex { margin-top: 12px; font: 600 12px/1.4 var(--font-mono); background: #fff; border-radius: 8px; padding: 8px 10px; }
+.ig-node.last { background: var(--ig-primary); }
+.ig-node.last .n { color: var(--ig-primary-light); }
+.ig-node.last h5 { color: #fff; }
+.ig-node.last p { color: #CDEBEC; }
+.ig-node.last .ic { background: #fff; }
+.ig-node.last .ic svg { stroke: var(--ig-primary); }
+.ig-node.last .ex { background: var(--ig-primary-dark); color: #fff; }
+.ig-arrow { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; }
+.ig-arrow svg { width: 30px; height: 16px; stroke: var(--ig-primary); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ig-arrow span { font: 600 10px/1.25 var(--font-mono); color: var(--ig-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.ig-loop { margin-top: 16px; display: flex; align-items: center; gap: 12px; border: 1.5px dashed var(--ig-primary-light); border-radius: 14px; padding: 12px 16px; font-size: 14px; }
+.ig-loop svg { flex: none; width: 22px; height: 22px; stroke: var(--ig-primary); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* The flow needs room for four steps; narrower than that it stacks, with the arrows pointing down */
+@container (max-width: 900px) {
+  .ig-flow { grid-template-columns: 1fr; }
+  .ig-arrow { flex-direction: row; padding: 8px 0; }
+  .ig-arrow svg { transform: rotate(90deg); }
+}
+/* On a phone, or in a narrow column */
+@container (max-width: 720px) {
+  .ig { padding: 24px 18px; border-radius: 16px; }
+  .ig-title { font-size: 23px; }
+  .ig-lede { font-size: 15px; }
+  .ig-crow { grid-template-columns: 1fr; gap: 8px; }
+  .ig-ctrack { padding-right: 62px; }
+  .ig-cnote { margin: 0; }
+  .ig-cbar { height: 38px; }
+  .ig-cbar > div { padding: 0 8px; font-size: 12px; }
+  .ig-cprice { font-size: 15px; padding-left: 8px; }
+  .ig-key { flex-wrap: wrap; gap: 10px 18px; }
+  .ig-tl { grid-template-columns: 1fr; gap: 14px; }
+  .ig-tl::before { left: 17px; right: auto; top: 18px; bottom: 18px; width: 2px; height: auto; }
+  .ig-step { display: grid; grid-template-columns: 36px 1fr; gap: 4px 14px; text-align: left; }
+  .ig-step .dot { margin: 0; grid-row: 1 / span 2; }
+  .ig-step h5 { margin-top: 8px; }
+  .ig-step .card { margin-top: 0; min-height: 0; }
+  .ig-mbar div { font-size: 11px; padding: 0 8px; }
+  .ig-wrow { grid-template-columns: 1fr auto; gap: 6px 12px; }
+  .ig-wrow .wtrack { grid-column: 1 / -1; grid-row: 2; height: 26px; }
+  .ig-wrow .wname, .ig-wrow .wval { grid-row: 1; }
+}
