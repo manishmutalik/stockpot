@@ -1,5 +1,17 @@
 # Changelog
 
+## Landing page: new layout
+
+The landing page has the layout of the Stitch redesign; every word on it is unchanged. What moved: a warm tinted hero with a
+photo that tilts toward the mouse, a floating "Made ₹743.04" badge and a slow glow; warm and cool tinted bands between the
+white sections; the four feature steps in boxed cards beside the screenshots (steps 03 and 04 share one card, the two phones
+sit side by side, the laptop is in a dark window frame); the food photo and the closing photo drift a little as they scroll past;
+the four steps are cards with a large number; the pricing card is narrower, tilts and has green ticks; the FAQ is two columns
+(one answer open at a time, as before); the closing call to action runs the full width over a dark photo; and the footer is dark.
+The header gets a shadow once the page scrolls. The redesign's own copy was not used (it made claims the product does not back
+up, such as "Kitchen Margin OS" and "+ 18% GST", which the landing page tests rule out). All the motion is off for visitors who
+ask for reduced motion. Web only; needs a redeploy.
+
 ## Online payments: Settings screen (step 2 of 3)
 
 Settings, Business & GST now has an **Online payments** card, next to Payment fees. The owner chooses Razorpay, Cashfree or
