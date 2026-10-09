@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import LandingPage from '../LandingPage';
 
@@ -146,5 +146,91 @@ describe('LandingPage', () => {
     expect(document.head.querySelector('link[href*="fonts.googleapis"]')).toBeNull();
     unmount();
     expect(document.documentElement.style.scrollBehavior).toBe(before);
+  });
+
+  it('lays the FAQ out in two columns, in order, with every question present', () => {
+    const { container } = renderPage();
+    const buttons = [...container.querySelectorAll('section#faq button[aria-expanded]')].map(b => b.textContent);
+    expect(buttons).toHaveLength(10);
+    const columns = [...container.querySelectorAll('section#faq .md\\:grid-cols-2 > div')];
+    expect(columns).toHaveLength(2);
+    const names = columns.map(col => [...col.querySelectorAll('button[aria-expanded]')].map(b => b.textContent));
+    expect(names[0]).toHaveLength(5);
+    expect(names[1]).toHaveLength(5);
+    expect(names[0][0]).toBe('Do I need a GST number?');
+    expect(names[1][4]).toBe('Can I try it before I pay?');
+    expect([...names[0], ...names[1]]).toEqual(buttons);
+  });
+
+  it('puts every footer link in the footer nav, and keeps the copyright', () => {
+    const { container } = renderPage();
+    const nav = container.querySelector('footer nav[aria-label="Footer"]')!;
+    expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Features', 'Pricing', 'FAQ', 'Log in', 'Terms of Service', 'Privacy Policy']);
+    expect(container.querySelector('footer')!.textContent).toContain(`© ${new Date().getFullYear()} Stockpot. All rights reserved.`);
+  });
+});
+
+describe('LandingPage motion', () => {
+  const realMatchMedia = window.matchMedia;
+  afterEach(() => {
+    window.matchMedia = realMatchMedia;
+    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
+  });
+  const scrollTo = (y: number) => act(async () => {
+    Object.defineProperty(window, 'scrollY', { value: y, configurable: true });
+    window.dispatchEvent(new Event('scroll'));
+    await new Promise(r => requestAnimationFrame(() => r(null)));
+  });
+  const mockMotion = (reduced: boolean) => {
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('prefers-reduced-motion') ? reduced : true,
+      media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+  };
+
+  it('puts a shadow on the header once the page has scrolled, and takes it off at the top', async () => {
+    const { container } = renderPage();
+    const header = container.querySelector('header')!;
+    expect(header.className).not.toContain('shadow-md');
+    await scrollTo(200);
+    expect(header.className).toContain('shadow-md');
+    await scrollTo(0);
+    expect(header.className).not.toContain('shadow-md');
+  });
+
+  it('drifts the hero glow with the scroll', async () => {
+    mockMotion(false);
+    const { container } = renderPage();
+    const glow = container.querySelector('section div[aria-hidden="true"]') as HTMLElement;
+    await scrollTo(500);
+    expect(glow.style.transform).toBe('translate3d(0, 90.0px, 0)');
+  });
+
+  it('keeps everything still for a visitor who asked for reduced motion', async () => {
+    mockMotion(true);
+    const { container } = renderPage();
+    const glow = container.querySelector('section div[aria-hidden="true"]') as HTMLElement;
+    await scrollTo(500);
+    expect(glow.style.transform).toBe('');
+    for (const img of container.querySelectorAll('img[src="/landing/pastries.webp"], img[src="/landing/sourdough.webp"]')) {
+      expect((img as HTMLElement).style.transform).toBe('');
+    }
+    // the tilt does nothing either
+    const tilt = container.querySelector('.landing-tilt') as HTMLElement;
+    fireEvent.mouseMove(tilt, { clientX: 10, clientY: 10 });
+    await act(async () => { await new Promise(r => requestAnimationFrame(() => r(null))); });
+    expect(tilt.style.transform).toBe('');
+  });
+
+  it('tilts toward the mouse and settles back when it leaves', async () => {
+    mockMotion(false);
+    const { container } = renderPage();
+    const tilt = container.querySelector('.landing-tilt') as HTMLElement;
+    tilt.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100, right: 200, bottom: 100, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    fireEvent.mouseMove(tilt, { clientX: 200, clientY: 0 });
+    await act(async () => { await new Promise(r => requestAnimationFrame(() => r(null))); });
+    expect(tilt.style.transform).toContain('rotateX(5.00deg) rotateY(5.00deg)');
+    fireEvent.mouseLeave(tilt);
+    expect(tilt.style.transform).toBe('');
   });
 });

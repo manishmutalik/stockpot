@@ -65,3 +65,44 @@
 .surface-card:hover {
   box-shadow: 0 10px 28px -4px rgba(43, 49, 61, 0.08), 0 4px 10px -2px rgba(43, 49, 61, 0.03);
 }
+
+/*
+ * Landing page motion (src/LandingPage.tsx): a floating badge, a slow glow, cards that lift on hover, a shimmer across the main
+ * buttons. Moves use `translate`, not `transform`, so they do not fight the scroll-reveal animation on the same element.
+ * All of it is switched off for visitors who ask for reduced motion.
+ */
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-7px) scale(1.015); }
+}
+@keyframes landing-glow {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.75; transform: scale(1.08) translateY(-4%); }
+}
+.landing-float { animation: landing-float 5s ease-in-out infinite; }
+.landing-glow { animation: landing-glow 8s ease-in-out infinite alternate; }
+.landing-lift {
+  transition: translate 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.3s ease;
+}
+.landing-lift:hover { translate: 0 -4px; box-shadow: 0 14px 28px -8px rgba(22, 28, 39, 0.1); }
+.landing-tilt { transition: transform 0.15s ease-out; will-change: transform; }
+.landing-shimmer { position: relative; overflow: hidden; }
+.landing-shimmer::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -60%;
+  width: 40%;
+  height: 200%;
+  background: linear-gradient(60deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.22) 50%, rgba(255, 255, 255, 0) 100%);
+  transform: rotate(25deg);
+  pointer-events: none;
+  transition: left 0.75s ease;
+}
+.landing-shimmer:hover::after { left: 130%; }
+@media (prefers-reduced-motion: reduce) {
+  .landing-float, .landing-glow { animation: none; }
+  .landing-lift, .landing-tilt { transition: none; }
+  .landing-lift:hover { translate: none; }
+  .landing-shimmer::after { display: none; }
+}
