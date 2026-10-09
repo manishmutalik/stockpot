@@ -191,7 +191,7 @@ function useBandParallax<C extends HTMLElement, I extends HTMLElement>(strength:
       img.style.transform = `translate3d(0, ${y.toFixed(1)}px, 0) scale(1.06)`;
     });
   }, [strength]);
-  return { frame, image };
+  return [frame, image] as const;
 }
 
 /** Tilts what is inside it a few degrees toward the mouse. Only for a mouse (not touch) and not for reduced motion. */
@@ -229,8 +229,8 @@ const LandingPage: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const glowA = useDrift<HTMLDivElement>(0.18);
   const glowB = useDrift<HTMLDivElement>(-0.12);
-  const panorama = useBandParallax<HTMLDivElement, HTMLImageElement>(36);
-  const closing = useBandParallax<HTMLElement, HTMLImageElement>(48);
+  const [panoramaFrame, panoramaImage] = useBandParallax<HTMLDivElement, HTMLImageElement>(36);
+  const [closingFrame, closingImage] = useBandParallax<HTMLElement, HTMLImageElement>(48);
 
   // Smooth-scroll the in-page anchors while the page is open.
   useEffect(() => {
@@ -485,9 +485,9 @@ const LandingPage: React.FC = () => {
 
             {/* A food photo between the rows, drifting a little as it crosses the screen */}
             <Reveal className="relative h-60 sm:h-72 lg:h-80 rounded-3xl overflow-hidden border border-[#dfd5c6] shadow-lg">
-              <div ref={panorama.frame} className="absolute inset-0 overflow-hidden">
+              <div ref={panoramaFrame} className="absolute inset-0 overflow-hidden">
                 <img
-                  ref={panorama.image}
+                  ref={panoramaImage}
                   src="/landing/pastries.webp" alt="" aria-hidden="true" loading="lazy" decoding="async"
                   className="absolute left-0 w-full h-[130%] -top-[15%] object-cover will-change-transform"
                 />
@@ -722,9 +722,9 @@ const LandingPage: React.FC = () => {
         </section>
 
         {/* 7. Final call to action, full width over a dark bakery photo */}
-        <section ref={closing.frame} className="relative overflow-hidden bg-ink py-20 lg:py-28">
+        <section ref={closingFrame} className="relative overflow-hidden bg-ink py-20 lg:py-28">
           <img
-            ref={closing.image}
+            ref={closingImage}
             src="/landing/sourdough.webp" alt="" aria-hidden="true" loading="lazy" decoding="async"
             className="absolute left-0 w-full h-[130%] -top-[15%] object-cover opacity-40 will-change-transform"
           />
