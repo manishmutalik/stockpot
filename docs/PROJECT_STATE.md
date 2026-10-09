@@ -288,6 +288,11 @@ Nothing is queued. The AI list in the handoff is complete.
   all four kinds, save, saved summary, unsaved drafts kept) are built; Upcoming with hand over (overdue shown, Remind left out) is built; notification settings and push registration (permission on request, switched off on sign-out, tap opens the screen) are built but need a development build, an EAS project id and Android FCM credentials to try; still to build, then a development build with speech recognition (the mic on the capture
   screen is a placeholder until then). Not tested against a real Firestore or a real model.
 
+- **Idea, parked until user feedback: reading a WhatsApp screenshot as an order.** Share a chat screenshot into
+  Stockpot Quick; it reads the order and the customer's name (or the number when not saved) and adds it through the
+  existing confirm flow. Not started. Design notes, costs and open decisions:
+  `docs/handoffs/whatsapp-screenshot-orders.md`.
+
 - **Razorpay is built and tested only against mocks.** The account was under review, so
   nothing has run against Razorpay itself yet. When it is live the owner posts the Test Mode
   Key Id, Key Secret, a ₹1,200 monthly Plan id and a webhook secret (set as Render
