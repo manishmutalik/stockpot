@@ -1,5 +1,14 @@
 # Changelog
 
+## Developer guide
+
+A new set of pages for a developer picking the project up, in `docs/developer-guide/`: where to start and how to run and check it, the
+architecture and who is trusted, the Firestore data model and security rules, the web app, the money maths and "plans", the server and
+its routes, the AI features and the rule that the model never writes a number, Stockpot's own billing and the owners' card payments,
+the phone app, and testing, CI, environment variables, deployment and troubleshooting. It also records what is known not to work yet or
+has never run against a live service (the Shopify callback's unsigned `state`, the payment gateway clients, the Razorpay subscription flow),
+and that nothing loads `.env.local` for you. Documentation only; no code changed. `docs/ARCHITECTURE.md` and the README now point to it.
+
 ## Landing page: new copy and four infographics
 
 The landing page follows the website content update. The words are shorter: the feature bullet lists are gone, each feature is a
