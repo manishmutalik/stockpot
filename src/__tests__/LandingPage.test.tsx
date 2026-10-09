@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import LandingPage from '../LandingPage';
+import { TRIAL_DAYS } from '../utils/trial';
 
 // jsdom has no IntersectionObserver, which the scroll-reveal animations use.
 beforeAll(() => {
@@ -64,7 +65,7 @@ describe('LandingPage', () => {
     const { container } = renderPage();
     const shots = [...container.querySelectorAll('img')].filter(img => img.getAttribute('src')?.startsWith('/landing/'));
     const srcs = shots.map(img => img.getAttribute('src'));
-    for (const name of ['hero-kitchen', 'phone-order', 'phone-bill', 'laptop-pricing', 'pastries', 'sourdough']) {
+    for (const name of ['hero-kitchen', 'laptop-pricing', 'pastries', 'sourdough']) {
       expect(srcs).toContain(`/landing/${name}.webp`);
     }
     shots.forEach(img => {
@@ -74,32 +75,59 @@ describe('LandingPage', () => {
       expect(decorative ? img.getAttribute('alt') === '' : !!img.getAttribute('alt')).toBe(true);
     });
     expect(screen.getByAltText(/dashboard open on a tablet/i)).toBeTruthy();
-    expect(screen.getByAltText(/add order form on a phone/i)).toBeTruthy();
-    expect(screen.getByAltText(/bill for that order on a phone/i)).toBeTruthy();
     expect(screen.getByAltText(/menu on a laptop/i)).toBeTruthy();
   });
 
   it('does not reference the old screenshots that were removed', () => {
     const { container } = renderPage();
-    for (const old of ['dashboard', 'dashboard-capture', 'device-laptop', 'device-phone', 'add-item', 'add-order', 'gst', 'inventory', 'orders', 'production', 'recipes', 'rnd', 'wastage', 'banner-wide', 'banner-tablet']) {
+    for (const old of ['dashboard', 'dashboard-capture', 'device-laptop', 'device-phone', 'add-item', 'add-order', 'gst', 'inventory', 'orders', 'production', 'recipes', 'rnd', 'wastage', 'banner-wide', 'banner-tablet', 'phone-order', 'phone-bill']) {
       expect(container.querySelector(`img[src="/landing/${old}.webp"]`)).toBeNull();
     }
   });
 
-  it('covers the features in words', () => {
+  it('covers the features in words, one line each, with no bullet lists', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
     for (const phrase of [
       'Take orders the way customers send them',
-      'Get paid without chasing',
-      'Know how much money every order made',
+      "Paste a WhatsApp message and Stockpot fills in the order, advance and all. The bill's UPI QR asks only for what's still due.",
+      'Know what every order made',
+      'Ingredients, packaging, delivery, discounts and fees come off every order, so the profit you see is the profit you keep.',
       'Know when a price needs to go up',
-      'A business briefing every morning',
-      'Stock that keeps itself up to date',
-      'Built for India',
+      'When an ingredient gets dearer, Stockpot tells you which items slipped and suggests a price that wins the margin back.',
+      'A briefing every morning.',
+      'Stock that keeps itself up to date.',
+      'Built for India: rupees, GST, UPI, WhatsApp, and grams to litres.',
     ]) {
       expect(text).toContain(phrase);
     }
+    expect(container.querySelectorAll('section#features ul')).toHaveLength(0);
+    for (const gone of ['Get paid without chasing', 'Customers worth a message', 'Shopify and Odoo orders imported too']) expect(text).not.toContain(gone);
+  });
+
+  it('shows the four infographics, each with a text alternative that states its figures', () => {
+    const { container } = renderPage();
+    const pictures = [...container.querySelectorAll('[role="img"][aria-label]')].map(el => el.getAttribute('aria-label')!);
+    const byStart = (start: string) => pictures.find(l => l.startsWith(start))!;
+    expect(byStart('Butter Croissant: when priced')).toContain('62% margin');
+    expect(byStart('Butter Croissant: when priced')).toContain('53% margin');
+    expect(byStart('Butter Croissant: when priced')).toContain('suggested ₹185');
+    expect(byStart('Order total ₹2,520')).toContain('₹2,020 balance');
+    expect(byStart('Order of 8 Butter Croissants')).toContain('₹603.04 made');
+    // the fourth is real text: the steps, in order, with what passes between them and the re-costing loop
+    const steps = [...container.querySelectorAll('section#how .ig-node h5')].map(h => h.textContent);
+    expect(steps).toEqual(['Add your ingredients', 'Build your recipes', 'Take orders and log bakes', 'Read your morning briefing']);
+    expect(container.querySelector('section#how')!.textContent).toContain('every recipe that uses it is re-costed');
+    expect(container.querySelectorAll('.ig')).toHaveLength(4);
+  });
+
+  it('puts each infographic where the content plan says: the price creep under the problem headline, two in features, the flow in how it works', () => {
+    const { container } = renderPage();
+    expect(container.querySelectorAll('section#features .ig')).toHaveLength(2);
+    expect(container.querySelectorAll('section#how .ig')).toHaveLength(1);
+    const problem = container.querySelector('section.border-y .ig')!;
+    expect(problem.querySelector('.ig-title')!.textContent).toBe('Same price. Smaller margin.');
+    expect(container.querySelector('section#features .ig-title')!.textContent).toBe('From a WhatsApp message to paid in full');
   });
 
   it('shows the hero promise, the trial terms and four quick facts', () => {
@@ -108,12 +136,23 @@ describe('LandingPage', () => {
     const text = container.textContent ?? '';
     expect(text).toContain('Know exactly how much money your food business makes.');
     expect(text).not.toContain('Know exactly what your food business makes');
-    expect(text).toContain('Busy every day. Still not sure how much money you made?');
-    expect(text).toContain('Know exactly how much money you made this week.');
-    expect(text).not.toMatch(/Still not sure what you made|Know exactly what you made/);
-    expect(text).toMatch(/after trial/);
+    expect(text).toContain('For home bakers, home chefs, tiffin services and small cloud kitchens');
+    expect(text).toContain('Stockpot tracks your ingredients, orders and costs, and shows what every order actually earns you');
+    expect(text).toContain('Busy every day. Still not sure what you made?');
+    expect(text).toMatch(/after the trial/);
     for (const fact of ['Per-dish', 'UPI + QR', 'Auto-fill', 'Live Alerts']) expect(text).toContain(fact);
     expect(text).toContain('₹743.04');
+    expect(screen.getByRole('link', { name: /see how it works/i }).getAttribute('href')).toBe('#how');
+  });
+
+  it('closes on the same promise, and says the trial length from the one shared setting', () => {
+    const { container } = renderPage();
+    const text = container.textContent ?? '';
+    expect(container.querySelector('section.bg-ink h2')!.textContent).toBe('Know exactly how much money your food business makes.');
+    expect(text).toContain(`Start your ${TRIAL_DAYS}-day free trial and see your true profit by tomorrow morning.`);
+    expect(text).toContain(`Try it free for ${TRIAL_DAYS} days.`);
+    // the content plan was written for a 14-day trial; the server's is TRIAL_DAYS, and the page must match checkout
+    if ((TRIAL_DAYS as number) !== 14) expect(text).not.toMatch(/\b14-day|\b14 days/);
   });
 
   it('does not repeat design claims the app does not back up', () => {
