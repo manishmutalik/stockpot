@@ -1,5 +1,17 @@
 # Changelog
 
+## Shopify connection: signed state and Shopify's signature checked
+
+Security fix. The Shopify OAuth callback (which has to sit outside sign-in, because Shopify's redirect carries no
+Authorization header) used to take the user from an unsigned `state`, so anyone who knew another user's Firebase uid could
+connect their own store to that user's account and have its orders imported there. Now, in `lib/shopifyOAuth.ts`:
+`state` is signed with an HMAC (a key derived from `SESSION_ENC_KEY`), carries a random nonce, the shop it was made for and
+an expiry 10 minutes out; the nonce is also set as an httpOnly cookie on the browser that started the connection, and the
+callback refuses a `state` that is tampered with, expired, for another shop or finished in another browser. The callback
+also checks Shopify's own `hmac` query parameter with the app secret (sorted query without `hmac`, HMAC-SHA256,
+constant-time compare), and only `*.myshopify.com` shops are accepted, so the app secret is never sent to any other host.
+A connection started before the deploy has to be started again. Server only; needs a redeploy.
+
 ## Landing page: new copy and four infographics
 
 The landing page follows the website content update. The words are shorter: the feature bullet lists are gone, each feature is a

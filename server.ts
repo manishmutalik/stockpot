@@ -44,6 +44,10 @@ import { createBillPageHandler, createPayHandler, createReturnHandler } from "./
 import { createGatewayHandlers } from "./lib/gatewayRoutes";
 import { createAdminGatewayStore } from "./lib/gatewayStore";
 import { readSecretKey } from "./lib/secretBox";
+import {
+  readStateKey, normalizeShop, newNonce, createState, checkCallback as checkShopifyCallback,
+  NONCE_COOKIE as SHOPIFY_NONCE_COOKIE, STATE_TTL_MS as SHOPIFY_STATE_TTL_MS,
+} from "./lib/shopifyOAuth";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -224,50 +228,59 @@ async function startServer() {
       return res.status(400).send("Shopify API credentials are not configured on the server.");
     }
 
-    const fullShop = shop.includes(".") ? shop : `${shop}.myshopify.com`;
+    const fullShop = normalizeShop(shop);
+    if (!fullShop) {
+      return res.status(400).send("Enter your store's myshopify.com name, e.g. my-store.");
+    }
     const scopes = "read_orders,read_products";
     const baseUrl = (process.env.APP_URL || "").replace(/\/$/, "");
     if (!baseUrl) {
       console.error("APP_URL environment variable is missing");
       return res.status(500).send("APP_URL environment variable is not configured.");
     }
+    const stateKey = readStateKey();
+    if (!stateKey) {
+      console.error("SESSION_ENC_KEY environment variable is missing");
+      return res.status(500).send("SESSION_ENC_KEY environment variable is not configured.");
+    }
 
-    // Encode uid + a short-lived nonce into `state` so the callback can tie
-    // the exchanged token back to the right user without any cookie at all.
-    const state = Buffer.from(JSON.stringify({ uid: req.uid, ts: Date.now() })).toString("base64url");
-    const redirectUri = `${baseUrl}/api/auth/shopify/callback`;
-    const shopifyUrl = `https://${fullShop}/admin/oauth/authorize?client_id=${clientId}&scope=${scopes}&redirect_uri=${redirectUri}&state=${state}`;
+    // A signed, expiring `state` (see lib/shopifyOAuth.ts) carries the user to the callback; its nonce also goes in an
+    // httpOnly cookie so only this browser can finish the flow.
+    const nonce = newNonce();
+    const state = createState({ uid: req.uid!, shop: fullShop, nonce, now: Date.now() }, stateKey);
+    res.cookie(SHOPIFY_NONCE_COOKIE, nonce, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax", // sent on Shopify's top-level redirect back to us
+      maxAge: SHOPIFY_STATE_TTL_MS,
+      path: "/api/auth/shopify/callback",
+    });
+    const redirectUri = encodeURIComponent(`${baseUrl}/api/auth/shopify/callback`);
+    const shopifyUrl = `https://${fullShop}/admin/oauth/authorize?client_id=${encodeURIComponent(clientId)}&scope=${scopes}&redirect_uri=${redirectUri}&state=${state}`;
 
     res.json({ url: shopifyUrl });
   });
 
   // NOTE: This callback is hit by Shopify's redirect, not by our SPA, so it
-  // cannot carry an Authorization header. We recover the user from the
-  // `state` param we generated above instead of relying on a client-writable
-  // cookie for identity.
+  // cannot carry an Authorization header. The user comes from the signed
+  // `state` made above; lib/shopifyOAuth.ts checks it and Shopify's `hmac`.
   app.get("/api/auth/shopify/callback", async (req, res) => {
-    const { shop, code, state } = req.query;
-
-    if (!shop || !code || !state) {
-      return res.status(400).send("Missing shop, code, or state");
-    }
-
-    let uid: string;
-    try {
-      const decoded = JSON.parse(Buffer.from(state as string, "base64url").toString("utf8"));
-      uid = decoded.uid;
-      if (!uid) throw new Error("no uid in state");
-    } catch {
-      return res.status(400).send("Invalid state parameter");
-    }
-
-    const fullShop = (shop as string).includes(".") ? (shop as string) : `${shop}.myshopify.com`;
     const clientId = process.env.SHOPIFY_CLIENT_ID;
     const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+    const stateKey = readStateKey();
 
-    if (!clientId || !clientSecret) {
+    if (!clientId || !clientSecret || !stateKey) {
       return res.status(500).send("Shopify credentials are not configured on the server.");
     }
+
+    const checked = checkShopifyCallback(new URL(req.originalUrl, "http://localhost").searchParams, {
+      stateKey, appSecret: clientSecret, cookieNonce: req.cookies?.[SHOPIFY_NONCE_COOKIE], now: Date.now(),
+    });
+    if (checked.ok === false) {
+      return res.status(checked.status).send(checked.message);
+    }
+    res.clearCookie(SHOPIFY_NONCE_COOKIE, { path: "/api/auth/shopify/callback" });
+    const { uid, shop: fullShop, code } = checked;
 
     try {
       const response = await axios.post(`https://${fullShop}/admin/oauth/access_token`, {

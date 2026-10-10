@@ -67,7 +67,7 @@ enabled), a Razorpay account.
 | Variable | Required | Purpose |
 |---|---|---|
 | `APP_URL` | Yes | Base URL of the running app, used to build the Shopify OAuth callback URL. |
-| `SESSION_ENC_KEY` | Yes | Encrypts Shopify/Odoo credentials at rest. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. |
+| `SESSION_ENC_KEY` | Yes | Encrypts Shopify/Odoo credentials at rest, and (through a key derived from it) signs the Shopify OAuth `state` so the callback can trust which user started the connection. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. |
 | `GOOGLE_APPLICATION_CREDENTIALS` or `FIREBASE_SERVICE_ACCOUNT_JSON` | Yes | A Firebase service account, used by the server to verify Firebase ID tokens (`lib/auth.ts`). The former points at a downloaded JSON file; the latter takes the JSON contents directly as a string, for platforms where you can't mount a file. |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | For billing | Razorpay API keys. Without them, the server still boots and every non-billing route works; only billing routes and the paywall fail with a clear error. The Key Id is public (checkout needs it); the Key Secret stays on the server. |
 | `RAZORPAY_PLAN_ID` | For billing | The Razorpay Plan (monthly, INR) customers subscribe to. |
