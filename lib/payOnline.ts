@@ -6,6 +6,7 @@
  *   GET /bill/:token          the bill page, with a "Pay by card or online" button when the owner has set a gateway up
  *   GET /bill/:token/pay      makes a payment link for what is owed right now and sends the customer to it
  *   GET /bill/:token/return   where the gateway sends the customer afterwards
+ *   POST /bill/:token/claim   the customer says they have paid by UPI (which tells nobody by itself); the owner confirms it
  *
  * The rules that keep this safe:
  *  - The amount is worked out here, from the orders as they are now. Nothing the browser sends is used for it.
@@ -15,11 +16,13 @@
  *  - The owner's keys are decrypted only for the length of one call and never logged or sent anywhere but the gateway.
  *  - The token in the address is the only access check, as for the bill itself. A link already made for the same amount is
  *    reused, so opening the button again and again does not make a pile of links on the owner's account.
+ *  - "I've paid by UPI" is a claim, never proof. It marks nothing paid: it puts the claim on the unpaid orders so the owner sees
+ *    it in Payments due, and tells the owner's phone once. The owner checks their UPI app and confirms, or says it did not come.
  */
 import type { Request, Response } from 'express';
-import { buildBill, billBalance, isValidBillToken } from '../src/utils/billing';
+import { buildBill, billBalance, buildBillUpiLink, formatMoney, isValidBillToken } from '../src/utils/billing';
 import { isUnpaid } from '../src/utils/payments';
-import { planMarkPaid } from '../src/utils/plans';
+import { hasPaymentClaim, planMarkPaid } from '../src/utils/plans';
 import { billSettingsOf } from '../src/utils/quickViews';
 import type { BakerySettings, Order } from '../src/types';
 import type { BillRecord, BillRecords, PaymentAttempt } from './billStore';
@@ -41,7 +44,12 @@ export interface PayOnlineDeps {
   now: () => number;
   /** The app's public address; the gateway sends the customer back to it. */
   publicUrl?: string;
+  /** Tells the owner's phone something (best effort; absent in tests and when push is not set up). */
+  notify?: (uid: string, message: OwnerMessage) => Promise<void>;
 }
+
+/** A push notification for the owner. `data.screen` says which screen tapping it opens. */
+export interface OwnerMessage { title: string; body: string; data: Record<string, string> }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const base = (deps: PayOnlineDeps) => (deps.publicUrl ?? '').replace(/\/$/, '');
@@ -51,6 +59,8 @@ const REUSE_MS = 12 * 60 * 60 * 1000;
 const LINK_LIFE_SECONDS = 24 * 60 * 60;
 /** The gateway is asked about a waiting link at most this often, however often the page is opened. */
 const CHECK_EVERY_MS = 10_000;
+/** Tapping "I've paid" again within this long changes nothing and does not tell the owner twice. */
+const CLAIM_REPEAT_MS = 30 * 60 * 1000;
 
 // ─── What is owed right now ─────────────────────────────────────────────────
 
@@ -64,6 +74,8 @@ interface Owing {
   businessName: string;
   businessPhone?: string;
   reference: string;
+  /** When the customer said they had paid, if every unpaid order on the bill carries that claim (the latest). */
+  claimedAt?: number;
 }
 
 async function loadOwing(deps: PayOnlineDeps, record: BillRecord): Promise<Owing> {
@@ -77,6 +89,7 @@ async function loadOwing(deps: PayOnlineDeps, record: BillRecord): Promise<Owing
       businessName: record.bill.business.name, businessPhone: settings.phone || undefined, reference: record.bill.reference,
     };
     if (unpaid.length === 0) return owing;
+    if (unpaid.every(hasPaymentClaim)) owing.claimedAt = Math.max(...unpaid.map(o => o.paymentClaim!.at));
     const menu = asMenu(await tx.getMany('menu', unpaid.map(o => o.menuItemId)));
     const bill = buildBill({
       orders: unpaid, menu, settings: billSettingsOf(settings), currency: record.bill.currency,
@@ -153,12 +166,14 @@ async function reconcile(deps: PayOnlineDeps, token: string, record: BillRecord,
 
 // ─── GET /bill/:token ───────────────────────────────────────────────────────
 
-async function pageExtras(deps: PayOnlineDeps, token: string, record: BillRecord, cameBack: boolean): Promise<BillPageExtras> {
+async function pageExtras(deps: PayOnlineDeps, token: string, record: BillRecord, opts: { cameBack: boolean; claimed: boolean }): Promise<BillPageExtras> {
+  const { cameBack, claimed } = opts;
   // A bill with no owner or orders on record (an old one): the page is the bill, as it always was.
   if (!record.uid || record.orderIds.length === 0) return {};
   const rec = await deps.gateways.get(record.uid);
-  // An owner with no gateway, and no payment ever started: the same.
-  if (!rec && !record.payment) return {};
+  const upi = buildBillUpiLink(record.bill) !== null;
+  // An owner with no gateway, no payment ever started and no UPI on the bill: the same.
+  if (!rec && !record.payment && !upi) return {};
 
   const payment = await reconcile(deps, token, record);
   const owing = await loadOwing(deps, { ...record, payment });
@@ -167,6 +182,10 @@ async function pageExtras(deps: PayOnlineDeps, token: string, record: BillRecord
   const extras: BillPageExtras = {};
   if (cameBack && payment?.status === 'created') {
     extras.notice = { tone: 'info', text: 'We have not received the payment yet. If you have just paid, it can take a minute to show here. Refresh this page in a moment.' };
+  }
+  if (upi && owing.unpaidIds.length > 0) {
+    extras.upiClaim = owing.claimedAt ? { state: 'sent' } : { state: 'offer', action: `/bill/${token}/claim` };
+    if (claimed && owing.claimedAt) extras.notice = { tone: 'good', text: `Thank you! We have told ${owing.businessName}. They will check and confirm your payment.` };
   }
   if (owing.unpaidIds.length === 0 || record.bill.currency.code !== 'INR' || !rec) return extras;
   if (rec.provider === 'link') {
@@ -186,7 +205,7 @@ export function createBillPageHandler(deps: PayOnlineDeps) {
       const record = await deps.records.get(token);
       if (!record) return res.status(404).type('html').send(NOT_FOUND_HTML);
       // The page is the bill first: if the payment side fails, the bill is still shown.
-      const extras = await pageExtras(deps, token, record, req.query?.back === '1').catch((err: any) => {
+      const extras = await pageExtras(deps, token, record, { cameBack: req.query?.back === '1', claimed: req.query?.claimed === '1' }).catch((err: any) => {
         console.error('Bill page payment details failed:', err?.message);
         return {} as BillPageExtras;
       });
@@ -268,5 +287,89 @@ export function createReturnHandler(deps: PayOnlineDeps) {
       console.error('Online payment return failed:', err?.message);
     }
     return res.redirect(303, `/bill/${token}?back=1`);
+  };
+}
+
+// ─── POST /bill/:token/claim ────────────────────────────────────────────────
+
+/**
+ * The customer says they have paid by UPI. A UPI payment straight to the owner's UPI ID tells nobody it happened, so this is the
+ * customer's word, kept as a claim on every unpaid order the bill covers; nothing is marked paid. The owner sees it in Payments
+ * due and confirms it, or says it was not received. Their phone is told once: a second tap soon after changes nothing.
+ */
+export function createClaimHandler(deps: PayOnlineDeps) {
+  return async (req: Request, res: Response) => {
+    res.set(PUBLIC_BILL_HEADERS);
+    const token = req.params.token;
+    if (!isValidBillToken(token)) return res.status(404).type('html').send(NOT_FOUND_HTML);
+    const back = `/bill/${token}`;
+    try {
+      const record = await deps.records.get(token);
+      if (!record || !record.uid || record.orderIds.length === 0) return res.status(404).type('html').send(NOT_FOUND_HTML);
+      // Only a bill that asks for UPI can be said to have been paid by it.
+      if (buildBillUpiLink(record.bill) === null) return res.redirect(303, back);
+
+      const now = deps.now();
+      const told = await deps.db.run(record.uid, async tx => {
+        const found = await tx.getMany('orders', record.orderIds);
+        const unpaid = ([...found.values()] as unknown as Order[]).filter(o => !o.cancelledOn && isUnpaid(o));
+        if (unpaid.length === 0) return null;
+        const recent = unpaid.every(o => hasPaymentClaim(o) && now - o.paymentClaim.at < CLAIM_REPEAT_MS);
+        if (recent) return null;
+        const settings = ((await tx.get('settings', 'bakery')) ?? {}) as Partial<BakerySettings>;
+        const menu = asMenu(await tx.getMany('menu', unpaid.map(o => o.menuItemId)));
+        const bill = buildBill({
+          orders: unpaid, menu, settings: billSettingsOf(settings), currency: record.bill.currency,
+          statement: record.bill.kind === 'statement',
+        });
+        const amount = round2(billBalance(bill));
+        tx.apply(unpaid.map(o => ({ collection: 'orders' as const, id: o.id, merge: true, data: { paymentClaim: { at: now, amount, method: 'upi' } } })));
+        return { amount, customerName: bill.customerName, reference: record.bill.reference, currency: record.bill.currency };
+      });
+
+      if (told && deps.notify) {
+        const who = told.customerName || 'A customer';
+        await deps.notify(record.uid, {
+          title: `${who} says they have paid`,
+          body: `${formatMoney(told.amount, told.currency)} by UPI for ${told.reference}. Check your UPI app, then confirm it in Stockpot.`,
+          data: { screen: 'payments-due' },
+        }).catch((err: any) => console.error('Telling the owner about a UPI claim failed:', err?.message));
+      }
+      return res.redirect(303, `${back}?claimed=1`);
+    } catch (err: any) {
+      console.error('Saving a UPI payment claim failed:', err?.message);
+      return res.status(500).type('html').send(messageHtml('Something went wrong', 'We could not pass that on just now. Please try again in a moment, or tell the business yourself.', back));
+    }
+  };
+}
+
+// ─── Payments started online, looked at from the owner's side ───────────────
+
+/** A link this old has expired at the gateway, so it is no longer asked about. */
+const WAITING_FOR_MS = LINK_LIFE_SECONDS * 1000 + 60 * 60 * 1000;
+/** At most this many bills are looked at per call, and for at most this long, so the owner's screen is never held up for long. */
+const SETTLE_MAX_BILLS = 8;
+const SETTLE_TIMEOUT_MS = 5000;
+
+/**
+ * For the owner's Payments due list: a customer who paid by card and closed the page before coming back has paid, but nothing has
+ * asked the gateway yet. This asks about the waiting links on the given bills (the owner's own only), and settles the ones paid in
+ * full, before the list is read. Best effort: anything slow or failing is left for the next look.
+ */
+export function createWaitingPaymentSettler(deps: PayOnlineDeps) {
+  return async (uid: string, tokens: string[]): Promise<void> => {
+    const now = deps.now();
+    const work = (async () => {
+      const unique = [...new Set(tokens.filter(isValidBillToken))].slice(0, SETTLE_MAX_BILLS);
+      await Promise.allSettled(unique.map(async token => {
+        const record = await deps.records.get(token);
+        const p = record?.payment;
+        if (!record || record.uid !== uid || !p || p.status !== 'created' || now - p.createdAt > WAITING_FOR_MS) return;
+        await reconcile(deps, token, record);
+      }));
+    })();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([work, new Promise<void>(resolve => { timer = setTimeout(resolve, SETTLE_TIMEOUT_MS); })]);
+    if (timer) clearTimeout(timer);
   };
 }

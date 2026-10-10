@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planOrderGroup, planHandOver, planMarkPaid } from '../planOrders';
+import { planOrderGroup, planHandOver, planMarkPaid, planDismissClaim, hasPaymentClaim } from '../planOrders';
 import type { MenuItem, Order, RawMaterial } from '../../../types';
 
 const flour: RawMaterial = { id: 'flour', name: 'Flour', unit: 'g', initialStock: 5000, costPerUnit: 0.05, category: 'Raw Materials', threshold: 100, dateAdded: '2026-01-01' };
@@ -167,12 +167,27 @@ describe('planHandOver', () => {
 describe('planMarkPaid', () => {
   it('marks orders paid with the method and the fee rate in force', () => {
     expect(planMarkPaid({ ids: ['a', 'b'], paid: true, method: 'upi', feeRates: { upi: 0.5 } })).toEqual([
-      { collection: 'orders', id: 'a', merge: true, data: { paymentStatus: 'paid', paymentMethod: 'upi', paymentFeeRate: 0.5 } },
-      { collection: 'orders', id: 'b', merge: true, data: { paymentStatus: 'paid', paymentMethod: 'upi', paymentFeeRate: 0.5 } },
+      { collection: 'orders', id: 'a', merge: true, data: { paymentStatus: 'paid', paymentMethod: 'upi', paymentFeeRate: 0.5, paymentClaim: null } },
+      { collection: 'orders', id: 'b', merge: true, data: { paymentStatus: 'paid', paymentMethod: 'upi', paymentFeeRate: 0.5, paymentClaim: null } },
     ]);
   });
   it('marks unpaid again with no method, and paid without a method records none', () => {
-    expect(planMarkPaid({ ids: ['a'], paid: false, method: 'upi' })[0].data).toEqual({ paymentStatus: 'unpaid' });
-    expect(planMarkPaid({ ids: ['a'], paid: true })[0].data).toEqual({ paymentStatus: 'paid' });
+    expect(planMarkPaid({ ids: ['a'], paid: false, method: 'upi' })[0].data).toEqual({ paymentStatus: 'unpaid', paymentClaim: null });
+    expect(planMarkPaid({ ids: ['a'], paid: true })[0].data).toEqual({ paymentStatus: 'paid', paymentClaim: null });
+  });
+});
+
+describe('customer payment claims', () => {
+  it('a dismissal clears the claim and nothing else', () => {
+    expect(planDismissClaim(['a', 'b'])).toEqual([
+      { collection: 'orders', id: 'a', merge: true, data: { paymentClaim: null } },
+      { collection: 'orders', id: 'b', merge: true, data: { paymentClaim: null } },
+    ]);
+  });
+  it('only a stored claim with a time and an amount counts', () => {
+    expect(hasPaymentClaim({ paymentClaim: { at: 1, amount: 900, method: 'upi' } })).toBe(true);
+    expect(hasPaymentClaim({ paymentClaim: null })).toBe(false);
+    expect(hasPaymentClaim({})).toBe(false);
+    expect(hasPaymentClaim({ paymentClaim: { at: 'yesterday', amount: 900 } as any })).toBe(false);
   });
 });

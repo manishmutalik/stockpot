@@ -12,14 +12,15 @@ import type { AuthedRequest } from './auth';
 /**
  * GET /bill/:token (public, no sign-in). A malformed token, an unknown token
  * and a missing bill all give the same 404 page, so the response never
- * reveals whether an order or bill exists.
+ * reveals whether an order or bill exists. The only form a bill page has is
+ * "I've paid by UPI", which posts back to this site (`form-action 'self'`).
  */
 export const PUBLIC_BILL_HEADERS = {
   'Cache-Control': 'private, no-store',
   'Referrer-Policy': 'no-referrer',
   'X-Robots-Tag': 'noindex, nofollow',
   'X-Content-Type-Options': 'nosniff',
-  'Content-Security-Policy': "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+  'Content-Security-Policy': "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'self'",
 } as const;
 
 export function createPublicBillHandler(getBill: (token: string) => Promise<Bill | null>) {

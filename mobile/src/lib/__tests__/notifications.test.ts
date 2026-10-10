@@ -45,6 +45,7 @@ describe('routeForNotification', () => {
     expect(routeForNotification({ screen: 'upcoming' })).toEqual({ pathname: '/upcoming' });
     expect(routeForNotification({ screen: 'items' })).toEqual({ pathname: '/' });
     expect(routeForNotification({ screen: 'stock-in' })).toEqual({ pathname: '/capture', params: { kind: 'restock' } });
+    expect(routeForNotification({ screen: 'payments-due' })).toEqual({ pathname: '/upcoming', params: { tab: 'payments' } });
   });
   it('does nothing for a screen this version does not have, or no data', () => {
     for (const d of [{ screen: 'printer' }, {}, null, undefined, 'today', 5, { screen: 7 }]) expect(routeForNotification(d), String(d)).toBeNull();

@@ -17,7 +17,8 @@ import { formatAmount } from './money';
 import { groupPendingPayments, type PendingCustomer } from './payments';
 import { clusterOrdersByGroup } from './orderClustering';
 import { isOpenPreorder, summarizeDue } from './preorders';
-import type { Currency, PaymentDueSummary, StatusLine, TodayView, UpcomingOrder, UpcomingView } from './quickApiTypes';
+import type { Currency, PaymentClaimSummary, PaymentDueSummary, StatusLine, TodayView, UpcomingOrder, UpcomingView } from './quickApiTypes';
+import { hasPaymentClaim } from './plans/planOrders';
 
 export type { Currency, DueSummary, StatusKind, StatusLine, TodayView, UpcomingOrder, UpcomingView } from './quickApiTypes';
 import { getExperimentMaterialUsage } from './experimentMaterialUsage';
@@ -41,11 +42,29 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 // ─── Today ──────────────────────────────────────────────────────────────────
 
+/**
+ * A customer's "I've paid by UPI" across their unpaid orders: the latest tap, and what was claimed. One tap puts the same claim
+ * (time and amount) on every order its bill covered, so each tap is counted once.
+ */
+export function claimSummary(orders: Order[]): PaymentClaimSummary | undefined {
+  const claimed = orders.filter(hasPaymentClaim);
+  if (claimed.length === 0) return undefined;
+  const taps = new Map(claimed.map(o => [o.paymentClaim.at, o.paymentClaim.amount]));
+  return {
+    at: Math.max(...taps.keys()),
+    amount: round2([...taps.values()].reduce((a, b) => a + b, 0)),
+    orderCount: new Set(claimed.map(o => o.orderGroupId || o.id)).size,
+  };
+}
+
 /** A customer who owes money, as the app lists them. */
-export const pendingSummary = (c: PendingCustomer, today: string): PaymentDueSummary => ({
-  key: c.key, name: c.name, phone: c.phone ?? null, orderCount: c.orderCount, oldestDate: c.oldestDate,
-  daysOutstanding: Math.max(daysBetween(c.oldestDate, today), 0), dueTotal: round2(c.dueTotal),
-});
+export const pendingSummary = (c: PendingCustomer, today: string): PaymentDueSummary => {
+  const claim = claimSummary(c.orders);
+  return {
+    key: c.key, name: c.name, phone: c.phone ?? null, orderCount: c.orderCount, oldestDate: c.oldestDate,
+    daysOutstanding: Math.max(daysBetween(c.oldestDate, today), 0), dueTotal: round2(c.dueTotal), ...(claim && { claim }),
+  };
+};
 
 /** How many of the people who owe most Today lists by name. */
 export const TOP_OWING = 3;

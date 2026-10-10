@@ -238,11 +238,23 @@ export function planHandOver(input: { order: Order; orders: Order[]; menu: MenuI
   return { kind: 'ok', atomic: true, writes };
 }
 
-/** Marks orders paid (with how, and the fee rate in force now) or unpaid again. */
+/**
+ * Marks orders paid (with how, and the fee rate in force now) or unpaid again. Either way a customer's "I've paid" claim on them is
+ * settled, so it is cleared: a paid order needs no claim, and an order marked unpaid again should not show an old one.
+ */
 export function planMarkPaid(input: { ids: string[]; paid: boolean; method?: PaymentMethod; feeRates?: FeeRates }): PlannedWrite[] {
   const feeRates = input.feeRates ?? {};
   return input.ids.map(id => ({
     collection: 'orders' as const, id, merge: true,
-    data: { paymentStatus: input.paid ? 'paid' : 'unpaid', ...(input.paid && input.method && paymentFields(input.method, feeRates)) },
+    data: { paymentStatus: input.paid ? 'paid' : 'unpaid', ...(input.paid && input.method && paymentFields(input.method, feeRates)), paymentClaim: null },
   }));
 }
+
+/** The owner says a customer's "I've paid" was not received: the claim goes, and the orders stay unpaid. */
+export function planDismissClaim(ids: string[]): PlannedWrite[] {
+  return ids.map(id => ({ collection: 'orders' as const, id, merge: true, data: { paymentClaim: null } }));
+}
+
+/** A claim that is really there (an old order has none, and a cleared one is null). */
+export const hasPaymentClaim = (o: Pick<Order, 'paymentClaim'>): o is Order & { paymentClaim: NonNullable<Order['paymentClaim']> } =>
+  !!o.paymentClaim && typeof o.paymentClaim.at === 'number' && typeof o.paymentClaim.amount === 'number';

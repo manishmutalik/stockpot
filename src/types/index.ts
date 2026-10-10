@@ -266,6 +266,18 @@ export interface Order {
   /** What happened to the advance when the order was cancelled: 'kept' counts as income on the cancellation
    * date, 'refunded' does not. Stored on the item that holds the advance. */
   advanceOutcome?: 'refunded' | 'kept';
+  /** The customer said, on the public bill page, that they have paid by UPI. A claim, not proof: the order stays unpaid until the
+   * owner confirms it (or says it was not received). Written by the server on every unpaid item the bill covered; cleared (set
+   * to null) whenever the order is marked paid or unpaid. */
+  paymentClaim?: PaymentClaim | null;
+}
+
+/** A customer's "I've paid" from the bill page: when, how much the bill asked for then, and how they said they paid. */
+export interface PaymentClaim {
+  /** Unix ms. */
+  at: number;
+  amount: number;
+  method: 'upi';
 }
 
 export type PaymentMethod = 'upi' | 'cash' | 'card' | 'other';
@@ -512,6 +524,8 @@ export interface AppViewProps {
   cancelPreorder: (order: Order, advanceOutcome?: 'refunded' | 'kept') => Promise<boolean>;
   /** Marks orders paid or unpaid (every id given, in one write). */
   markOrdersPaid: (ids: string[], paid: boolean, method?: PaymentMethod) => void;
+  /** Clears a customer's "I've paid by UPI" from these orders (it was not received); they stay unpaid. */
+  dismissPaymentClaim: (ids: string[]) => void;
   /** Records how already-paid orders were paid. */
   setOrdersPaymentMethod: (ids: string[], method: PaymentMethod) => void;
   deleteOrder: (id: string) => void;

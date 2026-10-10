@@ -19,17 +19,18 @@
 import type { NextFunction, Response } from 'express';
 import type { AuthedRequest } from './auth';
 import { parseIdempotencyKey, withIdempotency, type QuickDb, type QuickDoc, type QuickTx, type StoredResult } from './quickDb';
-import { planOrderGroup, planRestock, planProductionSession, planHandOver, planMarkPaid, collapseWrites, productionRunCost } from '../src/utils/plans';
+import { planOrderGroup, planRestock, planProductionSession, planHandOver, planMarkPaid, planDismissClaim, hasPaymentClaim, collapseWrites, productionRunCost } from '../src/utils/plans';
 import type { OrderGroupCommon, OrderLineItem, PlanError, ProductionRunInput } from '../src/utils/plans';
 import { enterableUnits } from '../src/utils/conversions';
 import { speechPhrases } from '../src/utils/speechPhrases';
 import { customerDirectory } from '../src/utils/quickParse';
 import { saleAmounts } from '../src/utils/profit';
-import { buildBill, billBalance, buildBillMessage, buildInvoiceMessage, buildStatementMessage, buildWhatsAppUrl, withBillLink } from '../src/utils/billing';
+import { buildBill, billBalance, buildBillMessage, buildInvoiceMessage, buildStatementMessage, buildWhatsAppUrl, canPayByUpi, withBillLink } from '../src/utils/billing';
 import { formatAmount } from '../src/utils/money';
 import { isUnpaid } from '../src/utils/payments';
 import { buildPaymentsDue, customerDues, matchingOption } from '../src/utils/quickPayments';
-import { billSettingsOf, buildToday, buildUpcoming, USE_BY_SOON_DAYS } from '../src/utils/quickViews';
+import { billSettingsOf, buildToday, buildUpcoming, claimSummary, USE_BY_SOON_DAYS } from '../src/utils/quickViews';
+import type { PaymentSetupView } from '../src/utils/quickApiTypes';
 import { EXPO_PUSH_TOKEN, readNotificationSettings, withNotificationDefaults } from '../src/utils/quickNotifications';
 import { clusterOrdersByGroup } from '../src/utils/orderClustering';
 import { addDays, todayInZone } from '../src/utils/localDate';
@@ -45,6 +46,13 @@ export interface QuickRouteDeps {
   statements?: (uid: string, orderIds: string[]) => Promise<{ token: string } | null>;
   /** The app's public address, for the "view bill online" link. */
   publicUrl?: string;
+  /**
+   * Asks the owner's gateway about card payments started on these bills and settles the paid ones (lib/payOnline.ts), so a
+   * customer who paid and closed the page shows as paid. Best effort, and quick. Absent: Payments due reads the orders as they are.
+   */
+  settleWaiting?: (uid: string, billTokens: string[]) => Promise<void>;
+  /** How customers can pay this owner online, for the phone's Settings (lib/gatewayStore.ts). */
+  onlinePayments?: (uid: string) => Promise<PaymentSetupView['online']>;
 }
 
 // ─── Access ─────────────────────────────────────────────────────────────────
@@ -470,6 +478,46 @@ export function createQuickPaymentHandler(deps: QuickRouteDeps) {
   });
 }
 
+// ─── POST /mobile/payments/claim ────────────────────────────────────────────
+
+export function readClaimBody(body: unknown): Read<{ customerKey: string; action: 'confirm' | 'dismiss' }> {
+  if (!isObject(body)) return bad('Send { customerKey, action }.');
+  if (typeof body.customerKey !== 'string' || body.customerKey.length === 0 || body.customerKey.length > 200) return bad('Say whose payment it is.');
+  if (body.action !== 'confirm' && body.action !== 'dismiss') return bad("The action must be 'confirm' or 'dismiss'.");
+  return { ok: true, value: { customerKey: body.customerKey, action: body.action } };
+}
+
+/**
+ * The owner's answer to a customer's "I've paid by UPI" (from the bill page). Confirm: the orders the customer said they paid for
+ * are marked paid by UPI, with its fee rate, as Got paid would. Dismiss ("not received"): the claim goes and they stay unpaid, so
+ * the customer can say so again. Only that customer's claimed, unpaid orders are touched.
+ */
+export function createQuickClaimHandler(deps: QuickRouteDeps) {
+  return writeHandler(deps, 'payment-claims', readClaimBody, async (tx, { customerKey, action }) => {
+    const settings = await loadSettings(tx);
+    const unpaid = (await tx.where('orders', 'paymentStatus', 'unpaid')) as Order[];
+    const menu = asMenu(await tx.getMany('menu', unpaid.map(o => o.menuItemId)));
+    const currency = currencyOf(settings);
+    const today = todayInZone(settings.timezone, new Date(deps.now()));
+
+    const entry = customerDues({ unpaid, menu, settings, currency, today }).find(e => e.customer.key === customerKey);
+    const claim = entry && claimSummary(entry.customer.orders);
+    if (!entry || !claim) return failure(404, 'There is no payment waiting to be confirmed for that customer.', { code: 'no_claim' });
+
+    // Whole orders only: a multi-item order the customer claimed is settled together.
+    const claimed = entry.dues.filter(d => d.orders.some(hasPaymentClaim));
+    const ids = claimed.flatMap(d => d.orders.map(o => o.id));
+    tx.apply(action === 'confirm'
+      ? planMarkPaid({ ids, paid: true, method: 'upi', feeRates: settings.paymentFeeRates })
+      : planDismissClaim(ids));
+    const settled = action === 'confirm' ? round2(claimed.reduce((sum, d) => sum + d.due, 0)) : 0;
+    return { status: 200, body: {
+      customerName: entry.customer.name, action, orderIds: ids, amount: claim.amount,
+      remainingDue: round2(entry.customer.dueTotal - settled),
+    } };
+  });
+}
+
 // ─── POST /mobile/payments/statement ────────────────────────────────────────
 
 /**
@@ -579,13 +627,46 @@ export function createQuickUpcomingHandler(deps: QuickRouteDeps) {
   });
 }
 
-/** The Payments due list: everyone who owes, largest amount first, with the orders behind it. */
+/**
+ * The Payments due list: everyone who owes, largest amount first, with the orders behind it. Card payments a customer started
+ * from a bill are asked about first, so one who paid and closed the page before coming back is no longer listed.
+ */
 export function createQuickPaymentsDueHandler(deps: QuickRouteDeps) {
-  return readHandler(deps, async (tx, { today, settings }) => {
+  const read = readHandler(deps, async (tx, { today, settings }) => {
     const unpaid = (await tx.where('orders', 'paymentStatus', 'unpaid')) as unknown as Order[];
     const menu = asMenu(await tx.getMany('menu', unpaid.map(o => o.menuItemId)));
     return buildPaymentsDue({ unpaid, menu, settings, currency: currencyOf(settings), today });
   });
+  return async (req: AuthedRequest, res: Response) => {
+    if (deps.settleWaiting) {
+      try {
+        const tokens = await deps.db.run(req.uid!, async tx =>
+          ((await tx.where('orders', 'paymentStatus', 'unpaid')) as unknown as Order[]).flatMap(o => [o.billToken, o.statementToken]).filter((t): t is string => !!t));
+        if (tokens.length > 0) await deps.settleWaiting(req.uid!, tokens);
+      } catch (err: any) {
+        console.error('Checking waiting online payments failed:', err?.message);
+      }
+    }
+    return read(req, res);
+  };
+}
+
+/** How customers can pay this owner online, for the phone's Settings: UPI on bills, and card payments. Set up in the web app. */
+export function createQuickPaymentSetupHandler(deps: QuickRouteDeps) {
+  return async (req: AuthedRequest, res: Response) => {
+    try {
+      const settings = (await deps.db.run(req.uid!, tx => loadSettings(tx))) as Partial<BakerySettings> & { currency?: { code: string; symbol: string } };
+      const body: PaymentSetupView = {
+        upi: canPayByUpi(settings.upiId, currencyOf(settings).code),
+        online: deps.onlinePayments ? await deps.onlinePayments(req.uid!) : null,
+      };
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.status(200).json(body);
+    } catch (err: any) {
+      console.error('Quick payment setup failed:', err?.message);
+      return res.status(500).json({ error: 'Could not load that. Pull to refresh to try again.', code: 'read_failed' });
+    }
+  };
 }
 
 /**

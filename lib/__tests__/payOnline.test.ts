@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import crypto from 'node:crypto';
-import { createBillPageHandler, createPayHandler, createReturnHandler, type PayOnlineDeps } from '../payOnline';
+import { createBillPageHandler, createClaimHandler, createPayHandler, createReturnHandler, createWaitingPaymentSettler, type PayOnlineDeps } from '../payOnline';
 import type { BillRecord, BillRecords, PaymentAttempt } from '../billStore';
 import type { GatewayRecord, GatewayStore } from '../gatewayStore';
 import { encryptSecret } from '../secretBox';
@@ -319,5 +319,123 @@ describe('coming back from the gateway', () => {
     await back(removed.deps);
     expect(removed.saved()!.status).toBe('created');
     expect((await run(createReturnHandler, removed.deps, 'nope')).code).toBe(404);
+  });
+});
+
+describe('"I have paid by UPI"', () => {
+  const UPI = { upiId: 'anita@okhdfc' };
+  const claim = (d: PayOnlineDeps, token = TOKEN) => run(createClaimHandler, d, token);
+
+  it('offers the button under the UPI one, posting to this site, only on a bill that asks for UPI', async () => {
+    const w = world({ gateway: null, bill: UPI });
+    const r = await page(w.deps);
+    expect(r.body).toContain(`<form method="post" action="/bill/${TOKEN}/claim">`);
+    expect(r.body.indexOf('with UPI')).toBeLessThan(r.body.indexOf("I've paid by UPI"));
+    expect(r.headers['Content-Security-Policy']).toContain("form-action 'self'");
+    const noUpi = world({ gateway: null });
+    expect((await page(noUpi.deps)).body).not.toContain("I've paid");
+  });
+
+  it('keeps the claim on every unpaid order the bill covers, with what the bill asked for, and marks nothing paid', async () => {
+    const notify = vi.fn().mockResolvedValue(undefined);
+    const w = world({ gateway: null, bill: UPI });
+    w.deps.notify = notify;
+    const r = await claim(w.deps);
+    expect(r.code).toBe(303);
+    expect(r.location).toBe(`/bill/${TOKEN}?claimed=1`);
+    expect(w.mem.read(UID, 'orders', 'o1')).toMatchObject({ paymentStatus: 'unpaid', paymentClaim: { at: NOW, amount: 1300, method: 'upi' } });
+    expect(notify).toHaveBeenCalledWith(UID, {
+      title: 'Priya says they have paid',
+      body: expect.stringContaining('₹1,300.00 by UPI'),
+      data: { screen: 'payments-due' },
+    });
+  });
+
+  it('tells the owner once: a second tap soon after changes nothing; a tap much later tells them again', async () => {
+    const notify = vi.fn().mockResolvedValue(undefined);
+    const clock = { t: NOW };
+    const w = world({ gateway: null, bill: UPI, clock });
+    w.deps.notify = notify;
+    await claim(w.deps);
+    clock.t += 60_000;
+    await claim(w.deps);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(w.mem.read(UID, 'orders', 'o1')!.paymentClaim.at).toBe(NOW);
+    clock.t += 2 * 60 * 60 * 1000;
+    await claim(w.deps);
+    expect(notify).toHaveBeenCalledTimes(2);
+  });
+
+  it('says thank you afterwards and shows that the business was told, instead of the button', async () => {
+    const w = world({ gateway: null, bill: UPI });
+    await claim(w.deps);
+    const r = await page(w.deps, { claimed: '1' });
+    expect(r.body).toContain('Thank you! We have told Anita Bakes.');
+    expect(r.body).toContain('You told Anita Bakes you have paid.');
+    expect(r.body).not.toContain('<form');
+    expect(r.body).toContain('with UPI');   // they can still pay, if they had not yet
+  });
+
+  it('claims nothing for a paid bill, a bill without UPI, or a bad token, and a failed notification still saves the claim', async () => {
+    const paid = world({ gateway: null, bill: UPI, orders: { o1: { menuItemId: 'cake', quantity: 1, date: '2026-10-05', unitPriceAtSale: 900 } } });
+    paid.deps.notify = vi.fn();
+    expect((await claim(paid.deps)).location).toBe(`/bill/${TOKEN}?claimed=1`);
+    expect(paid.deps.notify).not.toHaveBeenCalled();
+    expect(paid.mem.read(UID, 'orders', 'o1')!.paymentClaim).toBeUndefined();
+
+    const noUpi = world({ gateway: null });
+    expect((await claim(noUpi.deps)).location).toBe(`/bill/${TOKEN}`);
+    expect(noUpi.mem.read(UID, 'orders', 'o1')!.paymentClaim).toBeUndefined();
+
+    expect((await claim(noUpi.deps, 'nope')).code).toBe(404);
+
+    const flaky = world({ gateway: null, bill: UPI });
+    flaky.deps.notify = vi.fn().mockRejectedValue(new Error('expo down'));
+    expect((await claim(flaky.deps)).code).toBe(303);
+    expect(flaky.mem.read(UID, 'orders', 'o1')!.paymentClaim).toMatchObject({ amount: 1300 });
+  });
+
+  it('offers the button again once the owner has said the payment did not come (the claim cleared)', async () => {
+    const w = world({ gateway: null, bill: UPI });
+    await claim(w.deps);
+    w.mem.seed(UID, 'orders', 'o1', { ...w.mem.read(UID, 'orders', 'o1'), paymentClaim: null });
+    expect((await page(w.deps)).body).toContain("I've paid by UPI");
+  });
+});
+
+describe('settling payments the customer made online and never came back from', () => {
+  it('asks the gateway about the owner\'s waiting links and marks the paid ones paid by card', async () => {
+    const w = world({ payment: attempt(), fetch: gatewayFetch(rzpPaid(130000)) });
+    await createWaitingPaymentSettler(w.deps)(UID, [TOKEN]);
+    expect(w.mem.read(UID, 'orders', 'o1')).toMatchObject({ paymentStatus: 'paid', paymentMethod: 'card' });
+    expect(w.saved()!.status).toBe('settled');
+  });
+
+  it('leaves alone another owner\'s bill, a settled or old payment, and bad tokens, without asking the gateway', async () => {
+    const other = world({ payment: attempt(), fetch: gatewayFetch(rzpPaid(130000)) });
+    await createWaitingPaymentSettler(other.deps)('someone-else', [TOKEN, 'nope']);
+    expect(other.fetch).not.toHaveBeenCalled();
+    const old = world({ payment: attempt({ createdAt: NOW - 3 * 24 * 60 * 60 * 1000 }), fetch: gatewayFetch(rzpPaid(130000)) });
+    await createWaitingPaymentSettler(old.deps)(UID, [TOKEN]);
+    expect(old.fetch).not.toHaveBeenCalled();
+    const done = world({ payment: attempt({ status: 'settled' }), fetch: gatewayFetch(rzpPaid(130000)) });
+    await createWaitingPaymentSettler(done.deps)(UID, [TOKEN, TOKEN]);
+    expect(done.fetch).not.toHaveBeenCalled();
+  });
+
+  it('gives up after a few seconds rather than hold the owner\'s screen', async () => {
+    vi.useFakeTimers();
+    try {
+      const w = world({ payment: attempt(), fetch: vi.fn(() => new Promise(() => {})) });
+      let finished = false;
+      const p = createWaitingPaymentSettler(w.deps)(UID, [TOKEN]).then(() => { finished = true; });
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(finished).toBe(false);
+      await vi.advanceTimersByTimeAsync(1500);
+      await p;
+      expect(finished).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

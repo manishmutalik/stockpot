@@ -24,7 +24,7 @@ import { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../
 import { formatShortDate } from '../utils/localDate';
 import { holdsStock, isOpenPreorder } from '../utils/preorders';
 import { stampFor } from '../utils/orderPricing';
-import { planOrderGroup, planHandOver, planMarkPaid, paymentFields as planPaymentFields, randomId } from '../utils/plans';
+import { planOrderGroup, planHandOver, planMarkPaid, planDismissClaim, paymentFields as planPaymentFields, randomId } from '../utils/plans';
 import { addWritesToBatch } from '../utils/plans/clientCommit';
 
 export function useOrderActions(
@@ -255,6 +255,19 @@ export function useOrderActions(
     }
   };
 
+  /** A customer said on the bill that they paid by UPI, and the owner says it did not come: the claim goes, the orders stay unpaid. */
+  const dismissPaymentClaim = async (ids: string[]) => {
+    if (!auth.currentUser || ids.length === 0) return;
+    const userId = auth.currentUser.uid;
+    try {
+      const batch = writeBatch(db);
+      addWritesToBatch(batch, userId, planDismissClaim(ids));
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders`);
+    }
+  };
+
   /** Records how already-paid orders were paid (every item of a multi-item order together). */
   const setOrdersPaymentMethod = async (ids: string[], method: PaymentMethod) => {
     if (!auth.currentUser || ids.length === 0) return;
@@ -439,6 +452,7 @@ export function useOrderActions(
     fulfillOrder,
     cancelPreorder,
     markOrdersPaid,
+    dismissPaymentClaim,
     setOrdersPaymentMethod,
     updateOrder,
     deleteOrder,

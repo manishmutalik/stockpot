@@ -11,6 +11,7 @@ import { decryptSecret, encryptSecret } from './secretBox';
 import { getGateway, isGatewayId, type FetchLike, type GatewayCredentials } from './gateways';
 import type { GatewayRecord, GatewayStore } from './gatewayStore';
 import type { GatewayStatus } from '../src/utils/onlinePayments';
+import type { PaymentSetupView } from '../src/utils/quickApiTypes';
 
 export interface GatewayRouteDeps {
   store: GatewayStore;
@@ -24,6 +25,14 @@ export type { GatewayStatus } from '../src/utils/onlinePayments';
 export const statusOf = (record: GatewayRecord | null, serverReady: boolean): GatewayStatus => record
   ? { serverReady, configured: true, provider: record.provider, keyId: record.keyId, secretLast4: record.secretLast4, environment: record.environment, test: record.test, link: record.link, updatedAt: record.updatedAt }
   : { serverReady, configured: false };
+
+/** What the phone's Settings say about card payments: the gateway's name and whether its keys are test keys, or a pasted link. */
+export function onlinePaymentsOf(record: GatewayRecord | null): PaymentSetupView['online'] {
+  if (!record) return null;
+  if (record.provider === 'link') return record.link ? { kind: 'link' } : null;
+  if (!isGatewayId(record.provider)) return null;
+  return { kind: 'gateway', label: getGateway(record.provider).label, test: record.test === true || record.environment === 'sandbox' };
+}
 
 const NOT_READY = { error: 'Online payments are not set up on this server yet. Ask whoever runs Stockpot to add the encryption key (PAYMENT_SECRETS_KEY).', code: 'server_not_ready' };
 

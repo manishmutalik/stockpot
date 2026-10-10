@@ -85,7 +85,9 @@ needs an `Idempotency-Key`. Shapes are in `src/utils/quickApiTypes.ts`.
 | `POST /mobile/orders/:id/invoice` | Build the invoice and public bill link, ready to send | `InvoiceResponse` (message, `whatsappUrl`) |
 | `POST /mobile/payments` | Record a payment against a customer's whole orders (must equal what whole orders are owed) | `PaymentSaved` |
 | `POST /mobile/payments/statement` | Statement or invoice for one customer's unpaid orders | `StatementResponse` |
-| `GET /mobile/payments-due` | Everyone who owes, largest first | `PaymentsDueView` |
+| `POST /mobile/payments/claim` | Confirm (paid by UPI) or dismiss a customer's "I've paid by UPI" from the bill page | `ClaimReviewSaved` |
+| `GET /mobile/payments-due` | Everyone who owes, largest first, with any "says they paid" claim; card payments started from a bill are asked about first | `PaymentsDueView` |
+| `GET /mobile/payment-setup` | Whether bills ask for UPI, and which card payments are set up (Settings) | `PaymentSetupView` |
 | `GET /mobile/today` | Status lines, due today/tomorrow, overdue, "to collect" (top three), low stock, use-by soon, today's takings | `TodayView` |
 | `GET /mobile/upcoming` | Open pre-orders (overdue first), with confirmation text and WhatsApp URL | `UpcomingView` |
 | `GET /mobile/speech-phrases` | Words to hint the recogniser | `{phrases}` |
@@ -115,7 +117,7 @@ Handler refusals worth knowing: `no_menu` (422, add menu items in the web app fi
   uses `financialsForRange`, `summarizeDue`, `groupPendingPayments`: the web dashboard's own functions.
 - **Upcoming**: open pre-orders by day, overdue pinned at the top, each with **Hand over**, **Send confirmation** and **Send invoice**.
   The hand-over sheet's "Balance received now" switch starts **off** so the app never records money as received unless the owner turns it on.
-- **Payments due**: reached by tapping "N payments pending" or "See all" in To collect. Each customer shows what they owe, how long their oldest
+- **Payments due**: a customer who tapped "I've paid by UPI" on the bill shows **Says they paid ₹X by UPI · when**, with **Confirm received** and **Not received** (see [Billing and payments](07-billing-and-payments.md)). Reached by tapping "N payments pending" or "See all" in To collect. Each customer shows what they owe, how long their oldest
   order has waited (amber from 7 days, coral from 14), the orders behind it, **Send invoice / Send statement** and **Got paid**, which opens
   the Payment capture with "Priya paid 1300" pre-written.
 - **Sharing**: the server writes the message and builds a `wa.me` URL when the order has a phone; the app opens it, or the phone's share
@@ -167,5 +169,4 @@ root `npm test`.
 - **Notification action buttons** (Stock in / Dismiss / See items): a tap opens the useful screen instead.
 - **Editable money fields** on confirm screens (would need a "recalculate" call per change).
 - **Offline queue** (decided against), part-payments (need a data-model change), iOS release (store work, push key, Sign in with Apple if Google sign-in is offered).
-- **Payments due noticing customers who paid online and closed the page** (needs the server to ask the gateway about waiting links).
 - **Reading a WhatsApp screenshot** as an order is a parked idea, written up in `docs/handoffs/whatsapp-screenshot-orders.md` (on branch `whatsapp-screenshot-doc` until that is merged). Not started.

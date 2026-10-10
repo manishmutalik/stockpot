@@ -10,7 +10,8 @@ import { Button } from '../../components/Button';
 import { HandOverSheet } from '../../components/HandOverSheet';
 import { PaymentDueCard } from '../../components/PaymentDueCard';
 import { UpcomingCard } from '../../components/UpcomingCard';
-import { ordersLabel, recordPaymentText } from '../../lib/paymentsDue';
+import { ordersLabel, recordPaymentText, reviewClaim } from '../../lib/paymentsDue';
+import { randomUUID } from 'expo-crypto';
 import { countOrders, groupUpcoming } from '../../lib/upcoming';
 import { shareMessage } from '../../lib/share';
 import { useApiView } from '../../lib/useApiView';
@@ -56,6 +57,35 @@ export default function Upcoming() {
   useFocusEffect(useCallback(() => {
     if (wanted === 'payments') { setTab('payments'); router.setParams({ tab: undefined }); }
   }, [wanted, router]));
+
+  // A customer said on the bill page that they have paid by UPI: the owner confirms it, or says it did not come.
+  const [reviewing, setReviewing] = useState<string | null>(null);
+  const review = (c: PaymentDueSummary, action: 'confirm' | 'dismiss') => {
+    if (!c.claim || reviewing) return;
+    if (isDemo) { Alert.alert('Not available in the demo', 'Sign in with your own account to confirm payments.'); return; }
+    const amount = formatAmount(c.claim.amount, owed.data?.currency ?? { code: 'INR', symbol: '₹' });
+    const go = async () => {
+      setReviewing(c.key);
+      try {
+        await reviewClaim(api, c.key, action, randomUUID());
+        refreshOwed();
+        refresh();
+      } catch (e: any) {
+        Alert.alert('Could not save that', e?.message ?? 'Please try again.');
+      } finally {
+        setReviewing(null);
+      }
+    };
+    if (action === 'confirm') {
+      Alert.alert(`${amount} from ${c.name}?`, `This marks it paid by UPI. Check that it reached your UPI app first.`, [
+        { text: 'Cancel', style: 'cancel' }, { text: 'Confirm received', onPress: go },
+      ]);
+    } else {
+      Alert.alert('Not received?', `${c.name} stays on the list as owing ${formatAmount(c.dueTotal, owed.data?.currency ?? { code: 'INR', symbol: '₹' })}. They can tell you again from the bill.`, [
+        { text: 'Cancel', style: 'cancel' }, { text: 'Not received', style: 'destructive', onPress: go },
+      ]);
+    }
+  };
 
   const recordPayment = (c: PaymentDueSummary) => {
     if (isDemo) { Alert.alert('Not available in the demo', 'Recording a payment is not available in the demo kitchen. Sign in with your own account to use it.'); return; }
@@ -104,7 +134,8 @@ export default function Upcoming() {
                 </View>
               )}
               {owed.data?.customers.map(c => (
-                <PaymentDueCard key={c.key} customer={c} currency={owed.data!.currency} onRecord={() => recordPayment(c)} />
+                <PaymentDueCard key={c.key} customer={c} currency={owed.data!.currency} onRecord={() => recordPayment(c)}
+                  onConfirmClaim={() => review(c, 'confirm')} onDismissClaim={() => review(c, 'dismiss')} claimBusy={reviewing === c.key} />
               ))}
               {!!owed.data && owed.data.customers.length > 0 && (
                 <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.grey, textAlign: 'center' }}>

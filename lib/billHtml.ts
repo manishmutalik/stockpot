@@ -20,10 +20,12 @@ const PAGE_STYLE = `
   .row{display:flex;justify-content:space-between;padding:4px 0}.total{font-size:20px;font-weight:700;border-top:2px solid #2b313d;margin-top:8px;padding-top:12px}
   .pay{display:block;margin-top:20px;text-align:center;background:#00797b;color:#fff;text-decoration:none;font-weight:600;padding:14px;border-radius:12px}
   .pay.alt{background:#fff;color:#00797b;border:2px solid #00797b;margin-top:12px}
+  form{margin:0}button.pay{width:100%;border:0;font:inherit;font-weight:600;cursor:pointer}button.pay.quiet{background:#eaf4f3;color:#2b313d;margin-top:10px;font-size:15px;padding:12px}
+  .claimed{margin-top:12px;text-align:center;color:#5a5a5a;font-size:14px}
   .paid,.notice{margin-top:20px;text-align:center;font-weight:600;padding:14px;border-radius:12px}.paid{background:#e6f6f0;color:#14724f}
   .notice.info{background:#fff4e0;color:#8a4b00;font-weight:500;font-size:14px}.notice.good{background:#e6f6f0;color:#14724f}
   footer{text-align:center;color:#5a5a5a;font-size:12px;margin-top:16px}
-  @media print{body{background:#fff}.card{box-shadow:none}.pay,.notice{display:none}}
+  @media print{body{background:#fff}.card{box-shadow:none}.pay,.notice,.claimed,form{display:none}}
 `;
 
 /** What the page shows beyond the stored bill: whether it has been paid since, and the ways to pay it. */
@@ -34,6 +36,11 @@ export interface BillPageExtras {
   payOnline?: { href: string; amount: number } | null;
   /** A line above the bill, such as after the customer comes back from the gateway. */
   notice?: { tone: 'good' | 'info'; text: string };
+  /**
+   * "I've paid by UPI", for a bill paid by UPI straight to the owner (which tells nobody it happened). `offer` shows the button,
+   * posting to `action`; `sent` says the business has been told. Shown only with the UPI button.
+   */
+  upiClaim?: { state: 'offer'; action: string } | { state: 'sent' };
 }
 
 export function renderBillHtml(bill: Bill, extras: BillPageExtras = {}): string {
@@ -51,6 +58,10 @@ export function renderBillHtml(bill: Bill, extras: BillPageExtras = {}): string 
   // The card button goes first when it is the only way to pay; with UPI as well, UPI stays the main button and card sits under it.
   const card = extras.payOnline && !extras.paid
     ? `<a class="pay${upi ? ' alt' : ''}" href="${escapeHtml(extras.payOnline.href)}" rel="noopener noreferrer">Pay ${money(extras.payOnline.amount)} by card or online</a>` : '';
+  const claim = !upi || !extras.upiClaim ? ''
+    : extras.upiClaim.state === 'offer'
+      ? `<form method="post" action="${escapeHtml(extras.upiClaim.action)}"><button class="pay quiet" type="submit">I've paid by UPI</button></form>`
+      : `<div class="claimed">You told ${escapeHtml(bill.business.name)} you have paid. This bill shows as paid once they confirm it.</div>`;
   const paidBox = extras.paid ? '<div class="paid">Paid in full. Thank you!</div>' : '';
   const notice = extras.notice ? `<div class="notice ${extras.notice.tone}" role="status">${escapeHtml(extras.notice.text)}</div>` : '';
   const gstLabel = bill.gst
@@ -92,6 +103,7 @@ export function renderBillHtml(bill: Bill, extras: BillPageExtras = {}): string 
     ${notice}
     ${paidBox}
     ${upi}
+    ${claim}
     ${card}
   </div>
   <footer>Thank you for your order.</footer>

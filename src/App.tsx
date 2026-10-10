@@ -759,7 +759,7 @@ function BakeryApp() {
   // ── Order Actions ────────────────────────────────────────────────────────────
   // Extracted to src/hooks/useOrderActions.ts as part of the Phase 4 breakup.
   const {
-    addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders,
+    addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders,
   } = useOrderActions(menu, orders, orderDate, showConfirm, showAlert, materials, settings.paymentFeeRates, {
     // Booking, advances and cancellations are dated in the business's own time zone, and an advance is compared with the total including GST.
     today: () => todayInZone(settings.timezone),
@@ -1262,7 +1262,7 @@ function BakeryApp() {
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
     deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
-    addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders, saveSettings,
+    addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,
     billing, cancelSubscription, isCancelling, startCheckout, isStartingCheckout,

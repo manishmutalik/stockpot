@@ -13,6 +13,7 @@ export const colors = {
   inputFill: '#EEF1FF',
   outline: '#BDC9C8',
   green: '#1FA97A',
+  greenPressed: '#17875F',
   coral: '#E4536B',
   amber: '#D97706',
   white: '#FFFFFF',

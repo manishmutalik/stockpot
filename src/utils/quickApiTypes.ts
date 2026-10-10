@@ -40,12 +40,25 @@ export interface PaymentDueSummary {
   daysOutstanding: number;
   /** What they owe: items, delivery and GST, less any advance. */
   dueTotal: number;
+  /**
+   * The customer said on the bill page that they have paid by UPI (POST /api/mobile/payments/claim confirms or dismisses it).
+   * `amount` is what the bill(s) they said it for asked; `orderCount` is how many of their orders that covers. Absent: no claim.
+   */
+  claim?: PaymentClaimSummary;
+}
+
+/** A customer's "I've paid by UPI", not yet confirmed by the owner. */
+export interface PaymentClaimSummary {
+  /** Unix ms of the latest tap. */
+  at: number;
+  amount: number;
+  orderCount: number;
 }
 
 /** One customer who owes money, with what they owe it for. */
 export interface PaymentDueCustomer extends PaymentDueSummary {
   /** One entry per whole order, oldest first. */
-  orders: { orderId: string; date: string; items: { name: string; quantity: number }[]; due: number }[];
+  orders: { orderId: string; date: string; items: { name: string; quantity: number }[]; due: number; claimed?: boolean }[];
 }
 
 /** GET /api/mobile/payments-due: everyone who owes, largest amount first. */
@@ -285,6 +298,28 @@ export interface InvoiceResponse {
   shareMessage: string;
   /** A wa.me link that opens WhatsApp to this customer with that text, when the order has a phone number. */
   whatsappUrl: string | null;
+}
+
+/**
+ * POST /api/mobile/payments/claim (200), with { customerKey, action: 'confirm' | 'dismiss' }. Confirm marks the orders the customer
+ * said they paid for as paid by UPI; dismiss clears the claim and leaves them unpaid.
+ */
+export interface ClaimReviewSaved {
+  customerName: string;
+  action: 'confirm' | 'dismiss';
+  orderIds: string[];
+  /** What the claim was for. */
+  amount: number;
+  /** What they still owe afterwards. */
+  remainingDue: number;
+}
+
+/** GET /api/mobile/payment-setup: how customers can pay this owner online. Read-only; set up in the web app. */
+export interface PaymentSetupView {
+  /** Bills ask for UPI (a UPI ID is set and the currency is rupees). */
+  upi: boolean;
+  /** The owner's card / online payments: their own gateway, or a payment link they pasted. Null: not set up. */
+  online: { kind: 'gateway'; label: string; test: boolean } | { kind: 'link' } | null;
 }
 
 /**

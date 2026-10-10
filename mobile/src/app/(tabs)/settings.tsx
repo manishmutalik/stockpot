@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
@@ -10,6 +10,9 @@ import { Card } from '../../components/Card';
 import { EVENING_TIMES, MORNING_TIMES, timeLabel, withSwitch, withTime } from '../../lib/notifications';
 import { pushFailureMessage, pushPermission, registerForPush, type PushPermission } from '../../lib/push';
 import { useNotificationSettings } from '../../lib/useNotificationSettings';
+import { PAYMENT_SETUP_PATH, paymentSetupLines } from '../../lib/paymentsDue';
+import { useApiView } from '../../lib/useApiView';
+import type { PaymentSetupView } from '../../../../src/utils/quickApiTypes';
 import { useVoicePrefs } from '../../lib/useVoiceHints';
 import { colors, fonts, radius } from '../../theme';
 
@@ -47,6 +50,34 @@ function TimeChips({ label, times, current, onPick }: { label: string; times: st
           );
         })}
       </View>
+    </View>
+  );
+}
+
+/** How customers can pay from a bill. Read-only here: UPI and card payments are set up in the web app. */
+function CustomerPayments() {
+  const { api } = useAuth();
+  const setup = useApiView<PaymentSetupView>(api, PAYMENT_SETUP_PATH);
+  // Looked at again on each visit (it may have been set up on the web meanwhile); the first load is already under way.
+  const { refresh } = setup;
+  const first = useRef(true);
+  useFocusEffect(useCallback(() => { if (first.current) first.current = false; else refresh(); }, [refresh]));
+  return (
+    <View style={{ gap: 8 }}>
+      <Text style={caption}>CUSTOMER PAYMENTS</Text>
+      <Card style={{ gap: 14, padding: 16 }}>
+        {setup.loading && <ActivityIndicator color={colors.primary} />}
+        {!!setup.error && !setup.data && <Text accessibilityRole="alert" style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.coral }}>{setup.error}</Text>}
+        {setup.data && paymentSetupLines(setup.data).map(line => (
+          <View key={line.title} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+            <MaterialIcons name={line.on ? 'check-circle' : 'radio-button-unchecked'} size={20} color={line.on ? colors.green : colors.grey} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>{line.title}</Text>
+              <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.grey }}>{line.detail}</Text>
+            </View>
+          </View>
+        ))}
+      </Card>
     </View>
   );
 }
@@ -136,6 +167,8 @@ export default function Settings() {
           </Card>
         )}
       </View>
+
+      {!isDemo && <CustomerPayments />}
 
       {!isDemo && (
         <View style={{ gap: 8 }}>
