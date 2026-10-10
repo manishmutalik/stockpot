@@ -1,5 +1,10 @@
 # Architecture
 
+> **Note:** this file is the original note from the `App.tsx` breakup (when it was a 3,800-line file; it is now about 1,700 lines
+> and the data listeners have since been split into `useFirestoreCollection` / `useSettingsListener`). The up-to-date,
+> full description of the codebase is the [developer guide](developer-guide/README.md). The "Adding a new feature" steps
+> below still apply; the guide's [web app](developer-guide/03-web-app.md) page has the current checklist.
+
 This doc exists so the next person extending this app doesn't rebuild another
 3,800-line `App.tsx`. It covers the pattern used to break the original
 monolith apart, and where to put new code.

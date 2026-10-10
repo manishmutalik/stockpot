@@ -5,6 +5,9 @@ bakers, and small online food stores: track raw materials, recipes, orders,
 production runs, wastage, and (optionally) sync orders in from Shopify or
 Odoo.
 
+**New to the codebase?** Start with the [developer guide](docs/developer-guide/README.md): what each part does, how a request
+travels, the data model, the money maths, the server, the AI features, the phone app, and how to test and run it.
+
 ## Architecture
 
 - **Frontend:** React 19 + TypeScript, built with Vite, styled with Tailwind CSS.
