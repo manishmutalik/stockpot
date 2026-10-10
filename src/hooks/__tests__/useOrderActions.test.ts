@@ -378,7 +378,7 @@ describe('payment status', () => {
     expect(batchSet).toHaveBeenCalledTimes(3);
     for (const call of batchSet.mock.calls) {
       expect(call[0].path).toMatch(/\/orders\//);
-      expect(call[1]).toEqual({ paymentStatus: 'paid' });
+      expect(call[1]).toEqual({ paymentStatus: 'paid', paymentClaim: null });
       expect(call[2]).toEqual({ merge: true });
     }
   });
@@ -386,7 +386,7 @@ describe('payment status', () => {
   it('can mark them unpaid again, and does nothing for an empty list', async () => {
     const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials));
     await result.current.markOrdersPaid(['a'], false);
-    expect(batchSet.mock.calls[0][1]).toEqual({ paymentStatus: 'unpaid' });
+    expect(batchSet.mock.calls[0][1]).toEqual({ paymentStatus: 'unpaid', paymentClaim: null });
     vi.clearAllMocks();
     await result.current.markOrdersPaid([], true);
     expect(batchCommit).not.toHaveBeenCalled();
@@ -494,13 +494,13 @@ describe('discount and payment method', () => {
     const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials, { upi: 1 }));
     await result.current.markOrdersPaid(['a', 'b'], true, 'upi');
     expect(batchCommit).toHaveBeenCalledTimes(1);
-    for (const call of batchSet.mock.calls) expect(call[1]).toEqual({ paymentStatus: 'paid', paymentMethod: 'upi', paymentFeeRate: 1 });
+    for (const call of batchSet.mock.calls) expect(call[1]).toEqual({ paymentStatus: 'paid', paymentMethod: 'upi', paymentFeeRate: 1, paymentClaim: null });
   });
 
   it('marking unpaid never records a method', async () => {
     const { result } = renderHook(() => useOrderActions(menu, [], '2026-04-01', showConfirm, vi.fn(), materials, { upi: 1 }));
     await result.current.markOrdersPaid(['a'], false, 'upi');
-    expect(batchSet.mock.calls[0][1]).toEqual({ paymentStatus: 'unpaid' });
+    expect(batchSet.mock.calls[0][1]).toEqual({ paymentStatus: 'unpaid', paymentClaim: null });
   });
 
   it('records how paid orders were paid, for every item together', async () => {

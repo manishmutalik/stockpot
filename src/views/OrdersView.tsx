@@ -373,7 +373,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
   const {
     orders, menu, currency, settings, orderFilterStart, setOrderFilterStart, orderFilterEnd, setOrderFilterEnd,
     setIsAddOrderModalOpen, shopifyStatus, importShopifyOrders, isImportingShopify, odooStatus,
-    importOdooOrders, isImportingOdoo, fulfillOrder, cancelPreorder, ordersFilterOnOpen, markOrdersPaid, setOrdersPaymentMethod, updateOrder, deleteOrder, materials
+    importOdooOrders, isImportingOdoo, fulfillOrder, cancelPreorder, ordersFilterOnOpen, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, materials
   } = props;
 
   // Which orders currently have their "Delivery Details" section expanded.
@@ -413,7 +413,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
   const today = todayInZone(settings.timezone);
 
   // Orders about to be marked paid (asks how they were paid first), or null.
-  const [markPaid, setMarkPaid] = useState<{ ids: string[]; title: string; summary: string; amount: number } | null>(null);
+  const [markPaid, setMarkPaid] = useState<{ ids: string[]; title: string; summary: string; amount: number; method?: PaymentMethod } | null>(null);
 
   const [search, setSearch] = useState('');
   // The Dashboard's pre-order card can open this tab on its Upcoming list.
@@ -718,6 +718,14 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
           summary: `${c.orderCount} order${c.orderCount === 1 ? '' : 's'} from ${c.name}`,
           amount: c.dueTotal,
         })}
+        onConfirmClaim={(c, ids, amount) => setMarkPaid({
+          ids,
+          title: 'Confirm UPI payment',
+          summary: `${c.name} said they paid by UPI`,
+          amount,
+          method: 'upi',
+        })}
+        onDismissClaim={ids => dismissPaymentClaim(ids)}
       />
 
       {/* Who orders, who is due or lapsed, and a WhatsApp nudge for each (no AI involved) */}
@@ -918,7 +926,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
       {markPaid && createPortal(
         <MarkPaidModal
           title={markPaid.title} summary={markPaid.summary} amount={markPaid.amount} money={money}
-          feeRates={settings.paymentFeeRates}
+          feeRates={settings.paymentFeeRates} initialMethod={markPaid.method}
           onConfirm={method => { markOrdersPaid(markPaid.ids, true, method); setMarkPaid(null); }}
           onClose={() => setMarkPaid(null)}
         />,

@@ -140,6 +140,12 @@ bill again, the server asks the gateway whether the link was paid in full, and o
 card fee), once. The owner has no webhook to set up. `APP_URL` must be the real public address, because the gateway sends the
 customer back to it.
 
+**Owners with only UPI.** A UPI payment straight to the owner's UPI ID tells nobody it happened, so the bill page also has an
+**I've paid by UPI** button (`POST /bill/:token/claim`). It marks nothing paid: it keeps the customer's word as a claim on the
+unpaid orders and tells the owner's phone, and the owner confirms it (marked paid by UPI) or says it was not received, in the phone's
+Payments due or the web's Payments pending. Payments due also asks the gateway about card payments started from a bill, so a
+customer who paid and never came back to the page shows as paid.
+
 The Razorpay and Cashfree clients (`lib/gateways/`) were written from their documented APIs and tested against recorded
 replies, not a live gateway. Before relying on them, use **test-mode keys** (Razorpay `rzp_test_…`, Cashfree sandbox) and pay a
 ₹1 bill end to end.

@@ -41,6 +41,7 @@ export function routeForNotification(data: unknown): AppRoute | null {
     case 'today': return { pathname: '/' };
     case 'items': return { pathname: '/' };
     case 'upcoming': return { pathname: '/upcoming' };
+    case 'payments-due': return { pathname: '/upcoming', params: { tab: 'payments' } };
     case 'stock-in': return { pathname: '/capture', params: { kind: 'restock' } };
     default: return null;
   }

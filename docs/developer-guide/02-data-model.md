@@ -100,6 +100,7 @@ Important fields and what they mean:
 | `cancelledOn`, `advanceOutcome` | A cancelled order is never a sale; a kept advance counts as income on the cancellation date, a refunded one does not. |
 | `fulfilled` | Handed over / completed. No inventory maths hangs off it any more. |
 | `billToken`, `statementToken` | Public bill / statement link tokens. **Written by the server only.** |
+| `paymentClaim` | A customer's "I've paid by UPI" from the bill page: `{at, amount, method: 'upi'}`. A claim, not a payment; cleared (`null`) when the order is marked paid or unpaid, or the owner says it was not received. Written by the server. |
 | `productionRunId` | Legacy: an order auto-created by a production run. New runs no longer create orders. |
 | `deliveryMethod` | `'pickup' | 'self_delivery' | 'third_party'`; only `third_party` has a `deliveryFee` (paid to a courier). |
 

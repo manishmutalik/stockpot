@@ -23,7 +23,7 @@ import { createChatHandler } from "./lib/chatRoutes";
 import { createChatModel } from "./lib/chatModel";
 import { createOrderParseHandler } from "./lib/orderParseRoutes";
 import { createQuickParseHandler } from "./lib/quickParseRoutes";
-import { createQuickInvoiceHandler, createQuickStatementHandler, createQuickPaymentsDueHandler } from "./lib/quickRoutes";
+import { createQuickInvoiceHandler, createQuickStatementHandler, createQuickPaymentsDueHandler, createQuickClaimHandler, createQuickPaymentSetupHandler, type QuickRouteDeps } from "./lib/quickRoutes";
 import { createNotificationRunHandler, listUsersWithDevices } from "./lib/notificationRoutes";
 import { runNotificationJob } from "./lib/notificationJob";
 import { createDemoSeedHandler, seedDemoKitchen } from "./lib/demoSeedRoutes";
@@ -40,8 +40,9 @@ import { searchUsda, searchOpenFoodFacts } from "./lib/nutritionSearch";
 import { createOrRefreshBill, createOrRefreshStatement } from "./lib/billStore";
 import { createBillHandler } from "./lib/billRoutes";
 import { createAdminBillRecords } from "./lib/billStore";
-import { createBillPageHandler, createPayHandler, createReturnHandler } from "./lib/payOnline";
-import { createGatewayHandlers } from "./lib/gatewayRoutes";
+import { createBillPageHandler, createClaimHandler, createPayHandler, createReturnHandler, createWaitingPaymentSettler, type PayOnlineDeps } from "./lib/payOnline";
+import { createOwnerNotifier } from "./lib/ownerPush";
+import { createGatewayHandlers, onlinePaymentsOf } from "./lib/gatewayRoutes";
 import { createAdminGatewayStore } from "./lib/gatewayStore";
 import { readSecretKey } from "./lib/secretBox";
 
@@ -151,9 +152,23 @@ async function startServer() {
 
   // --- Stockpot Quick (phone app) save endpoints ---
   // Bearer-token only, so no CSRF check (see lib/quickRoutes.ts). Every POST needs an Idempotency-Key header.
-  const quickDeps = {
-    db: createAdminQuickDb(), now: () => Date.now(), newId: randomId,
+  // The owner's own payment gateway (Razorpay / Cashfree keys, kept encrypted with PAYMENT_SECRETS_KEY; see lib/secretBox.ts). Made
+  // here because the phone's Payments due asks it about card payments, and its Settings say what is set up.
+  const gatewayStore = createAdminGatewayStore();
+  const paymentSecretKey = readSecretKey();
+  if (!paymentSecretKey) console.warn("PAYMENT_SECRETS_KEY is missing or not 32 bytes of base64: owners cannot save payment gateway keys yet.");
+  const quickDb = createAdminQuickDb();
+  // The public bill pages, where a customer pays by card or says they have paid by UPI (which then tells the owner's phone).
+  const payOnlineDeps: PayOnlineDeps = {
+    db: quickDb, records: createAdminBillRecords(), gateways: gatewayStore, secretKey: paymentSecretKey,
+    fetch: fetch as any, now: Date.now, publicUrl: process.env.APP_URL,
+    notify: createOwnerNotifier({ db: quickDb, send: createExpoPushSender({ accessToken: process.env.EXPO_ACCESS_TOKEN }), now: Date.now }),
+  };
+  const quickDeps: QuickRouteDeps = {
+    db: quickDb, now: () => Date.now(), newId: randomId,
     bills: createOrRefreshBill, statements: createOrRefreshStatement, publicUrl: process.env.APP_URL,
+    settleWaiting: createWaitingPaymentSettler(payOnlineDeps),
+    onlinePayments: async uid => onlinePaymentsOf(await gatewayStore.get(uid)),
   };
   // The scheduled job that sends the phone app's notifications (see lib/notificationRoutes.ts). Not behind requireAuth: it has
   // its own shared secret, and is off until NOTIFICATIONS_CRON_SECRET is set.
@@ -187,6 +202,8 @@ async function startServer() {
   api.post("/mobile/orders/:id/invoice", quickGate, createQuickInvoiceHandler(quickDeps));
   api.post("/mobile/payments", quickGate, createQuickPaymentHandler(quickDeps));
   api.post("/mobile/payments/statement", quickGate, createQuickStatementHandler(quickDeps));
+  api.post("/mobile/payments/claim", quickGate, createQuickClaimHandler(quickDeps));
+  api.get("/mobile/payment-setup", quickGate, createQuickPaymentSetupHandler(quickDeps));
   api.get("/mobile/payments-due", quickGate, createQuickPaymentsDueHandler(quickDeps));
   api.get("/mobile/today", quickGate, createQuickTodayHandler(quickDeps));
   api.get("/mobile/upcoming", quickGate, createQuickUpcomingHandler(quickDeps));
@@ -519,9 +536,6 @@ async function startServer() {
   // --- Online payments (the owner's own payment gateway) ---
   // Settings for the owner's Razorpay / Cashfree keys, which are checked with the gateway and kept encrypted (lib/secretBox.ts,
   // needs PAYMENT_SECRETS_KEY). The customer's side is the public /bill/:token routes below.
-  const gatewayStore = createAdminGatewayStore();
-  const paymentSecretKey = readSecretKey();
-  if (!paymentSecretKey) console.warn("PAYMENT_SECRETS_KEY is missing or not 32 bytes of base64: owners cannot save payment gateway keys yet.");
   const gatewayHandlers = createGatewayHandlers({ store: gatewayStore, secretKey: paymentSecretKey, fetch: fetch as any, now: Date.now });
   api.get("/payments/gateway", gatewayHandlers.get);
   api.put("/payments/gateway", requireCsrf, gatewayHandlers.put);
@@ -534,14 +548,12 @@ async function startServer() {
   // link. No sign-in: the unguessable token in the URL is the access check.
   // Registered before the Vite/static handlers below so the SPA never
   // swallows it.
-  const payOnlineDeps = {
-    db: quickDeps.db, records: createAdminBillRecords(), gateways: gatewayStore, secretKey: paymentSecretKey,
-    fetch: fetch as any, now: Date.now, publicUrl: process.env.APP_URL,
-  };
   app.get("/bill/:token", createBillPageHandler(payOnlineDeps));
   // Where a customer pays by card or online (opened from the bill page), and where the gateway sends them back.
   app.get("/bill/:token/pay", createPayHandler(payOnlineDeps));
   app.get("/bill/:token/return", createReturnHandler(payOnlineDeps));
+  // "I've paid by UPI": the customer's word, kept for the owner to confirm (never marks anything paid by itself).
+  app.post("/bill/:token/claim", createClaimHandler(payOnlineDeps));
 
   // --- Vite Middleware ---
 

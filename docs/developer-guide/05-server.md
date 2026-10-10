@@ -82,7 +82,7 @@ All routes below are under `/api` and need a Firebase ID token unless marked **p
 
 Documented in [The phone app](08-phone-app.md): `POST /mobile/parse`, `/mobile/orders`, `/mobile/restocks`,
 `/mobile/production-runs`, `/mobile/orders/:id/hand-over`, `/mobile/orders/:id/invoice`, `/mobile/payments`,
-`/mobile/payments/statement`; `GET /mobile/payments-due`, `/mobile/today`, `/mobile/upcoming`, `/mobile/speech-phrases`;
+`/mobile/payments/statement`, `/mobile/payments/claim`; `GET /mobile/payments-due`, `/mobile/payment-setup`, `/mobile/today`, `/mobile/upcoming`, `/mobile/speech-phrases`;
 `POST` and `DELETE /mobile/push-token`; `GET` and `PUT /mobile/notification-settings`; and `POST /mobile/demo/seed`
 (no plan check; demo accounts only).
 
@@ -98,6 +98,7 @@ Documented in [The phone app](08-phone-app.md): `POST /mobile/parse`, `/mobile/o
 | `GET /bill/:token` (**public**) | `createBillPageHandler` (`lib/payOnline.ts`) | The customer's bill page |
 | `GET /bill/:token/pay` (**public**) | `createPayHandler` | Makes a payment link for what is owed *now* and redirects the customer |
 | `GET /bill/:token/return` (**public**) | `createReturnHandler` | Where the gateway sends the customer back; asks the gateway whether it was paid |
+| `POST /bill/:token/claim` (**public**) | `createClaimHandler` | "I've paid by UPI": keeps the customer's claim on the unpaid orders and tells the owner's phone once; marks nothing paid |
 
 ### Integrations and lookups (defined inline in `server.ts`)
 

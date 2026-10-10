@@ -10,6 +10,7 @@ import { buildBill, billBalance } from './billing';
 import { clusterOrdersByGroup } from './orderClustering';
 import { groupPendingPayments, type PendingCustomer } from './payments';
 import { resolveItemName } from './orderPricing';
+import { hasPaymentClaim } from './plans/planOrders';
 import type { Currency, PaymentsDueView } from './quickApiTypes';
 import { billSettingsOf, pendingSummary } from './quickViews';
 
@@ -62,6 +63,7 @@ export function buildPaymentsDue(input: {
       date: d.orders[0].date,
       items: d.orders.map(o => ({ name: resolveItemName(o, menu), quantity: o.quantity || 0 })),
       due: d.due,
+      ...(d.orders.some(hasPaymentClaim) && { claimed: true }),
     })),
   }));
   return { today, currency, total: round2(customers.reduce((sum, c) => sum + c.dueTotal, 0)), customers };

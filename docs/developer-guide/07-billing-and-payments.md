@@ -151,13 +151,37 @@ The rules that keep it safe:
 `APP_URL` must be the real public address, because the gateway sends the customer back to it. (A placeholder `APP_URL` once made
 every payment link point at a placeholder domain.)
 
+### Owners with only UPI: "I've paid by UPI"
+
+A UPI payment straight to the owner's UPI ID sends nothing back, so Stockpot cannot know it happened. The bill page therefore has an
+**I've paid by UPI** button under the UPI one (only when the bill asks for UPI and is unpaid). It is a form that posts to
+`POST /bill/:token/claim` (`createClaimHandler`), which:
+
+1. marks **nothing** paid: it writes `paymentClaim: { at, amount, method: 'upi' }` on every unpaid order the bill covers, where
+   `amount` is what the bill asked for at that moment;
+2. tells the owner's phone once (`lib/ownerPush.ts`, through Expo; `data.screen = 'payments-due'`). A second tap within 30 minutes
+   changes nothing and sends nothing;
+3. sends the customer back to the bill with "Thank you! We have told …", and the page shows "You told … you have paid" instead of the
+   button.
+
+The owner then sees **Says they paid ₹X by UPI · when** on that customer (phone: Payments due, and SAYS PAID in Today's To collect; web:
+Payments pending), checks their UPI app, and either:
+
+- **Confirm received**: `POST /api/mobile/payments/claim` with `action: 'confirm'` (or, on the web, Mark paid with UPI preselected)
+  marks the claimed orders paid by UPI with the UPI fee, as whole orders;
+- **Not received**: `action: 'dismiss'` (`planDismissClaim`) clears the claim; the orders stay unpaid and the customer can claim again.
+
+`planMarkPaid` always clears a claim (`paymentClaim: null`), so marking paid by any route settles it. `claimSummary` (in
+`src/utils/quickViews.ts`) counts each tap once even when a statement's claim sits on several orders. Anyone with the bill link can tap
+the button; that is acceptable because a claim changes no money and the owner must confirm it.
+
 ### Where the phone fits
 
-The phone's "Send invoice" / "Send statement" create the same public bill (`createOrRefreshBill` / `createOrRefreshStatement`) and the
-WhatsApp message carries the link, so a customer who opens it can pay by card without the owner doing anything more. Orders are
-marked paid when the customer returns from the gateway or the bill page is opened again (the gateway is asked then). If a customer
-pays and closes the page without returning, the orders stay unpaid in the phone's Payments due until the bill is opened again.
-Making Payments due ask the gateway about waiting links is a planned follow-up that is not built.
+The phone's Send invoice and Send statement create the same public bill, and the WhatsApp message carries the link. **Payments due asks
+the gateway first** (`createWaitingPaymentSettler`, passed to the phone endpoints as `settleWaiting`): for the unpaid orders' bill and
+statement tokens, it reconciles card payments still `created` and less than about a day old, at most 8 bills and 5 seconds, so a customer
+who paid and closed the page without returning shows as paid. Anything slow or failing is left for the next look. The phone's Settings
+show what is set up (`GET /api/mobile/payment-setup`: UPI on bills, and the gateway or a pasted link).
 
 ## Other credentials stored encrypted
 

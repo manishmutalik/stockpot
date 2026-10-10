@@ -1,5 +1,27 @@
 # Changelog
 
+## Online payments, step 3: "I've paid by UPI", and payments that settle by themselves
+
+**Owners with only UPI.** A customer who pays a bill by UPI pays the owner's UPI ID directly, and nothing tells Stockpot it
+happened. The public bill page now has an **I've paid by UPI** button under the UPI one. Tapping it marks nothing paid: it keeps the
+customer's word as a claim on the bill's unpaid orders (`paymentClaim` on each: when, and what the bill asked for), tells the
+owner's phone once ("Priya says they have paid · ₹1,300 by UPI for INV-…"; tapping it opens Payments due), and thanks the customer.
+A second tap within half an hour changes nothing. The owner sees **Says they paid ₹1,300 by UPI · today, 2:15 pm** on the customer
+in Payments due (and a SAYS PAID mark in Today's To collect), checks their UPI app, and taps **Confirm received** (those orders are
+marked paid by UPI, with the UPI fee) or **Not received** (the claim goes and they stay unpaid; the customer can say so again). The
+web shows the same in Payments pending, where Confirm received opens Mark paid with UPI chosen. Marking orders paid or unpaid in any
+way clears a claim on them. The bill page's form posts only to this site (`form-action 'self'`).
+
+**Owners with a gateway.** Payments due now asks the gateway about card payments started from a bill before it lists who owes, so a
+customer who paid and closed the page without coming back shows as paid (at most 8 bills, links under about a day old, at most 5
+seconds; anything slow is left for the next look).
+
+**Phone Settings** has a Customer payments section saying whether bills ask for UPI and which card payments are set up (Razorpay,
+Cashfree, test keys, or a pasted link), with where to set them up on the web.
+
+New endpoints: `POST /bill/:token/claim` (public), `POST /api/mobile/payments/claim` (`{ customerKey, action: 'confirm' | 'dismiss' }`,
+needs an Idempotency-Key) and `GET /api/mobile/payment-setup`. Needs a Render redeploy and a new APK (the phone screens changed).
+
 ## Developer guide
 
 A new set of pages for a developer picking the project up, in `docs/developer-guide/`: where to start and how to run and check it, the

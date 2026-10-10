@@ -14,7 +14,14 @@ function Row({ customer, currency, last, onOpen }: { customer: PaymentDueSummary
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: last ? 0 : 1, borderBottomColor: colors.inputFill }}>
       <Pressable accessibilityRole="button" accessibilityLabel={`${customer.name} owes ${formatAmount(customer.dueTotal, currency)}. See the list`} onPress={onOpen} style={{ flex: 1, gap: 2 }}>
-        <Text numberOfLines={1} style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>{customer.name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text numberOfLines={1} style={{ flexShrink: 1, fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>{customer.name}</Text>
+          {!!customer.claim && (
+            <View style={{ backgroundColor: `${colors.green}1F`, borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 }}>
+              <Text style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: 0.5, color: colors.green }}>SAYS PAID</Text>
+            </View>
+          )}
+        </View>
         <Text numberOfLines={1} style={{ fontFamily: fonts.regular, fontSize: 13, color: tone === 'grey' ? colors.grey : toneColor[tone] }}>
           {`${formatAmount(customer.dueTotal, currency)} · ${ordersLabel(customer.orderCount)} · ${waitingLabel(customer.daysOutstanding)}`}
         </Text>

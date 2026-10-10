@@ -18,8 +18,10 @@ export const MarkPaidModal: React.FC<{
   feeRates: Partial<Record<PaymentMethod, number>> | undefined;
   onConfirm: (method: PaymentMethod | undefined) => void;
   onClose: () => void;
-}> = ({ title, summary, amount, money, feeRates, onConfirm, onClose }) => {
-  const [method, setMethod] = useState<PaymentMethod | ''>('');
+  /** The method to start with, e.g. UPI when the customer said they paid by UPI. */
+  initialMethod?: PaymentMethod;
+}> = ({ title, summary, amount, money, feeRates, onConfirm, onClose, initialMethod }) => {
+  const [method, setMethod] = useState<PaymentMethod | ''>(initialMethod ?? '');
   const rate = method ? feeRates?.[method] ?? 0 : 0;
 
   return (

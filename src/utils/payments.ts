@@ -78,3 +78,13 @@ export function groupPendingPayments(input: {
   }
   return result.sort((a, b) => b.dueTotal - a.dueTotal || a.oldestDate.localeCompare(b.oldestDate));
 }
+
+/**
+ * The orders a customer's "I've paid by UPI" covers, as whole orders: every item of a multi-item order the claim is on, so
+ * confirming or dismissing it settles the order together.
+ */
+export function claimedOrderIds(orders: Pick<Order, 'id' | 'orderGroupId' | 'paymentClaim'>[]): string[] {
+  const claimed = orders.filter(o => !!o.paymentClaim && typeof o.paymentClaim.at === 'number');
+  const groups = new Set(claimed.map(o => o.orderGroupId).filter(Boolean));
+  return orders.filter(o => claimed.includes(o) || (!!o.orderGroupId && groups.has(o.orderGroupId))).map(o => o.id);
+}
