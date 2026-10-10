@@ -257,10 +257,10 @@ const LandingPage: React.FC = () => {
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white border border-[#dfd5c6] shadow-sm mb-6"
+              className="inline-flex items-center gap-3 px-5 py-3 sm:px-7 sm:py-3.5 rounded-2xl sm:rounded-full bg-primary shadow-lg shadow-primary/25 ring-4 ring-primary/10 mb-7 max-w-full"
             >
-              <span className="w-2 h-2 rounded-full bg-margin animate-pulse shrink-0" aria-hidden="true" />
-              <span className={`${MONO} text-[10px] sm:text-xs font-bold uppercase tracking-wider text-primary`}>
+              <span className="w-2.5 h-2.5 rounded-full bg-primary-light animate-pulse shrink-0" aria-hidden="true" />
+              <span className={`${MONO} text-sm sm:text-base lg:text-lg leading-snug font-bold uppercase tracking-wide text-white text-left sm:text-center`}>
                 For home bakers, home chefs, tiffin services and small cloud kitchens
               </span>
             </motion.div>

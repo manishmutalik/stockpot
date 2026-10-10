@@ -1,5 +1,11 @@
 # Changelog
 
+## Landing page: the "who it's for" line stands out
+
+The first line of the hero ("For home bakers, home chefs, tiffin services and small cloud kitchens") is now a solid teal pill with
+white text, about 18 px on desktop (it was 12 px in teal on white), so a visitor sees straight away who Stockpot is for. On a phone it
+wraps onto three lines in a rounded box rather than a squeezed pill. Words unchanged.
+
 ## Landing page: new copy and four infographics
 
 The landing page follows the website content update. The words are shorter: the feature bullet lists are gone, each feature is a
