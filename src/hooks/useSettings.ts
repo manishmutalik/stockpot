@@ -19,6 +19,7 @@ import { useEffect, useRef } from 'react';
 import { auth, db, doc, setDoc } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { BakerySettings } from '../types';
+import { THEME_VARIABLE_NAMES, themeVariables } from '../utils/themeColour';
 
 export function useSettings(
   settings: BakerySettings,
@@ -31,10 +32,12 @@ export function useSettings(
   /** True once the stored settings have been read. Until then `settings` is only the built-in defaults. */
   settingsLoaded: boolean
 ) {
-  // Applies the primary theme colour to the CSS custom property so all
-  // Tailwind `text-primary` / `bg-primary` classes update instantly.
+  // Applies the owner's brand colour as the app's theme: the --color-primary family every `bg-primary` / `text-primary` class
+  // reads (see utils/themeColour). Removed again when the app closes, so the landing page keeps Stockpot's own colours.
   useEffect(() => {
-    document.documentElement.style.setProperty('--primary-color', settings.primaryColor);
+    const root = document.documentElement.style;
+    for (const [name, value] of Object.entries(themeVariables(settings.primaryColor))) root.setProperty(name, value);
+    return () => { for (const name of THEME_VARIABLE_NAMES) root.removeProperty(name); };
   }, [settings.primaryColor]);
 
   /**

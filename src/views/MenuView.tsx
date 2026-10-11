@@ -673,7 +673,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
             emoji={shareCardItem.emoji}
             businessName={settings.name || 'My Food Business'}
             logo={settings.logo}
-            primaryColor={settings.primaryColor || '#10b981'}
+            primaryColor={settings.primaryColor || '#00797B'}
             rollup={calculateRecipeNutrition(shareCardItem.recipe, materials, shareCardItem.servings || 0)}
           />
         </div>

@@ -235,7 +235,7 @@ export function buildDemoData(userId: string, today: string) {
   const settings = {
     name: 'Stockpot Demo Kitchen',
     logo: '',
-    primaryColor: '#10b981',
+    primaryColor: '#00797B',
     address: '14, 80 Feet Road, Indiranagar, Bengaluru 560038',
     phone: '+91 98450 00199',
     email: `${userId}@demo.stockpot.app`,

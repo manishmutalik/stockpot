@@ -21,7 +21,7 @@ import { CURRENCIES } from '../utils/conversions';
 const DEFAULT_SETTINGS: BakerySettings = {
   name: 'My Food Business',
   logo: '',
-  primaryColor: '#10b981',
+  primaryColor: '#00797B',
   address: '',
   phone: '',
   email: '',
