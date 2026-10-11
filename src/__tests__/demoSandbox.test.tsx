@@ -102,8 +102,9 @@ describe('Demo sandbox', () => {
       const item = menu.find((m: any) => m.id === o.menuItemId);
       return o.quantity * sum(item.recipe.map((r: any) => r.amount * materials.find((m: any) => m.id === r.materialId).costPerUnit));
     }));
-    expect(screen.getByText('Cost of Goods Sold').nextElementSibling?.textContent).toBe(money(cogs));
-    expect(screen.getByText('Net Profit').closest('div.surface-card')?.textContent).toContain(money(income - cogs));
+    const line = (label: string) => screen.getByText(label, { exact: false, selector: 'div' }).closest('li')?.textContent ?? '';
+    expect(line('Ingredients and packaging')).toContain(money(cogs));
+    expect(line('Profit before overheads')).toContain(money(income - cogs));
   }, 60000);
 
   it('opens the Add Order and Log Production Run modals from the demo data', async () => {

@@ -447,3 +447,50 @@ export function bookedAhead(input: {
   }
   return { orderCount, revenue, advancesHeld };
 }
+
+// ─── The Dashboard's profit breakdown ───────────────────────────────────────
+
+/** One line of the step-down from sales to true profit. Costs are negative. */
+export interface ProfitStep {
+  key: 'sales' | 'advancesKept' | 'materials' | 'couriers' | 'wastage' | 'beforeOverheads' | 'paymentFees' | 'fixedCosts' | 'trueProfit';
+  label: string;
+  /** Signed: what this line adds (positive) or takes away (negative); for a subtotal or the total, the running figure. */
+  amount: number;
+  kind: 'start' | 'add' | 'cost' | 'subtotal' | 'total';
+  /** A short note under the label. */
+  hint?: string;
+}
+
+type BreakdownFigures = Pick<Financials, 'income' | 'orderExpenses' | 'deliveryExpenses' | 'wastageExpenses' | 'profit' | 'paymentFees' | 'fixedCosts' | 'trueProfit'>
+  & Partial<Pick<Financials, 'forfeitedAdvances' | 'packagingExpenses' | 'discounts'>>;
+
+/**
+ * Sales down to true profit, one cost at a time, from the same figures `financialsForRange` returns, so the lines always add up
+ * to the cards: sales (+ advances kept) − ingredients and packaging − couriers − wastage = profit before overheads; that − payment
+ * fees − fixed costs = true profit. Lines that are nothing are left out (except ingredients and packaging, which every sale has).
+ */
+export function profitSteps(f: BreakdownFigures, opts: { gstApplicable?: boolean; money?: (n: number) => string } = {}): ProfitStep[] {
+  const money = opts.money ?? ((n: number) => n.toFixed(2));
+  const steps: ProfitStep[] = [{
+    key: 'sales', label: opts.gstApplicable ? 'Sales (excl. GST)' : 'Sales', amount: f.income, kind: 'start',
+    hint: (f.discounts ?? 0) > 0 ? `After ${money(f.discounts!)} of discounts` : 'Items and delivery charged',
+  }];
+  if ((f.forfeitedAdvances ?? 0) > 0) steps.push({ key: 'advancesKept', label: 'Advances kept', amount: f.forfeitedAdvances!, kind: 'add', hint: 'From cancelled pre-orders' });
+  steps.push({
+    key: 'materials', label: 'Ingredients and packaging', amount: -f.orderExpenses, kind: 'cost',
+    hint: (f.packagingExpenses ?? 0) > 0 ? `Of what was sold · ${money(f.packagingExpenses!)} packaging` : 'Of what was sold',
+  });
+  if (f.deliveryExpenses > 0) steps.push({ key: 'couriers', label: 'Courier fees', amount: -f.deliveryExpenses, kind: 'cost', hint: 'Third-party delivery' });
+  if (f.wastageExpenses > 0) steps.push({ key: 'wastage', label: 'Wastage', amount: -f.wastageExpenses, kind: 'cost', hint: 'Stock thrown away' });
+  steps.push({ key: 'beforeOverheads', label: 'Profit before overheads', amount: f.profit, kind: 'subtotal' });
+  if (f.paymentFees > 0) steps.push({ key: 'paymentFees', label: 'Payment fees', amount: -f.paymentFees, kind: 'cost', hint: 'Card and UPI charges' });
+  if (f.fixedCosts > 0) steps.push({ key: 'fixedCosts', label: 'Fixed costs', amount: -f.fixedCosts, kind: 'cost', hint: 'Rent, salaries and other overheads, for these days' });
+  steps.push({ key: 'trueProfit', label: 'True profit', amount: f.trueProfit, kind: 'total', hint: 'What the business kept' });
+  return steps;
+}
+
+/** For the trend chart: what came in, everything that went out, and what was kept. `costs` is every cost true profit takes off. */
+export function trendFigures(f: Pick<Financials, 'income' | 'trueProfit'> & Partial<Pick<Financials, 'forfeitedAdvances'>>): { income: number; costs: number; trueProfit: number } {
+  const income = f.income + (f.forfeitedAdvances ?? 0);
+  return { income, costs: Math.round((income - f.trueProfit) * 100) / 100, trueProfit: f.trueProfit };
+}

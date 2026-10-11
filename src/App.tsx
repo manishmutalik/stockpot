@@ -320,7 +320,7 @@ const INITIAL_MENU: MenuItem[] = [
 // Imported here for this file's own use, and re-exported so existing
 // `from '../App'` imports in view files keep working.
 import { UNIT_CONVERSIONS, convertAmount, CURRENCIES } from './utils/conversions';
-import { financialsForRange } from './utils/profit';
+import { financialsForRange, trendFigures } from './utils/profit';
 import { getBatchesNeedingAttention } from './utils/stockAging';
 import { withShelfStock } from './utils/batchStock';
 import { AskBusiness } from './components/AskBusiness';
@@ -935,6 +935,7 @@ function BakeryApp() {
       fixedCosts: parseFloat(fins.fixedCosts.toFixed(2)),
       totalContribution: parseFloat(fins.totalContribution.toFixed(2)),
       trueProfit: parseFloat(fins.trueProfit.toFixed(2)),
+      forfeitedAdvances: parseFloat(fins.forfeitedAdvances.toFixed(2)),
       avgOrderContribution: parseFloat(fins.avgOrderContribution.toFixed(2)),
       unpaidIncome: parseFloat(fins.unpaidIncome.toFixed(2)),
       orderCount: fins.orderCount,
@@ -960,7 +961,8 @@ function BakeryApp() {
           name: d.toLocaleDateString('default', { month: 'short', day: 'numeric' }), 
           income: fins.income,
           expenses: fins.expenses,
-          profit: fins.profit
+          profit: fins.profit,
+          ...trendFigures(fins),
         });
       }
     } else if (summaryRange === 'weekly') {
@@ -977,7 +979,8 @@ function BakeryApp() {
           name: `W${start.getDate()}/${start.getMonth() + 1}`, 
           income: fins.income,
           expenses: fins.expenses,
-          profit: fins.profit
+          profit: fins.profit,
+          ...trendFigures(fins),
         });
       }
     } else if (summaryRange === 'monthly') {
@@ -992,7 +995,8 @@ function BakeryApp() {
           name: d.toLocaleDateString('default', { month: 'short' }), 
           income: fins.income,
           expenses: fins.expenses,
-          profit: fins.profit
+          profit: fins.profit,
+          ...trendFigures(fins),
         });
       }
     } else {
@@ -1011,14 +1015,15 @@ function BakeryApp() {
             name: d.toLocaleDateString('default', { month: 'short', day: 'numeric' }), 
             income: fins.income,
             expenses: fins.expenses,
-            profit: fins.profit
+            profit: fins.profit,
+          ...trendFigures(fins),
           });
         }
       } else {
         // Just show summary
         data.push({ name: 'Period Start', income: 0, expenses: 0, profit: 0 });
         const fins = getFinancialsForRange(summaryDateStart, summaryDateEnd);
-        data.push({ name: 'Period Total', income: fins.income, expenses: fins.expenses, profit: fins.profit });
+        data.push({ name: 'Period Total', income: fins.income, expenses: fins.expenses, profit: fins.profit, ...trendFigures(fins) });
       }
     }
     return data;
