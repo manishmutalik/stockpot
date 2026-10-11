@@ -1,5 +1,15 @@
 # Changelog
 
+## Fixed costs count up to today, as sales do
+
+A view that runs past today (this month, this week) counted sales up to today but fixed costs for every day of the period, so on
+the 10th of the month the Dashboard set the whole month's rent and salaries against 10 days of sales, and true profit looked far
+worse than it was until the month ended. `financialsForRange` now counts fixed costs up to today too (the same `today` that already
+stops orders), so this month on the 10th carries 10 days of overheads. A finished month carries all of them, a period that has not
+started none, and the figures without a `today` are unchanged. The Dashboard's fixed-costs line says "up to today" when the period
+runs past it. This also applies to the trend chart and the AI's snapshot, which use the same sum. On
+the demo, this month's true profit is now ₹8,934 (it carried overheads for days not yet reached).
+
 ## Demo: overheads that suit a home bakery
 
 The demo sandbox's overheads were a shop's (₹31,500 a month: rent, power, a full-time helper) and applied to every month back to

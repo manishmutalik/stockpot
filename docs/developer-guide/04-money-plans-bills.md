@@ -35,7 +35,7 @@ The three rules (stated in the file's header):
 | `wastageExpenses`, `experimentExpenses` | Discarded stock; R&D Lab spend |
 | `gstCollected`, `gstPaid` | Output GST on sales; input GST contained in costs |
 | `paymentFees` | Fees on payments received (including on advances that were kept) |
-| `fixedCosts` | Monthly fixed costs, prorated by day to the range |
+| `fixedCosts` | Monthly fixed costs, prorated by day to the range, **up to today** (like sales; see below) |
 | `forfeitedAdvances` | Advances kept from cancelled pre-orders: income on the cancellation date |
 | `profit` | Income (plus kept advances) less ingredients, packaging, courier and wastage. Shown as **Profit before overheads** |
 | `trueProfit` | `profit` less payment fees and fixed costs: **what the business really made**, the Dashboard's headline |
@@ -43,7 +43,8 @@ The three rules (stated in the file's header):
 | `estimated` | True if any order in range predates stamping |
 
 Passing `today` matters: with it, nothing dated after today is counted (an order due next Friday is "booked for later",
-not yet a sale), and cancelled orders are never counted. `bookedAhead(...)` reports what is booked for later.
+not yet a sale; the days after today carry no fixed costs either, so a month view on the 10th sets 10 days of rent against 10
+days of sales), and cancelled orders are never counted. `bookedAhead(...)` reports what is booked for later.
 
 Per-order and per-product views are `orderContribution` and `productProfits` / `productProfit` in the same file.
 

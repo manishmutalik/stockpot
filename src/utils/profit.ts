@@ -298,7 +298,7 @@ export interface Financials {
   discounts: number;
   /** Fees paid on payments received (including on advances that were kept). */
   paymentFees: number;
-  /** Fixed monthly costs prorated to the range. */
+  /** Fixed monthly costs prorated to the range, up to today when `today` is given. */
   fixedCosts: number;
   /** Advances kept from pre-orders cancelled in the range: income on the day they were cancelled. */
   forfeitedAdvances: number;
@@ -386,7 +386,9 @@ export function financialsForRange(input: {
     .filter(w => w.date >= start && w.date <= last)
     .reduce((total, w) => total + (w.cost || 0), 0);
 
-  const fixedCosts = fixedCostsForRange(settings.fixedCosts, start, end);
+  // Up to today, as sales are: the rest of this month's rent is not yet spent, and taking it off now would set a whole month's
+  // overheads against the days of sales so far.
+  const fixedCosts = fixedCostsForRange(settings.fixedCosts, start, last);
   const orderExpenses = ingredients + packaging;
   return {
     income,
