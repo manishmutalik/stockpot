@@ -1,5 +1,16 @@
 # Changelog
 
+## Settings: the brand colour now colours the app
+
+Picking a colour in Settings › App Customisation did nothing to the app: it set a CSS variable (`--primary-color`) that nothing
+read, and since the Settings redesign the colour was only used on shared nutrition cards. It now themes the app: the
+`--color-primary` family that every `bg-primary` / `text-primary` class reads (primary, its hover shade, the light tint and the
+canvas tint), worked out in `src/utils/themeColour.ts`. Three safeguards: the old default green (#10b981), which every account
+was saved with, means "not chosen" and keeps Stockpot teal, so nobody's app changes colour unless they pick one; a colour too
+light for white text is darkened just enough to read (4.5:1) in the app, while the nutrition cards keep the colour as picked; and
+the theme is removed when the app closes, so the landing page keeps its own colours. The swatches drop the old default and add a
+blue and a purple; new accounts start on Stockpot teal.
+
 ## Online payments, step 3: "I've paid by UPI", and payments that settle by themselves
 
 **Owners with only UPI.** A customer who pays a bill by UPI pays the owner's UPI ID directly, and nothing tells Stockpot it

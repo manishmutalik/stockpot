@@ -11,9 +11,9 @@ import { OnlinePaymentsCard } from '../components/OnlinePaymentsCard';
 
 type SettingsTab = 'bakery' | 'integrations' | 'customisation' | 'account' | 'categories';
 
-// Colour is only used on shared nutrition cards, so offer the brand palette
-// (plus the previous default) rather than a wall of earth tones.
-const BRAND_SWATCHES = ['#00797B', '#006143', '#1FA97A', '#10b981', '#2B313D', '#E4536B', '#F59E0B'];
+// The brand colour themes the app (see utils/themeColour) and the shared nutrition cards. Stockpot teal first; the old default
+// green (#10b981) is not offered, because it now means "not chosen" and keeps the app teal.
+const BRAND_SWATCHES = ['#00797B', '#006143', '#1FA97A', '#2563EB', '#7C3AED', '#2B313D', '#E4536B', '#F59E0B'];
 
 const Toggle: React.FC<{ checked: boolean; onChange: () => void; label: string }> = ({ checked, onChange, label }) => (
   <button
@@ -613,7 +613,7 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div>
                   <span className={LABEL}>Brand Colour</span>
-                  <p className="text-xs text-muted mb-3">Used on the nutrition cards you share.</p>
+                  <p className="text-xs text-muted mb-3">Colours the app's buttons and highlights, and the nutrition cards you share. A very light colour is darkened a little in the app so white text stays readable.</p>
                   <div className="flex flex-wrap gap-3">
                     {BRAND_SWATCHES.map(color => (
                       <button
