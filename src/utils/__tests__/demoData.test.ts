@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildDemoData } from '../demoData';
 import { convertAmount } from '../conversions';
+import { financialsForRange, fixedCostsForRange } from '../profit';
 
 const TODAY = '2026-03-10';
 const demo = buildDemoData('uid1', TODAY);
@@ -170,6 +171,21 @@ describe('demo data adds up', () => {
     expect(demo.settings.fixedCosts!.length).toBeGreaterThan(0);
     for (const c of demo.settings.fixedCosts!) expect(c.monthlyAmount).toBeGreaterThan(0);
     expect(new Set(demo.settings.fixedCosts!.map(c => c.id)).size).toBe(demo.settings.fixedCosts!.length);
+  });
+
+  it('makes a true profit on every dashboard view, with no overheads before its first order', () => {
+    const fins = (start: string, end: string) => financialsForRange({
+      orders: demo.orders, menu: demo.menu, materials: demo.materials, experiments: demo.experiments,
+      wastageLogs: [], settings: demo.settings, start, end, today: TODAY,
+    });
+    // Today, this week, and this calendar month (which runs past today, so carries the whole month's overheads).
+    for (const [start, end] of [[TODAY, TODAY], ['2026-03-04', TODAY], ['2026-03-01', '2026-03-31']]) {
+      const f = fins(start, end);
+      expect(f.fixedCosts).toBeGreaterThan(0);
+      expect(f.trueProfit).toBeGreaterThan(0);
+    }
+    // The first order is 6 days ago; the month before has neither sales nor overheads.
+    expect(fixedCostsForRange(demo.settings.fixedCosts, '2026-02-01', '2026-03-03')).toBe(0);
   });
 
   it('has a price history for every material, ending at the material\'s current cost', () => {

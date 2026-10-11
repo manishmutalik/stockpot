@@ -1,5 +1,14 @@
 # Changelog
 
+## Demo: overheads that suit a home bakery
+
+The demo sandbox's overheads were a shop's (₹31,500 a month: rent, power, a full-time helper) and applied to every month back to
+the beginning, against a demo that only has a week of orders. With true profit now the Dashboard's headline, the demo's monthly
+view led with a ₹20,466 loss and its trend chart showed months of costs with no sales. The demo now has a home bakery's overheads
+(gas and electricity ₹2,500, a part-time helper ₹6,000, phone and internet ₹800), starting on the day of its first order. On the
+demo, today shows a true profit of ₹1,511 (50% of sales), the week ₹8,934 (49%) and the month ₹2,934 (16%). A test checks that
+each view stays in profit. Only the demo data changed; real accounts are untouched.
+
 ## Dashboard: from sales to true profit
 
 The Dashboard showed a dozen-odd tiles side by side (Net Profit, True Profit, Avg Order Contribution, Cost of Goods Sold, Production

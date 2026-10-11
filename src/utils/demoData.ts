@@ -140,6 +140,7 @@ export function buildDemoData(userId: string, today: string) {
   // Orders are paid in a mix of ways, each carrying the fee rate in force (see DEMO_FEE_RATES), and one
   // large café order was given a bulk discount, so the demo shows payment fees and discounts too.
   const methods: PaymentMethod[] = ['upi', 'cash', 'upi', 'card', 'upi', 'cash'];
+  const FIRST_ORDER_DAYS_AGO = Math.max(...orderRows.map(r => r[2]));
   const orders: DemoOrderWithStamp[] = orderRows.map(([menuItemId, quantity, daysAgo, customerName, customerPhone], i) => {
     const paymentMethod = methods[i % methods.length];
     return {
@@ -242,11 +243,13 @@ export function buildDemoData(userId: string, today: string) {
     currency: { code: 'INR', symbol: '₹' },
     categories: ['Raw Materials', 'Packaging Materials'],
     paymentFeeRates: DEMO_FEE_RATES,
-    // Typical monthly overheads for a small Bengaluru bakery, so the dashboard can show a True Profit.
+    // Typical monthly overheads for a home bakery, so the dashboard can show a True Profit. They start on the day of the first
+    // order, so months before the demo's week of trading do not show overheads with no sales against them. Sized so that the
+    // week of orders covers them: the demo shows a business that makes money, as most visitors' will.
     fixedCosts: [
-      { id: 'fc_rent', name: 'Shop rent', monthlyAmount: 15000 },
-      { id: 'fc_power', name: 'Gas & electricity', monthlyAmount: 4500 },
-      { id: 'fc_helper', name: "Helper's salary", monthlyAmount: 12000 },
+      { id: 'fc_power', name: 'Gas & electricity', monthlyAmount: 2500, startDate: at(FIRST_ORDER_DAYS_AGO) },
+      { id: 'fc_helper', name: 'Part-time helper', monthlyAmount: 6000, startDate: at(FIRST_ORDER_DAYS_AGO) },
+      { id: 'fc_phone', name: 'Phone & internet', monthlyAmount: 800, startDate: at(FIRST_ORDER_DAYS_AGO) },
     ],
   };
 
