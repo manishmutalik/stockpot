@@ -72,7 +72,9 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
   const steps = profitSteps(financials, { gstApplicable: settings.gstApplicable, money: fmt }).map(step =>
     step.key === 'couriers' && courierDeliveries > 0 ? { ...step, hint: `${step.hint} · ${courierDeliveries} deliver${courierDeliveries === 1 ? 'y' : 'ies'}` }
       : step.key === 'wastage' && filteredWastageLogs.length > 0 ? { ...step, hint: `${step.hint} · ${filteredWastageLogs.length} log${filteredWastageLogs.length === 1 ? '' : 's'}` }
-        : step);
+        // Fixed costs stop at today, as sales do (utils/profit.financialsForRange); say so when the period runs on past it.
+        : step.key === 'fixedCosts' && summaryDateEnd > todayInZone(settings.timezone) ? { ...step, hint: 'Rent, salaries and other overheads, up to today' }
+          : step);
   const avgRunCost = filteredProductionRuns.length > 0 ? totalProductionCost / filteredProductionRuns.length : 0;
   const hasChartData = !chartData.every(d => d.income === 0 && (d.costs ?? d.expenses) === 0 && (d.trueProfit ?? d.profit) === 0);
   const expiredCount = freshnessAlerts.filter(a => a.urgency === 'expired').length;

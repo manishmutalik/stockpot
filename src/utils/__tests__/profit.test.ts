@@ -357,6 +357,18 @@ describe('discounts, payment fees and fixed costs', () => {
       expect(f.trueProfit).toBeCloseTo(200 - 60 - 15 - 31, 6);
     });
 
+    it('counts fixed costs only up to today, as it counts sales', () => {
+      const settings = { ...NO_GST, fixedCosts: [{ id: 'r', name: 'Rent', monthlyAmount: 3100 }] };
+      const month = { start: '2026-03-01', end: '2026-03-31' };
+      // On the 10th, the month view carries 10 days of rent, not 31.
+      expect(financialsForRange({ ...base, ...month, orders: [], settings, today: '2026-03-10' }).fixedCosts).toBeCloseTo(1000, 6);
+      // A month that is over carries all of it, and one that has not started carries none.
+      expect(financialsForRange({ ...base, ...month, orders: [], settings, today: '2026-04-02' }).fixedCosts).toBeCloseTo(3100, 6);
+      expect(financialsForRange({ ...base, ...month, orders: [], settings, today: '2026-02-20' }).fixedCosts).toBe(0);
+      // Without a today, the whole range counts, as before.
+      expect(financialsForRange({ ...base, ...month, orders: [], settings }).fixedCosts).toBeCloseTo(3100, 6);
+    });
+
     it('does not move net profit when fixed costs change', () => {
       const orders = [stamped('a')];
       const without = financialsForRange({ ...base, ...range, orders });

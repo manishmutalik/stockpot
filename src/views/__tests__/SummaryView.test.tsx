@@ -87,6 +87,15 @@ describe('SummaryView (dashboard)', () => {
     expect(screen.getByText('Profit before overheads', { selector: 'span' }).parentElement?.textContent).toContain('$3,123.52');
   });
 
+  it('says fixed costs run up to today when the period goes on past it', () => {
+    const fins = { ...makeProps().financials, fixedCosts: 90, profit: 600, trueProfit: 510 };
+    const { unmount } = render(<SummaryView {...makeProps({ financials: fins, summaryDateStart: '2000-01-01', summaryDateEnd: '2999-12-31' })} />);
+    expect(row('Fixed costs').textContent).toContain('up to today');
+    unmount();
+    render(<SummaryView {...makeProps({ financials: fins, summaryDateStart: '2000-01-01', summaryDateEnd: '2000-01-31' })} />);
+    expect(row('Fixed costs').textContent).toContain('for these days');
+  });
+
   it('steps from sales to true profit, one cost at a time, each with its share of sales', () => {
     render(<SummaryView {...makeProps({ financials: { ...makeProps().financials, paymentFees: 30, fixedCosts: 90, profit: 600, trueProfit: 480 } })} />);
     expect(row('Ingredients and packaging').textContent).toContain('−$250.00');

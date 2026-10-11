@@ -178,7 +178,7 @@ describe('demo data adds up', () => {
       orders: demo.orders, menu: demo.menu, materials: demo.materials, experiments: demo.experiments,
       wastageLogs: [], settings: demo.settings, start, end, today: TODAY,
     });
-    // Today, this week, and this calendar month (which runs past today, so carries the whole month's overheads).
+    // Today, this week, and this calendar month (which runs past today; overheads count up to today, as sales do).
     for (const [start, end] of [[TODAY, TODAY], ['2026-03-04', TODAY], ['2026-03-01', '2026-03-31']]) {
       const f = fins(start, end);
       expect(f.fixedCosts).toBeGreaterThan(0);
