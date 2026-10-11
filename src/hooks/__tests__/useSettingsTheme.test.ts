@@ -3,8 +3,9 @@ import { renderHook } from '@testing-library/react';
 
 vi.mock('../../firebase', () => ({ auth: { currentUser: null }, db: {}, doc: vi.fn(), setDoc: vi.fn() }));
 import { useSettings } from '../useSettings';
+import type { BakerySettings } from '../../types';
 
-const settings = (primaryColor: string) => ({ name: 'B', logo: '', primaryColor, address: '', phone: '', email: '' }) as any;
+const settings = (primaryColor: string): BakerySettings => ({ name: 'B', logo: '', primaryColor, address: '', phone: '', email: '' });
 const render = (primaryColor: string) => renderHook(({ c }) => useSettings(settings(c), vi.fn(), false, [], { code: 'INR', symbol: '₹' }, vi.fn(), vi.fn(), false), { initialProps: { c: primaryColor } });
 
 describe('the brand colour themes the app', () => {
