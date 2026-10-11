@@ -37,8 +37,8 @@ The three rules (stated in the file's header):
 | `paymentFees` | Fees on payments received (including on advances that were kept) |
 | `fixedCosts` | Monthly fixed costs, prorated by day to the range |
 | `forfeitedAdvances` | Advances kept from cancelled pre-orders: income on the cancellation date |
-| `profit` | Income less ingredients, packaging, courier and wastage |
-| `trueProfit` | `totalContribution` less wastage less fixed costs: **what the business really made** |
+| `profit` | Income (plus kept advances) less ingredients, packaging, courier and wastage. Shown as **Profit before overheads** |
+| `trueProfit` | `profit` less payment fees and fixed costs: **what the business really made**, the Dashboard's headline |
 | `unpaidIncome` | The part of income still waiting to be paid |
 | `estimated` | True if any order in range predates stamping |
 
@@ -46,6 +46,12 @@ Passing `today` matters: with it, nothing dated after today is counted (an order
 not yet a sale), and cancelled orders are never counted. `bookedAhead(...)` reports what is booked for later.
 
 Per-order and per-product views are `orderContribution` and `productProfits` / `productProfit` in the same file.
+
+The Dashboard draws these as one list, sales down to true profit, from `profitSteps(financials)` (each cost as a step with a
+short explanation; a step that is zero is left out, except ingredients). The trend chart's bars come from `trendFigures`: sales,
+all costs (sales less true profit) and true profit. Production cost is **not** a step: stock made is counted as a cost when it is
+sold, inside ingredients and packaging, so taking it off again would count it twice. The Dashboard shows it on the production card
+as money spent, with that explanation.
 
 ## 4.2 Stamps: `src/utils/orderPricing.ts`
 

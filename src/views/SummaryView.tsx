@@ -4,14 +4,15 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine
 } from 'recharts';
 import {
-  ArrowRight, Calculator, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Factory,
-  CreditCard, Package, Percent, Plus, Receipt, Tag, Trash2, TrendingUp, Truck, TriangleAlert, Wallet
+  ArrowRight, Calculator, Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Percent, Plus, TrendingUp, TriangleAlert,
 } from 'lucide-react';
 import { AppViewProps } from '../types';
 import { MetricCard } from '../components/MetricCard';
 import { DailyBriefing } from '../components/DailyBriefing';
 import { RepricingCard } from '../components/RepricingCard';
 import { DueTomorrowCard } from '../components/DueTomorrowCard';
+import { ProfitBreakdown } from '../components/ProfitBreakdown';
+import { profitSteps } from '../utils/profit';
 import { todayInZone } from '../utils/localDate';
 import { actualOrders } from '../utils/preorders';
 import { getRunStatus } from '../utils/productionStats';
@@ -23,7 +24,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     materials, menu, orders, productionRuns, wastageLogs,
     summaryRange, summaryDateStart, summaryDateEnd, setSummaryDateStart, setSummaryDateEnd, summaryRefDate,
     handleRangeChange, financials, chartData, currency, settings, lowStockItems, lastSynced,
-    setActiveTab, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders, openRepricing, priceLog,
+    setActiveTab, setActiveSettingsTab, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders, openRepricing, priceLog,
   } = props;
 
   const fmt = (n: number) =>
@@ -65,10 +66,15 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     [filteredOrders]
   );
   const income = financials.income;
-  const ofIncome = (n: number) => (income > 0 ? `${((n / income) * 100).toFixed(1)}% of income` : null);
-  const margin = income > 0 ? (financials.profit / income) * 100 : null;
+  // What the business kept, as a share of what came in: the headline. Profit before overheads is the step before rent and fees.
+  const trueProfit = financials.trueProfit ?? financials.profit;
+  const margin = income > 0 ? (trueProfit / income) * 100 : null;
+  const steps = profitSteps(financials, { gstApplicable: settings.gstApplicable, money: fmt }).map(step =>
+    step.key === 'couriers' && courierDeliveries > 0 ? { ...step, hint: `${step.hint} · ${courierDeliveries} deliver${courierDeliveries === 1 ? 'y' : 'ies'}` }
+      : step.key === 'wastage' && filteredWastageLogs.length > 0 ? { ...step, hint: `${step.hint} · ${filteredWastageLogs.length} log${filteredWastageLogs.length === 1 ? '' : 's'}` }
+        : step);
   const avgRunCost = filteredProductionRuns.length > 0 ? totalProductionCost / filteredProductionRuns.length : 0;
-  const hasChartData = !chartData.every(d => d.income === 0 && d.expenses === 0 && d.profit === 0);
+  const hasChartData = !chartData.every(d => d.income === 0 && (d.costs ?? d.expenses) === 0 && (d.trueProfit ?? d.profit) === 0);
   const expiredCount = freshnessAlerts.filter(a => a.urgency === 'expired').length;
 
   const shiftPeriod = (direction: 1 | -1) => {
@@ -216,76 +222,79 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
         wastageLogs={wastageLogs} productionRuns={productionRuns} priceLog={priceLog} settings={settings} currency={currency} dataReady={!!dataReady}
       />
 
-      {/* Headline figures */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
-        <MetricCard
-          label="Cost of Goods Sold"
-          value={fmt(financials.orderExpenses)}
-          icon={Package}
-          tone="slate"
-          footLeft="Materials cost"
-          footRight={ofIncome(financials.orderExpenses)}
-        />
-        <MetricCard
-          label="Production Cost"
-          value={fmt(totalProductionCost)}
-          icon={Factory}
-          tone="teal"
-          footLeft={`${filteredProductionRuns.length} run${filteredProductionRuns.length !== 1 ? 's' : ''} in period`}
-          footRight={filteredProductionRuns.length > 0 ? `${fmt(avgRunCost)} / run` : null}
-        />
-        <MetricCard
-          label="Delivery Expenses"
-          value={fmt(financials.deliveryExpenses)}
-          icon={Truck}
-          tone="slate"
-          footLeft="3rd-party couriers"
-          footRight={courierDeliveries > 0 ? `${courierDeliveries} deliver${courierDeliveries === 1 ? 'y' : 'ies'}` : null}
-        />
-        <MetricCard
-          label="Wastage"
-          value={fmt(financials.wastageExpenses)}
-          icon={Trash2}
-          tone="coral"
-          footLeft={`${filteredWastageLogs.length} log${filteredWastageLogs.length !== 1 ? 's' : ''} in period`}
-          footRight={ofIncome(financials.wastageExpenses)}
-        />
-      </div>
+      {/* What the business made: the headline, then how sales came down to it, one cost at a time */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
+        <div className="lg:col-span-4 lg:order-last space-y-4 lg:space-y-6 min-w-0">
+          <div className="surface-card p-5 md:p-6 relative overflow-hidden">
+            <div className="absolute -right-16 -bottom-16 w-56 h-56 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+            <div className="relative">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">True profit</div>
+                {margin !== null && (
+                  <span className={`px-2.5 py-1 rounded-full font-mono text-[11px] font-bold ${margin >= 0 ? 'bg-margin/12 text-margin' : 'bg-coral/10 text-coral'}`}>
+                    {margin.toFixed(0)}% of sales
+                  </span>
+                )}
+              </div>
+              <div data-testid="true-profit" className={`mt-3 font-mono text-[32px] leading-none font-semibold tracking-tight ${trueProfit < 0 ? 'text-coral' : 'text-ink'}`}>
+                {fmt(trueProfit)}
+              </div>
+              <p className="text-sm text-muted mt-2">What the business kept after every cost, including fees and fixed costs.</p>
 
-      {settings.gstApplicable && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
-          <MetricCard label="GST Collected" value={fmt(financials.gstCollected)} icon={Percent} tone="teal" footLeft="Output tax on sales in period" />
-          <MetricCard label="GST Paid" value={fmt(financials.gstPaid)} icon={Percent} tone="slate" footLeft="Input tax on materials used" />
+              <div className="mt-4 rounded-xl bg-stone-50 p-4 space-y-2.5 text-sm">
+                {[
+                  { label: settings.gstApplicable ? 'Sales (excl. GST)' : 'Sales', value: fmt(income) },
+                  { label: 'Profit before overheads', value: fmt(financials.profit), hint: 'Before payment fees and fixed costs' },
+                  { label: 'Average per order', value: fmt(financials.avgOrderContribution ?? 0), hint: `${financials.orderCount ?? 0} order${financials.orderCount === 1 ? '' : 's'}, before fixed costs` },
+                ].map(row => (
+                  <div key={row.label} className="flex items-start justify-between gap-3">
+                    <span className="text-muted">
+                      {row.label}
+                      {row.hint && <span className="block text-[11px]">{row.hint}</span>}
+                    </span>
+                    <span className="font-mono text-[13px] text-ink">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 font-mono text-[11px] uppercase tracking-wider text-muted space-y-1">
+                <div>{filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''} · {itemsSold} item{itemsSold !== 1 ? 's' : ''} sold</div>
+                {income === 0 && <div>No sales yet</div>}
+                {financials.experimentExpenses > 0 && <div className="normal-case tracking-normal">R&amp;D spend of {fmt(financials.experimentExpenses)} is not counted in profit</div>}
+                {(financials.unpaidIncome ?? 0) > 0 && (
+                  <div className="normal-case tracking-normal">Includes {fmt(financials.unpaidIncome)} not yet paid</div>
+                )}
+                {financials.estimated && (
+                  <div
+                    className="normal-case tracking-normal"
+                    title="Some orders were made before prices and costs were recorded on each order, so they are shown at today's menu prices and material costs. Orders made from now on are exact."
+                  >
+                    Includes orders valued at today&apos;s prices (est.)
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {settings.gstApplicable && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-4">
+              <MetricCard label="GST Collected" value={fmt(financials.gstCollected)} icon={Percent} tone="teal" footLeft="Owed to the government, not income" />
+              <MetricCard label="GST Paid" value={fmt(financials.gstPaid)} icon={Percent} tone="slate" footLeft="Input tax on materials used" />
+            </div>
+          )}
         </div>
-      )}
 
-      {/* What the business really made: after payment fees and fixed costs, and what each order made on average */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
-        <MetricCard
-          label="True Profit"
-          value={fmt(financials.trueProfit ?? financials.profit)}
-          icon={Wallet}
-          tone="teal"
-          footLeft="After all costs"
-          footRight={income > 0 ? `${(((financials.trueProfit ?? financials.profit) / income) * 100).toFixed(1)}% of income` : null}
-        />
-        <MetricCard
-          label="Avg Order Contribution"
-          value={fmt(financials.avgOrderContribution ?? 0)}
-          icon={Calculator}
-          tone="slate"
-          footLeft={`${financials.orderCount ?? 0} order${financials.orderCount === 1 ? '' : 's'}`}
-          footRight="Made per order"
-        />
-        {(financials.fixedCosts ?? 0) > 0 && (
-          <MetricCard label="Fixed Costs" value={fmt(financials.fixedCosts)} icon={Receipt} tone="slate" footLeft="Overheads" footRight="Prorated" />
-        )}
-        {(financials.paymentFees ?? 0) > 0 && (
-          <MetricCard label="Payment Fees" value={fmt(financials.paymentFees)} icon={CreditCard} tone="coral" footLeft="Fees paid" footRight={ofIncome(financials.paymentFees)} />
-        )}
-        {(financials.discounts ?? 0) > 0 && (
-          <MetricCard label="Discounts" value={fmt(financials.discounts)} icon={Tag} tone="coral" footLeft="Given away" footRight={ofIncome(financials.discounts)} />
-        )}
+        <div className="lg:col-span-8 min-w-0">
+          <ProfitBreakdown
+            steps={steps}
+            money={fmt}
+            noFixedCostsNote={(settings.fixedCosts ?? []).length === 0 ? (
+              <>No fixed costs are set, so rent, salaries and other overheads are not taken off.{' '}
+                <button type="button" onClick={() => { setActiveSettingsTab?.('bakery'); setActiveTab('settings'); }} className="font-semibold text-primary hover:text-primary-dark">Add them in Settings</button>
+              </>
+            ) : undefined}
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
@@ -298,7 +307,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
               </div>
               <div>
                 <h3 className="text-xl font-semibold tracking-tight text-ink">Financial Trends</h3>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Revenue vs expenses vs profitability</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted">Sales, all costs and true profit</p>
               </div>
             </div>
 
@@ -348,9 +357,9 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
                       iconType="circle"
                       wrapperStyle={{ fontSize: '11px', fontWeight: 600, color: '#5A5A5A' }}
                     />
-                    <Bar dataKey="expenses" name="Expenses" fill="#E4536B" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="income" name="Income" fill="#00797B" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="profit" name="Net Profit" fill="#006143" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="income" name="Sales" fill="#00797B" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="costs" name="All costs" fill="#E4536B" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="trueProfit" name="True profit" fill="#006143" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -367,6 +376,13 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
               <div className="min-w-0">
                 <h3 className="text-xl font-semibold tracking-tight text-ink">Recent Production Runs</h3>
                 <p className="text-sm text-muted">Batch yield, cost and freshness in the selected period.</p>
+                {filteredProductionRuns.length > 0 && (
+                  <p className="mt-2 text-sm text-ink">
+                    <span className="font-mono font-semibold">{fmt(totalProductionCost)}</span> spent making stock
+                    <span className="text-muted"> · {filteredProductionRuns.length} run{filteredProductionRuns.length !== 1 ? 's' : ''} · {fmt(avgRunCost)} a run</span>
+                    <span className="block text-xs text-muted">Counted as a cost when it is sold (in ingredients and packaging above), so it is not taken off profit twice.</span>
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -430,66 +446,8 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
           </div>
         </div>
 
-        {/* RIGHT: profit, low stock, freshness */}
+        {/* RIGHT: low stock, freshness */}
         <div className="lg:col-span-4 space-y-4 lg:space-y-6 min-w-0">
-          <div className="surface-card p-5 md:p-6 relative overflow-hidden">
-            <div className="absolute -right-16 -bottom-16 w-56 h-56 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-            <div className="relative">
-              <div className="flex items-start justify-between gap-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Net Profit</div>
-                {margin !== null && (
-                  <span className={`px-2.5 py-1 rounded-full font-mono text-[11px] font-bold ${margin >= 0 ? 'bg-margin/12 text-margin' : 'bg-coral/10 text-coral'}`}>
-                    {margin.toFixed(1)}% margin
-                  </span>
-                )}
-              </div>
-              <div className={`mt-3 font-mono text-[32px] leading-none font-semibold tracking-tight ${financials.profit < 0 ? 'text-coral' : 'text-ink'}`}>
-                {fmt(financials.profit)}
-              </div>
-              <p className="text-sm text-muted mt-2">Income after materials, delivery and wastage.</p>
-
-              <div className="mt-4 rounded-xl bg-stone-50 p-4 space-y-2.5 text-sm">
-                {[
-                  { dot: 'bg-primary', label: settings.gstApplicable ? 'Income (excl. GST)' : 'Gross income', value: fmt(income), cls: 'text-ink' },
-                  { dot: 'bg-coral', label: 'Materials (COGS)', value: `-${fmt(financials.orderExpenses)}`, cls: 'text-ink' },
-                  { dot: 'bg-muted', label: 'Third-party couriers', value: `-${fmt(financials.deliveryExpenses)}`, cls: 'text-ink' },
-                  { dot: 'bg-coral', label: 'Logged wastage', value: `-${fmt(financials.wastageExpenses)}`, cls: 'text-coral' },
-                ].map(row => (
-                  <div key={row.label} className="flex items-center justify-between gap-3">
-                    <span className={`flex items-center gap-2 ${row.cls === 'text-coral' ? 'text-coral' : 'text-muted'}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${row.dot}`} />
-                      {row.label}
-                    </span>
-                    <span className={`font-mono text-[13px] ${row.cls}`}>{row.value}</span>
-                  </div>
-                ))}
-                <div className="pt-2.5 mt-1 border-t border-stone-200 flex items-center justify-between">
-                  <span className="font-semibold text-ink">Retained bottomline</span>
-                  <span className={`font-mono font-semibold ${margin !== null && margin < 0 ? 'text-coral' : 'text-margin'}`}>
-                    {margin !== null ? `${margin.toFixed(1)}%` : '—'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-3 font-mono text-[11px] uppercase tracking-wider text-muted space-y-1">
-                <div>{filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''} · {itemsSold} item{itemsSold !== 1 ? 's' : ''} sold</div>
-                {income === 0 && <div>No sales yet</div>}
-                {financials.experimentExpenses > 0 && <div>Operating Exp: {fmt(financials.experimentExpenses)} R&amp;D</div>}
-                {(financials.unpaidIncome ?? 0) > 0 && (
-                  <div className="normal-case tracking-normal">Includes {fmt(financials.unpaidIncome)} not yet paid</div>
-                )}
-                {financials.estimated && (
-                  <div
-                    className="normal-case tracking-normal"
-                    title="Some orders were made before prices and costs were recorded on each order, so they are shown at today's menu prices and material costs. Orders made from now on are exact."
-                  >
-                    Includes orders valued at today&apos;s prices (est.)
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
           <div className="surface-card p-5 md:p-6">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">

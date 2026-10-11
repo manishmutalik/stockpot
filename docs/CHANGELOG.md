@@ -1,5 +1,18 @@
 # Changelog
 
+## Dashboard: from sales to true profit
+
+The Dashboard showed a dozen-odd tiles side by side (Net Profit, True Profit, Avg Order Contribution, Cost of Goods Sold, Production
+Cost, Fixed Costs, Payment Fees and more), and it was not clear which was the real answer or how they related. It now leads with **True profit**: what the business kept after every cost,
+including payment fees and fixed costs, with its share of sales. Beside it, **From sales to true profit** lists each step: sales
+(after discounts), plus advances kept, minus ingredients and packaging, couriers and wastage, equals **Profit before overheads**
+(what was called Net Profit; the figure is unchanged), minus payment fees and fixed costs, equals true profit. Each line has a bar
+and its share of sales, and a step that is zero is left out. With no fixed costs set, a note says so and links to Settings, so a
+true profit that looks high is not mistaken for the full picture. The trend chart shows Sales, All costs and True profit. The
+production card shows what was spent making stock, and says why it is not taken off profit (it is counted when the stock is
+sold, inside ingredients and packaging). No sums changed: the lines come from `profitSteps` in `src/utils/profit.ts`, built from
+the same `financialsForRange` figures as before.
+
 ## Settings: the brand colour now colours the app
 
 Picking a colour in Settings › App Customisation did nothing to the app: it set a CSS variable (`--primary-color`) that nothing

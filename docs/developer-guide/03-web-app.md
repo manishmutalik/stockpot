@@ -101,7 +101,7 @@ out money themselves; they call `src/utils/profit.ts` and friends.
 
 | View | Main content | Key helpers it uses |
 |---|---|---|
-| `SummaryView` | Dashboard: range picker (daily/weekly/monthly/custom), revenue/profit tiles, charts, daily briefing, repricing card, due-tomorrow card | `profit.ts`, `preorders.ts`, `DailyBriefing` |
+| `SummaryView` | Dashboard: range picker (daily/weekly/monthly/custom), True profit card, sales-to-true-profit breakdown (`ProfitBreakdown`), trend chart, production spend, daily briefing, repricing card, due-tomorrow card | `profit.ts`, `preorders.ts`, `DailyBriefing` |
 | `InventoryView` | Materials table with status pills, restock, price history, reorder suggestions, nutrition, CSV | `inventoryStatus.ts`, `reorder.ts`, `pricing.ts` |
 | `MenuView` | Menu items, recipe editor with live cost, margin drift, target margin, what-if pricing, nutrition rollup | `pricing.ts`, `menuStats.ts`, `nutritionCalculations.ts` |
 | `OrdersView` | Orders by day, customer panel, pending payments, pre-orders and hand-over, bills, shareable menu PDF | `payments.ts`, `preorders.ts`, `customers.ts`, `billing.ts` |
