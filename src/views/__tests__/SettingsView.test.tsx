@@ -119,7 +119,7 @@ describe('SettingsView', () => {
     render(<SettingsView {...props} />);
     fireEvent.click(screen.getByLabelText('Use #E4536B'));
     expect(props.updateSettingsField).toHaveBeenCalledWith('primaryColor', '#E4536B');
-    expect(screen.getByLabelText('Use #00797B').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByLabelText('Use #00797B').getAttribute('aria-checked')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(props.updateSettingsField).toHaveBeenCalledWith('logo', '');
   });

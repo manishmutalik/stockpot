@@ -174,6 +174,6 @@ handler is actually called with the right prop before assuming the maths is wron
 ## Styling
 
 Tailwind v4 via `@tailwindcss/vite`; global styles and design tokens are in `src/index.css`. Brand colour is user-set
-(`settings.primaryColor`). `useSettings` applies it as the `--color-primary` family via `src/utils/themeColour.ts`, keeping Stockpot teal for the old default and darkening colours too light for white text. Use `primary` classes rather than hex values so they follow it. The look is: teal primary, off-white canvas, white
+(`settings.primaryColor`). `useSettings` applies it as the `--color-primary` family via `src/utils/themeColour.ts`, keeping Stockpot teal for the old default and darkening colours too light for white text. The owner picks it with `components/BrandColourPicker` (swatches, the device picker, or a typed hex code, with a preview of a button). Use `primary` classes rather than hex values so they follow it. The look is: teal primary, off-white canvas, white
 cards with soft teal-grey borders, mono uppercase captions (`font-mono text-[10px] uppercase tracking-wider`). Reuse the
 existing tokens and classes (`surface-card`, `modalField`) rather than new ad-hoc colours.
