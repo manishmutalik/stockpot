@@ -1,5 +1,22 @@
 # Changelog
 
+## Phone: a sent bill shows as sent, with Mark as paid, and a reminder after two days
+
+Sending a bill from the phone left nothing behind: the Send button stayed, so it was not clear what had gone out. Now, once a bill
+or statement has been shared (from Payments due, Today's To collect, an Upcoming card, the order just saved or the hand-over), the
+phone tells the server (`POST /api/mobile/bills/sent`), which stamps `billSentAt` on that customer's unpaid orders:
+
+- **For two days** the customer's card says **Bill sent today, 3:15 pm**; Send gives way to **Mark as paid** (with a small **Send
+  again** in case it did not go), and To collect shows **Sent**.
+- **Still unpaid two days later**, the owner gets one notification ("Priya has not paid yet", or several at once), during the day,
+  and the button is back as **Send reminder** (**Remind** in To collect). Sending again starts the two days again. The
+  notification has its own switch, **Unpaid bills**, in phone Settings (on by default); a phone built before it keeps the choice.
+- **Mark as paid** is new: a sheet that records everything the customer owes as paid by UPI, cash or card in one tap.
+  **Paid a different amount?** opens the Payment screen as Got paid did.
+
+A customer counts as billed only when every unpaid order of theirs was in a sent bill, so a new order brings Send back. Paid and
+cancelled orders are never stamped. Needs a new APK; the server part goes live with the Render deploy.
+
 ## Read a recipe: recipes from a photo or text, on the web
 
 **Recipes & Menus** has a **Read a recipe** button (where AI is available). The owner adds a photo of a notebook page, a

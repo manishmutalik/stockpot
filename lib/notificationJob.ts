@@ -6,6 +6,7 @@
  *
  * Per owner, in order:
  *  1. a cheap look (their settings, what was already sent, their phones): if nothing could be due, nothing more is read;
+ *     (unpaid bills are a look at the unpaid orders, once an hour in the daytime: utils/billReminders)
  *  2. one transaction that reads the business data, decides, and writes the new state ("claims" what it will send), so a
  *     second run overlapping this one finds it already claimed and sends nothing twice;
  *  3. the push itself, outside the transaction;
@@ -15,7 +16,12 @@
  */
 import type { QuickDb, QuickWrite } from './quickDb';
 import type { PushSender, PushMessage } from './expoPush';
-import { loadSettings, loadTodayView } from './quickRoutes';
+import { asMenu, currencyOf, loadSettings, loadTodayView } from './quickRoutes';
+import { customerDues } from '../src/utils/quickPayments';
+import { ordersToRemind } from '../src/utils/billReminders';
+import { planBillReminded } from '../src/utils/plans';
+import { formatAmount } from '../src/utils/money';
+import type { Order } from '../src/types';
 import { withNotificationDefaults } from '../src/utils/quickNotifications';
 import {
   NOTIFICATION_KINDS, planNotifications, readNotificationState, whatIsDue,
@@ -56,7 +62,7 @@ async function visit(deps: NotificationJobDeps, uid: string, summary: JobSummary
   const zone = (look.business as Partial<BakerySettings>).timezone;
   const when = { localDate: todayInZone(zone, nowDate), localTime: timeInZone(zone, nowDate) };
   const dueNow = whatIsDue({ settings: look.settings, state: look.state, ...when });
-  if (!dueNow.morning && !dueNow.dueTomorrow && !dueNow.stock) return;
+  if (!dueNow.morning && !dueNow.dueTomorrow && !dueNow.stock && !dueNow.bills) return;
   if (deps.isEntitled && !(await deps.isEntitled(uid))) return;
 
   // 2. Decide and claim, in one transaction.
@@ -67,11 +73,32 @@ async function visit(deps: NotificationJobDeps, uid: string, summary: JobSummary
     const now = whenFor(business, nowDate);
     // Looked at again with the state as it is now: a run that overlapped this one may have claimed it already.
     const due = whatIsDue({ settings, state, ...now });
-    if (!due.morning && !due.dueTomorrow && !due.stock) return null;
+    if (!due.morning && !due.dueTomorrow && !due.stock && !due.bills) return null;
     const today = await loadTodayView(tx, { today: now.localDate, settings: business as any });
-    const plan = planNotifications({ settings, state, ...now, today });
-    tx.apply([{ collection: 'mobileSettings', id: STATE_DOC, merge: false, data: { ...plan.state, updatedAt: deps.now() } }]);
-    return { previous: state, notifications: plan.notifications, devices: activeDevices(devices as any) };
+    // Bills sent two days ago and still unpaid, by customer; their orders are marked as reminded in this same transaction.
+    const reminded: { id: string; previous: number | null }[] = [];
+    let unpaidBills: { name: string; amount: string }[] | undefined;
+    if (due.bills) {
+      const unpaid = (await tx.where('orders', 'paymentStatus', 'unpaid')) as Order[];
+      const toRemind = new Set(ordersToRemind(unpaid, deps.now()).map(o => o.id));
+      if (toRemind.size > 0) {
+        const menu = asMenu(await tx.getMany('menu', unpaid.map(o => o.menuItemId)));
+        const currency = currencyOf(business);
+        const customers = customerDues({ unpaid, menu, settings: business, currency, today: now.localDate })
+          .filter(e => e.customer.orders.some(o => toRemind.has(o.id)));
+        for (const e of customers) for (const o of e.customer.orders) {
+          if (toRemind.has(o.id)) reminded.push({ id: o.id, previous: typeof o.billRemindedAt === 'number' ? o.billRemindedAt : null });
+        }
+        unpaidBills = customers.map(e => ({ name: e.customer.name, amount: formatAmount(e.customer.dueTotal, currency) }));
+      }
+    }
+    const plan = planNotifications({ settings, state, ...now, today, unpaidBills });
+    const sendsBills = plan.notifications.some(n => n.kind === 'unpaidBills');
+    tx.apply([
+      { collection: 'mobileSettings', id: STATE_DOC, merge: false, data: { ...plan.state, updatedAt: deps.now() } },
+      ...(sendsBills ? planBillReminded(reminded.map(r => r.id), deps.now()) : []),
+    ]);
+    return { previous: state, notifications: plan.notifications, devices: activeDevices(devices as any), reminded: sendsBills ? reminded : [] };
   });
   if (!claimed || claimed.notifications.length === 0 || claimed.devices.length === 0) return;
   summary.notifications += claimed.notifications.length;
@@ -101,6 +128,10 @@ async function visit(deps: NotificationJobDeps, uid: string, summary: JobSummary
       if (retry.size > 0) {
         const current = readNotificationState(await tx.get('mobileSettings', STATE_DOC));
         writes.push({ collection: 'mobileSettings', id: STATE_DOC, merge: false, data: { ...giveBack(current, claimed.previous, retry), updatedAt: deps.now() } });
+        // An unpaid-bill reminder no phone took: the orders go back to not reminded, so the next run tries again.
+        if (retry.has('unpaidBills')) {
+          for (const r of claimed.reminded) writes.push({ collection: 'orders', id: r.id, merge: true, data: { billRemindedAt: r.previous } });
+        }
       }
       tx.apply(writes);
     });

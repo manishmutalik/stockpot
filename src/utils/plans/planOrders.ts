@@ -255,6 +255,16 @@ export function planDismissClaim(ids: string[]): PlannedWrite[] {
   return ids.map(id => ({ collection: 'orders' as const, id, merge: true, data: { paymentClaim: null } }));
 }
 
+/** A bill or statement for these orders was just sent (WhatsApp or the share sheet opened with it). */
+export function planMarkBillSent(ids: string[], at: number): PlannedWrite[] {
+  return ids.map(id => ({ collection: 'orders' as const, id, merge: true, data: { billSentAt: at } }));
+}
+
+/** The owner has been reminded about these orders' unpaid bill. */
+export function planBillReminded(ids: string[], at: number): PlannedWrite[] {
+  return ids.map(id => ({ collection: 'orders' as const, id, merge: true, data: { billRemindedAt: at } }));
+}
+
 /** A claim that is really there (an old order has none, and a cleared one is null). */
 export const hasPaymentClaim = (o: Pick<Order, 'paymentClaim'>): o is Order & { paymentClaim: NonNullable<Order['paymentClaim']> } =>
   !!o.paymentClaim && typeof o.paymentClaim.at === 'number' && typeof o.paymentClaim.amount === 'number';

@@ -23,7 +23,7 @@ import { createChatHandler } from "./lib/chatRoutes";
 import { createChatModel } from "./lib/chatModel";
 import { createOrderParseHandler } from "./lib/orderParseRoutes";
 import { createQuickParseHandler } from "./lib/quickParseRoutes";
-import { createQuickInvoiceHandler, createQuickStatementHandler, createQuickPaymentsDueHandler, createQuickClaimHandler, createQuickPaymentSetupHandler, type QuickRouteDeps } from "./lib/quickRoutes";
+import { createQuickInvoiceHandler, createQuickStatementHandler, createQuickPaymentsDueHandler, createQuickClaimHandler, createQuickPaymentSetupHandler, createQuickBillSentHandler, type QuickRouteDeps } from "./lib/quickRoutes";
 import { createNotificationRunHandler, listUsersWithDevices } from "./lib/notificationRoutes";
 import { runNotificationJob } from "./lib/notificationJob";
 import { createDemoSeedHandler, seedDemoKitchen } from "./lib/demoSeedRoutes";
@@ -210,6 +210,7 @@ async function startServer() {
   api.post("/mobile/payments", quickGate, createQuickPaymentHandler(quickDeps));
   api.post("/mobile/payments/statement", quickGate, createQuickStatementHandler(quickDeps));
   api.post("/mobile/payments/claim", quickGate, createQuickClaimHandler(quickDeps));
+  api.post("/mobile/bills/sent", quickGate, createQuickBillSentHandler(quickDeps));
   api.get("/mobile/payment-setup", quickGate, createQuickPaymentSetupHandler(quickDeps));
   api.get("/mobile/payments-due", quickGate, createQuickPaymentsDueHandler(quickDeps));
   api.get("/mobile/today", quickGate, createQuickTodayHandler(quickDeps));

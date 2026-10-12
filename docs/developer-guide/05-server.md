@@ -82,7 +82,7 @@ All routes below are under `/api` and need a Firebase ID token unless marked **p
 
 Documented in [The phone app](08-phone-app.md): `POST /mobile/parse`, `/mobile/orders`, `/mobile/restocks`,
 `/mobile/production-runs`, `/mobile/orders/:id/hand-over`, `/mobile/orders/:id/invoice`, `/mobile/payments`,
-`/mobile/payments/statement`, `/mobile/payments/claim`; `GET /mobile/payments-due`, `/mobile/payment-setup`, `/mobile/today`, `/mobile/upcoming`, `/mobile/speech-phrases`;
+`/mobile/payments/statement`, `/mobile/payments/claim`, `/mobile/bills/sent`; `GET /mobile/payments-due`, `/mobile/payment-setup`, `/mobile/today`, `/mobile/upcoming`, `/mobile/speech-phrases`;
 `POST` and `DELETE /mobile/push-token`; `GET` and `PUT /mobile/notification-settings`; and `POST /mobile/demo/seed`
 (no plan check; demo accounts only).
 

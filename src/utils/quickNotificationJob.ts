@@ -12,14 +12,16 @@
  *    hours (a job that was down all morning should not wake someone at noon with "good morning");
  *  - running low and use-by are looked at once an hour, in the daytime only, so nobody is pinged at night; a material is
  *    announced once, and again only after it has recovered and run low a second time;
- *  - when there is nothing to say, nothing is sent (and the kind is not looked at again that day).
+ *  - when there is nothing to say, nothing is sent (and the kind is not looked at again that day);
+ *  - unpaid bills are looked at once an hour in the daytime too: a bill sent from the phone and still unpaid two days later is
+ *    announced once (the orders remember it, `billRemindedAt`), so sending it again starts the two days again.
  */
 import type { TodayView } from './quickViews';
 import type { NotificationSettings } from './quickNotifications';
 import { minutesOfDay } from './localDate';
 
-export type NotificationKind = 'morning' | 'lowStock' | 'useBy' | 'dueTomorrow';
-export const NOTIFICATION_KINDS: NotificationKind[] = ['morning', 'lowStock', 'useBy', 'dueTomorrow'];
+export type NotificationKind = 'morning' | 'lowStock' | 'useBy' | 'dueTomorrow' | 'unpaidBills';
+export const NOTIFICATION_KINDS: NotificationKind[] = ['morning', 'lowStock', 'useBy', 'dueTomorrow', 'unpaidBills'];
 
 /** How long after its time a scheduled notification may still be sent. */
 export const SEND_WINDOW_MINUTES = 180;
@@ -54,7 +56,7 @@ export function readNotificationState(stored: unknown): NotificationState {
   return { sent, lowNotified: flags(s.lowNotified), useByNotified: flags(s.useByNotified) };
 }
 
-export interface DueNow { morning: boolean; dueTomorrow: boolean; stock: boolean }
+export interface DueNow { morning: boolean; dueTomorrow: boolean; stock: boolean; bills: boolean }
 
 const inWindow = (time: string, nowTime: string) => {
   const since = minutesOfDay(nowTime) - minutesOfDay(time);
@@ -73,6 +75,7 @@ export function whatIsDue(input: { settings: NotificationSettings; state: Notifi
     morning: settings.morningSummary.enabled && state.sent.morning !== localDate && inWindow(settings.morningSummary.time, localTime),
     dueTomorrow: settings.dueTomorrow.enabled && state.sent.dueTomorrow !== localDate && inWindow(settings.dueTomorrow.time, localTime),
     stock: (wantsStock || keepsLowList) && daytime && minute < 15,
+    bills: settings.unpaidBills && daytime && minute < 15,
   };
 }
 
@@ -81,7 +84,7 @@ export interface PlannedNotification {
   title: string;
   body: string;
   /** Where tapping it goes in the app. */
-  data: { type: NotificationKind; screen: 'today' | 'stock-in' | 'items' | 'upcoming' };
+  data: { type: NotificationKind; screen: 'today' | 'stock-in' | 'items' | 'upcoming' | 'payments-due' };
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -99,6 +102,8 @@ export function planNotifications(input: {
   localDate: string;
   localTime: string;
   today: TodayView | null;
+  /** Customers whose sent bill is unpaid two days on and not yet reminded about, with what they owe (already formatted). */
+  unpaidBills?: { name: string; amount: string }[];
 }): { notifications: PlannedNotification[]; state: NotificationState } {
   const { settings, localDate, today } = input;
   const due = whatIsDue(input);
@@ -158,6 +163,17 @@ export function planNotifications(input: {
         });
       }
     }
+  }
+  if (due.bills && settings.unpaidBills && input.unpaidBills && input.unpaidBills.length > 0) {
+    const list = input.unpaidBills;
+    notifications.push({
+      kind: 'unpaidBills',
+      title: list.length === 1 ? `${list[0].name} has not paid yet` : `${list.length} bills unpaid after 2 days`,
+      body: list.length === 1
+        ? `${list[0].amount}, billed 2 days ago. Send a reminder, or mark it paid.`
+        : names(list.map(c => `${c.name} ${c.amount}`)),
+      data: { type: 'unpaidBills', screen: 'payments-due' },
+    });
   }
   return { notifications, state };
 }

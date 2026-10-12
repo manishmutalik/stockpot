@@ -179,3 +179,44 @@ describe('giveBack', () => {
     expect(morningOnly.lowNotified).toEqual({ butter: true });
   });
 });
+
+describe('unpaid bills', () => {
+  const NOON = Date.parse('2026-10-06T06:35:00Z'); // 12:05 in India, in the first quarter-hour
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it('reminds once, two days after a bill was sent, and marks the orders reminded', async () => {
+    const { deps, sent, mem } = world({ clock: NOON });
+    mem.seed(UID, 'orders', 'o2', { menuItemId: 'cake', quantity: 1, date: '2026-10-01', unitPriceAtSale: 900, customerName: 'Ravi', paymentStatus: 'unpaid', fulfilled: true, billSentAt: NOON - 2 * DAY - 1000 });
+    await runNotificationJob(deps);
+    const bills = sent.filter(m => m.data?.type === 'unpaidBills');
+    expect(bills).toHaveLength(2); // one per phone
+    expect(bills[0]).toMatchObject({ title: 'Ravi has not paid yet', data: { screen: 'payments-due' } });
+    expect(bills[0].body).toContain('900');
+    expect(mem.read(UID, 'orders', 'o2').billRemindedAt).toBe(NOON);
+    sent.length = 0;
+    await runNotificationJob(deps);
+    expect(sent.filter(m => m.data?.type === 'unpaidBills')).toEqual([]);
+  });
+
+  it('says nothing about a bill sent less than two days ago, or when switched off', async () => {
+    const recent = world({ clock: NOON });
+    recent.mem.seed(UID, 'orders', 'o2', { menuItemId: 'cake', quantity: 1, date: '2026-10-01', unitPriceAtSale: 900, customerName: 'Ravi', paymentStatus: 'unpaid', fulfilled: true, billSentAt: NOON - DAY });
+    await runNotificationJob(recent.deps);
+    expect(recent.sent.filter(m => m.data?.type === 'unpaidBills')).toEqual([]);
+
+    const off = world({ clock: NOON });
+    off.mem.seed(UID, 'mobileSettings', NOTIFICATIONS_DOC, { unpaidBills: false });
+    off.mem.seed(UID, 'orders', 'o2', { menuItemId: 'cake', quantity: 1, date: '2026-10-01', unitPriceAtSale: 900, customerName: 'Ravi', paymentStatus: 'unpaid', fulfilled: true, billSentAt: NOON - 3 * DAY });
+    await runNotificationJob(off.deps);
+    expect(off.sent.filter(m => m.data?.type === 'unpaidBills')).toEqual([]);
+    expect(off.mem.read(UID, 'orders', 'o2').billRemindedAt).toBeUndefined();
+  });
+
+  it('gives the reminder back when no phone took it, so the next run tries again', async () => {
+    const w = world({ clock: NOON });
+    w.mem.seed(UID, 'orders', 'o2', { menuItemId: 'cake', quantity: 1, date: '2026-10-01', unitPriceAtSale: 900, customerName: 'Ravi', paymentStatus: 'unpaid', fulfilled: true, billSentAt: NOON - 3 * DAY });
+    w.answer(m => m.map(() => ({ ok: false })));
+    await runNotificationJob(w.deps);
+    expect(w.mem.read(UID, 'orders', 'o2').billRemindedAt).toBeNull();
+  });
+});

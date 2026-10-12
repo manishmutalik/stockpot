@@ -14,6 +14,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   lowStock: true,
   useBy: true,
   dueTomorrow: { enabled: false, time: '19:00' },
+  unpaidBills: true,
 };
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -29,21 +30,28 @@ export function withNotificationDefaults(stored: unknown): NotificationSettings 
     lowStock: flag(s.lowStock, d.lowStock),
     useBy: flag(s.useBy, d.useBy),
     dueTomorrow: { enabled: flag(s.dueTomorrow?.enabled, d.dueTomorrow.enabled), time: time(s.dueTomorrow?.time, d.dueTomorrow.time) },
+    unpaidBills: flag(s.unpaidBills, d.unpaidBills),
   };
 }
 
-/** A request body, checked. Every field is required, so a half-sent update cannot switch something off by accident. */
-export function readNotificationSettings(body: unknown): { ok: true; value: NotificationSettings } | { ok: false; error: string } {
+/**
+ * A request body, checked. Every field is required, so a half-sent update cannot switch something off by accident, except
+ * `unpaidBills`, which phones built before it existed do not send: then it is left out and the stored choice (or the default)
+ * stands.
+ */
+export function readNotificationSettings(body: unknown): { ok: true; value: Omit<NotificationSettings, 'unpaidBills'> & { unpaidBills?: boolean } } | { ok: false; error: string } {
   const b = body as Record<string, any> | null;
   if (!b || typeof b !== 'object' || Array.isArray(b)) return { ok: false, error: 'Send all the notification settings.' };
   const flags = typeof b.lowStock === 'boolean' && typeof b.useBy === 'boolean'
     && typeof b.morningSummary?.enabled === 'boolean' && typeof b.dueTomorrow?.enabled === 'boolean';
   if (!flags) return { ok: false, error: 'Each notification needs an on or off setting.' };
   if (!TIME.test(b.morningSummary?.time ?? '') || !TIME.test(b.dueTomorrow?.time ?? '')) return { ok: false, error: 'Times must be HH:MM, for example 08:00.' };
+  if (b.unpaidBills !== undefined && typeof b.unpaidBills !== 'boolean') return { ok: false, error: 'Each notification needs an on or off setting.' };
   return { ok: true, value: {
     morningSummary: { enabled: b.morningSummary.enabled, time: b.morningSummary.time },
     lowStock: b.lowStock, useBy: b.useBy,
     dueTomorrow: { enabled: b.dueTomorrow.enabled, time: b.dueTomorrow.time },
+    ...(typeof b.unpaidBills === 'boolean' && { unpaidBills: b.unpaidBills }),
   } };
 }
 

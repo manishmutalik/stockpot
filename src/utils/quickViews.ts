@@ -18,6 +18,7 @@ import { groupPendingPayments, type PendingCustomer } from './payments';
 import { clusterOrdersByGroup } from './orderClustering';
 import { isOpenPreorder, summarizeDue } from './preorders';
 import type { Currency, PaymentClaimSummary, PaymentDueSummary, StatusLine, TodayView, UpcomingOrder, UpcomingView } from './quickApiTypes';
+import { billSentAtFor } from './billReminders';
 import { hasPaymentClaim } from './plans/planOrders';
 
 export type { Currency, DueSummary, StatusKind, StatusLine, TodayView, UpcomingOrder, UpcomingView } from './quickApiTypes';
@@ -60,9 +61,11 @@ export function claimSummary(orders: Order[]): PaymentClaimSummary | undefined {
 /** A customer who owes money, as the app lists them. */
 export const pendingSummary = (c: PendingCustomer, today: string): PaymentDueSummary => {
   const claim = claimSummary(c.orders);
+  const billSentAt = billSentAtFor(c.orders);
   return {
     key: c.key, name: c.name, phone: c.phone ?? null, orderCount: c.orderCount, oldestDate: c.oldestDate,
     daysOutstanding: Math.max(daysBetween(c.oldestDate, today), 0), dueTotal: round2(c.dueTotal), ...(claim && { claim }),
+    ...(billSentAt !== undefined && { billSentAt }),
   };
 };
 
@@ -188,6 +191,7 @@ export function buildUpcoming(input: {
       balanceDue: round2(billBalance(bill)),
       confirmationMessage,
       whatsappUrl: buildWhatsAppUrl(phone ?? undefined, confirmationMessage),
+      billSentAt: billSentAtFor(members.filter(o => o.paymentStatus === 'unpaid')) ?? null,
       stockShort: [...wanted].flatMap(([id, qty]) => {
         const item = menu.find(m => m.id === id);
         const short = qty - (item?.finishedGoodsStock ?? 0);

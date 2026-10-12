@@ -19,7 +19,7 @@
 import type { NextFunction, Response } from 'express';
 import type { AuthedRequest } from './auth';
 import { parseIdempotencyKey, withIdempotency, type QuickDb, type QuickDoc, type QuickTx, type StoredResult } from './quickDb';
-import { planOrderGroup, planRestock, planProductionSession, planHandOver, planMarkPaid, planDismissClaim, hasPaymentClaim, collapseWrites, productionRunCost } from '../src/utils/plans';
+import { planOrderGroup, planRestock, planProductionSession, planHandOver, planMarkPaid, planDismissClaim, planMarkBillSent, hasPaymentClaim, collapseWrites, productionRunCost } from '../src/utils/plans';
 import type { OrderGroupCommon, OrderLineItem, PlanError, ProductionRunInput } from '../src/utils/plans';
 import { enterableUnits } from '../src/utils/conversions';
 import { speechPhrases } from '../src/utils/speechPhrases';
@@ -518,6 +518,36 @@ export function createQuickClaimHandler(deps: QuickRouteDeps) {
   });
 }
 
+// ─── POST /mobile/bills/sent ────────────────────────────────────────────────
+
+export const BILL_SENT_MAX_ORDERS = 60;
+
+export function readBillSentBody(body: unknown): Read<{ orderIds: string[] }> {
+  if (!isObject(body) || !Array.isArray(body.orderIds)) return bad('Send { orderIds }.');
+  const ids = [...new Set(body.orderIds as unknown[])];
+  if (ids.length === 0 || ids.length > BILL_SENT_MAX_ORDERS || !ids.every(id => typeof id === 'string' && ID.test(id))) return bad('Say which orders the bill was for.');
+  return { ok: true, value: { orderIds: ids as string[] } };
+}
+
+/**
+ * A bill or statement was just sent: the phone calls this once WhatsApp or the share sheet has opened with it. Every one of those
+ * orders still unpaid (and not cancelled) is marked as billed now, so the phone shows "Bill sent" with Mark as paid for two
+ * days, and the notification job reminds the owner if it is still unpaid after that (utils/billReminders). Orders that are paid,
+ * cancelled or not found are left alone; sending again simply moves the time on.
+ */
+export function createQuickBillSentHandler(deps: QuickRouteDeps) {
+  return writeHandler(deps, 'bills-sent', readBillSentBody, async (tx, { orderIds }) => {
+    const found = await tx.getMany('orders', orderIds);
+    const ids = orderIds.filter(id => {
+      const o = found.get(id) as Order | undefined;
+      return !!o && isUnpaid(o) && !o.cancelledOn;
+    });
+    const at = deps.now();
+    if (ids.length > 0) tx.apply(planMarkBillSent(ids, at));
+    return { status: 200, body: { orderIds: ids, at } };
+  });
+}
+
 // ─── POST /mobile/payments/statement ────────────────────────────────────────
 
 /**
@@ -768,10 +798,14 @@ export function createQuickNotificationSettingsPutHandler(deps: QuickRouteDeps) 
     const parsed = readNotificationSettings(req.body);
     if (parsed.ok === false) return res.status(400).json({ error: parsed.error, code: 'bad_request' });
     try {
-      await deps.db.run(req.uid!, async tx => {
-        tx.apply([{ collection: 'mobileSettings', id: NOTIFICATIONS_DOC, merge: false, data: { ...parsed.value, updatedAt: deps.now() } }]);
+      const saved = await deps.db.run(req.uid!, async tx => {
+        // A phone built before "unpaid bills" existed does not send it: the stored choice stands.
+        const kept = parsed.value.unpaidBills ?? withNotificationDefaults(await tx.get('mobileSettings', NOTIFICATIONS_DOC)).unpaidBills;
+        const data = { ...parsed.value, unpaidBills: kept };
+        tx.apply([{ collection: 'mobileSettings', id: NOTIFICATIONS_DOC, merge: false, data: { ...data, updatedAt: deps.now() } }]);
+        return data;
       });
-      return res.json(parsed.value);
+      return res.json(saved);
     } catch (err: any) {
       console.error('Quick notification settings save failed:', err?.message);
       return res.status(500).json({ error: 'Could not save that.', code: 'save_failed' });
