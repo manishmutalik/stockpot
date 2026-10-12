@@ -35,8 +35,8 @@ function ActionButton({ label, icon, primary, grow = 1, onPress }: { label: stri
 }
 
 /** One pre-order: who, what, when, how much is paid and what is left, with Hand over, Send confirmation and Send invoice. */
-export function UpcomingCard({ order, today, currency, overdue, onHandOver, onConfirm }: {
-  order: UpcomingOrder; today: string; currency: Currency; overdue: boolean; onHandOver: () => void; onConfirm: () => void;
+export function UpcomingCard({ order, today, currency, overdue, onHandOver, onConfirm, onInvoiceSent }: {
+  order: UpcomingOrder; today: string; currency: Currency; overdue: boolean; onHandOver: () => void; onConfirm: () => void; onInvoiceSent?: () => void;
 }) {
   const money = (n: number) => formatAmount(n, currency);
   const pill = paymentPill(order);
@@ -96,7 +96,7 @@ export function UpcomingCard({ order, today, currency, overdue, onHandOver, onCo
         <ActionButton label="Hand over" icon="inventory-2" primary onPress={onHandOver} />
         <ActionButton label="Send confirmation" icon="send" grow={1.6} onPress={onConfirm} />
       </View>
-      <SendInvoiceButton orderId={order.orderId} />
+      <SendInvoiceButton orderId={order.orderId} sentAt={order.billSentAt} onSent={onInvoiceSent} />
     </Card>
   );
 }

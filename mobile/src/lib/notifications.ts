@@ -16,7 +16,7 @@ export function timeLabel(hhmm: string): string {
   return `${hour}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`;
 }
 
-type Switch = 'morningSummary' | 'lowStock' | 'useBy' | 'dueTomorrow';
+type Switch = 'morningSummary' | 'lowStock' | 'useBy' | 'dueTomorrow' | 'unpaidBills';
 
 /** The settings with one switch turned on or off. The server takes the whole set, so this always returns the whole set. */
 export function withSwitch(s: NotificationSettings, which: Switch, on: boolean): NotificationSettings {

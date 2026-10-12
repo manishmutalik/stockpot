@@ -45,6 +45,9 @@ export interface PaymentDueSummary {
    * `amount` is what the bill(s) they said it for asked; `orderCount` is how many of their orders that covers. Absent: no claim.
    */
   claim?: PaymentClaimSummary;
+  /** When the bill (or statement) covering all of their unpaid orders was sent, Unix ms (utils/billReminders). Absent: not sent, or
+   * an order since the last one has not been. */
+  billSentAt?: number;
 }
 
 /** A customer's "I've paid by UPI", not yet confirmed by the owner. */
@@ -109,6 +112,8 @@ export interface UpcomingOrder {
   confirmationMessage: string;
   /** A wa.me link that opens WhatsApp to this customer with that text, when there is a phone number. */
   whatsappUrl: string | null;
+  /** When the invoice for what is still owed was sent, Unix ms; null when it has not been, or nothing is owed. */
+  billSentAt: number | null;
 }
 
 /** GET /api/mobile/upcoming */
@@ -369,5 +374,12 @@ export interface NotificationSettings {
   useBy: boolean;
   /** An evening reminder of tomorrow's pre-orders, as items and quantities. */
   dueTomorrow: { enabled: boolean; time: string };
+  /** Once, when a bill sent from the phone is still unpaid two days later (utils/billReminders). */
+  unpaidBills: boolean;
 }
 
+/** POST /api/mobile/bills/sent: the orders now marked as billed (unpaid ones only), and when. */
+export interface BillSentResponse {
+  orderIds: string[];
+  at: number;
+}

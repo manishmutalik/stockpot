@@ -7,7 +7,7 @@ import type { UpcomingOrder, UpcomingView } from '../../../../src/utils/quickApi
 const order = (over: Partial<UpcomingOrder> = {}): UpcomingOrder => ({
   orderId: 'a', orderIds: ['a'], customerName: 'Priya Sharma', customerPhone: '98450 10101', date: '2026-10-10', dueSlot: 'evening', notes: null,
   items: [{ menuItemId: 'cake', name: 'Chocolate Truffle Cake', quantity: 2 }], total: 1800, advance: { amount: 500, method: 'upi' }, balanceDue: 1300,
-  stockShort: [], confirmationMessage: 'Hi', whatsappUrl: null, ...over,
+  stockShort: [], confirmationMessage: 'Hi', whatsappUrl: null, billSentAt: null, ...over,
 });
 const view = (over: Partial<UpcomingView> = {}): UpcomingView => ({ today: '2026-10-07', currency: { code: 'INR', symbol: '₹' }, overdue: [], upcoming: [], ...over });
 

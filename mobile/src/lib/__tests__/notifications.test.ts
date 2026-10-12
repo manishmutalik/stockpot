@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { EVENING_TIMES, MORNING_TIMES, routeForNotification, timeLabel, withSwitch, withTime } from '../notifications';
 import type { NotificationSettings } from '../../../../src/utils/quickApiTypes';
 
-const base: NotificationSettings = { morningSummary: { enabled: true, time: '08:00' }, lowStock: true, useBy: true, dueTomorrow: { enabled: false, time: '19:00' } };
+const base: NotificationSettings = { morningSummary: { enabled: true, time: '08:00' }, lowStock: true, useBy: true, dueTomorrow: { enabled: false, time: '19:00' }, unpaidBills: true };
 
 describe('timeLabel', () => {
   it('writes a time the way people say it', () => {
@@ -27,6 +27,7 @@ describe('changing the settings', () => {
     expect(withSwitch(base, 'useBy', false)).toEqual({ ...base, useBy: false });
     expect(withSwitch(base, 'dueTomorrow', true)).toEqual({ ...base, dueTomorrow: { enabled: true, time: '19:00' } });
     expect(withSwitch(base, 'morningSummary', false)).toEqual({ ...base, morningSummary: { enabled: false, time: '08:00' } });
+    expect(withSwitch(base, 'unpaidBills', false)).toEqual({ ...base, unpaidBills: false });
   });
   it('changes a time and keeps the switch', () => {
     expect(withTime(base, 'morningSummary', '07:00')).toEqual({ ...base, morningSummary: { enabled: true, time: '07:00' } });

@@ -110,9 +110,15 @@ customer, largest amount first; a pre-order is listed once it falls due, and a c
 - **Today's "To collect" card** lists the three who owe most, each with a **Send** button, and "See all" for the rest.
 - **Tapping "N payments pending"** on Today opens **Upcoming › Payments due**, the full list. Each card shows what they owe,
   how long their oldest order has waited (amber from 7 days, coral from 14), the orders behind it, **Send invoice / Send
-  statement** and **Got paid**.
-- **Got paid** opens the Payment screen with "Priya paid 1300" already written (nothing is read, or counted, until **Read it**
-  is tapped); a customer with no name starts empty.
+  statement** and **Mark as paid**.
+- **Mark as paid** opens a small sheet: everything they owe, paid in full, by **UPI**, **Cash** or **Card** (one tap saves it).
+  **Paid a different amount?** opens the Payment screen with "Priya paid 1300" already written (nothing is read, or counted,
+  until **Read it** is tapped).
+- **After a bill is sent** (from Payments due, To collect, an Upcoming card, the saved order or the hand-over), the phone tells the
+  server (`POST /api/mobile/bills/sent`). For two days the card says **Bill sent today, 3:15 pm** and shows only **Mark as paid**
+  (with a small **Send again** in case it did not go), and To collect shows **Sent**. Still unpaid two days later, the owner gets a
+  notification (once; switch: Settings › Unpaid bills) and the button is back as **Send reminder** (**Remind** in To collect).
+  Sending again starts the two days again.
 
 **Send** asks `POST /api/mobile/payments/statement` with the customer's key. A customer with one unpaid order gets that
 order's invoice; one with several gets a single statement (each order's items with its day, the total, any advance, the

@@ -5,6 +5,8 @@ import type { Currency, PaymentDueCustomer, PaymentDueSummary } from '../../../s
 import { formatAmount } from '../../../src/utils/money';
 import { formatDay } from '../lib/dates';
 import { claimLine, ordersLabel, waitingLabel, waitingTone } from '../lib/paymentsDue';
+import { billLine, billState } from '../lib/billSent';
+import { useSendStatement } from '../lib/useSendStatement';
 import { Card } from './Card';
 import { SendStatementButton } from './SendStatementButton';
 import { colors, fonts, radius, toneColor } from '../theme';
@@ -42,16 +44,35 @@ function ClaimBanner({ line, busy, onConfirm, onDismiss }: { line: string; busy:
   );
 }
 
-/** One customer who owes: who, how much, how long, what for (on the full list), with Send and Record payment. */
-export function PaymentDueCard({ customer, currency, onRecord, onConfirmClaim, onDismissClaim, claimBusy = false }: {
+/** "Send again", small: the bill went (or the owner thinks it did not), so it can be sent once more. */
+function SendAgain({ customerKey, onSent }: { customerKey: string; onSent?: () => void }) {
+  const { send, busy } = useSendStatement(customerKey, onSent);
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel="Send the bill again" onPress={send} disabled={busy} hitSlop={6} style={{ alignSelf: 'center' }}>
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.primary }}>{busy ? 'Opening…' : 'Send again'}</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * One customer who owes: who, how much, how long, what for (on the full list), with Send and Mark as paid. Once their bill is
+ * sent (lib/billSent), Send gives way to "Bill sent" for two days, with Mark as paid; still unpaid after that, Send is back as
+ * "Send reminder".
+ */
+export function PaymentDueCard({ customer, currency, onMarkPaid, onSent, onConfirmClaim, onDismissClaim, claimBusy = false }: {
   customer: PaymentDueSummary & Partial<Pick<PaymentDueCustomer, 'orders'>>;
   currency: Currency;
-  onRecord: () => void;
+  onMarkPaid: () => void;
+  /** After a bill or reminder has been sent: refresh the list. */
+  onSent?: () => void;
   onConfirmClaim?: () => void;
   onDismissClaim?: () => void;
   claimBusy?: boolean;
 }) {
   const money = (n: number) => formatAmount(n, currency);
+  const now = Date.now();
+  const bill = billState(customer.billSentAt, now);
+  const sentLine = billLine(bill, customer.billSentAt, now);
   const tone = waitingTone(customer.daysOutstanding);
   const toneHex = tone === 'grey' ? colors.grey : toneColor[tone];
   return (
@@ -74,6 +95,13 @@ export function PaymentDueCard({ customer, currency, onRecord, onConfirmClaim, o
         <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.grey }}>{ordersLabel(customer.orderCount)} · since {formatDay(customer.oldestDate)}</Text>
       </View>
 
+      {!!sentLine && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <MaterialIcons name={bill === 'sent' ? 'done-all' : 'schedule'} size={16} color={bill === 'sent' ? colors.grey : colors.amber} />
+          <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: bill === 'sent' ? colors.grey : colors.amber }}>{sentLine}</Text>
+        </View>
+      )}
+
       {!!customer.claim && !!onConfirmClaim && !!onDismissClaim && (
         <ClaimBanner line={claimLine(customer.claim, customer, currency, Date.now())} busy={claimBusy} onConfirm={onConfirmClaim} onDismiss={onDismissClaim} />
       )}
@@ -93,15 +121,16 @@ export function PaymentDueCard({ customer, currency, onRecord, onConfirmClaim, o
       )}
 
       <View style={{ flexDirection: 'row', gap: 12, alignItems: 'stretch' }}>
-        <View style={{ flex: 1.4 }}><SendStatementButton customer={customer} /></View>
+        {bill !== 'sent' && <View style={{ flex: 1.4 }}><SendStatementButton customer={customer} reminder={bill === 'unpaid_after_bill'} onSent={onSent} /></View>}
         <Pressable
-          accessibilityRole="button" accessibilityLabel={`Record a payment from ${customer.name}`} onPress={onRecord}
+          accessibilityRole="button" accessibilityLabel={`Mark ${money(customer.dueTotal)} from ${customer.name} as paid`} onPress={onMarkPaid}
           style={({ pressed }) => ({ flex: 1, minHeight: 52, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: pressed ? colors.primaryPressed : colors.primary })}
         >
-          <MaterialIcons name="currency-rupee" size={18} color={colors.white} />
-          <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.white }}>Got paid</Text>
+          <MaterialIcons name="check-circle-outline" size={18} color={colors.white} />
+          <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.white }}>Mark as paid</Text>
         </Pressable>
       </View>
+      {bill === 'sent' && <SendAgain customerKey={customer.key} onSent={onSent} />}
     </Card>
   );
 }

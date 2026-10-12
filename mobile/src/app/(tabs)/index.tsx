@@ -77,7 +77,7 @@ export default function Today() {
             const target = statusTarget(line.kind);
             return <StatusRow key={line.kind} line={line} onPress={target ? () => (target === 'payments' ? openPayments() : router.navigate('/upcoming')) : undefined} />;
           })}
-          {today.data && <ToCollectCard pending={today.data.pendingPayments} currency={today.data.currency} onOpen={openPayments} />}
+          {today.data && <ToCollectCard pending={today.data.pendingPayments} currency={today.data.currency} onOpen={openPayments} onSent={refresh} />}
         </View>
       )}
 

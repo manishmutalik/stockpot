@@ -86,6 +86,7 @@ needs an `Idempotency-Key`. Shapes are in `src/utils/quickApiTypes.ts`.
 | `POST /mobile/payments` | Record a payment against a customer's whole orders (must equal what whole orders are owed) | `PaymentSaved` |
 | `POST /mobile/payments/statement` | Statement or invoice for one customer's unpaid orders | `StatementResponse` |
 | `POST /mobile/payments/claim` | Confirm (paid by UPI) or dismiss a customer's "I've paid by UPI" from the bill page | `ClaimReviewSaved` |
+| `POST /mobile/bills/sent` | A bill or statement for these orders was just shared: stamps `billSentAt` on the unpaid ones | `BillSentResponse` |
 | `GET /mobile/payments-due` | Everyone who owes, largest first, with any "says they paid" claim; card payments started from a bill are asked about first | `PaymentsDueView` |
 | `GET /mobile/payment-setup` | Whether bills ask for UPI, and which card payments are set up (Settings) | `PaymentSetupView` |
 | `GET /mobile/today` | Status lines, due today/tomorrow, overdue, "to collect" (top three), low stock, use-by soon, today's takings | `TodayView` |
@@ -118,8 +119,14 @@ Handler refusals worth knowing: `no_menu` (422, add menu items in the web app fi
 - **Upcoming**: open pre-orders by day, overdue pinned at the top, each with **Hand over**, **Send confirmation** and **Send invoice**.
   The hand-over sheet's "Balance received now" switch starts **off** so the app never records money as received unless the owner turns it on.
 - **Payments due**: a customer who tapped "I've paid by UPI" on the bill shows **Says they paid ₹X by UPI · when**, with **Confirm received** and **Not received** (see [Billing and payments](07-billing-and-payments.md)). Reached by tapping "N payments pending" or "See all" in To collect. Each customer shows what they owe, how long their oldest
-  order has waited (amber from 7 days, coral from 14), the orders behind it, **Send invoice / Send statement** and **Got paid**, which opens
-  the Payment capture with "Priya paid 1300" pre-written.
+  order has waited (amber from 7 days, coral from 14), the orders behind it, **Send invoice / Send statement** and **Mark as paid**
+  (`MarkPaidSheet`: the whole amount by UPI, cash or card in one tap, `POST /mobile/payments`; "Paid a different amount?" opens the
+  Payment capture with "Priya paid 1300" pre-written).
+- **Sent bills** (`mobile/src/lib/billSent.ts`, `src/utils/billReminders.ts`): after any bill or statement is shared, the app calls
+  `POST /mobile/bills/sent`, which stamps `billSentAt` on the unpaid orders. A customer counts as billed when every unpaid order of
+  theirs has been (`billSentAtFor`), so a new order brings Send back. For two days the cards show "Bill sent" and Mark as paid
+  (Send again is a small link); after that "Send reminder", and the notification job sends one **Unpaid bills** reminder per sending
+  (`billRemindedAt`, daytime, hourly; a reminder no phone took is given back).
 - **Sharing**: the server writes the message and builds a `wa.me` URL when the order has a phone; the app opens it, or the phone's share
   sheet when there is no number.
 

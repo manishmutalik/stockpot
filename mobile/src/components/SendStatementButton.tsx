@@ -6,8 +6,13 @@ import { useSendStatement } from '../lib/useSendStatement';
 import { colors } from '../theme';
 import { Button } from './Button';
 
-/** Sends what one customer owes (see useSendStatement): an invoice for one order, a single statement for several. */
-export function SendStatementButton({ customer, variant = 'soft' }: { customer: Pick<PaymentDueSummary, 'key' | 'orderCount'>; variant?: 'soft' | 'quiet' | 'outline' }) {
-  const { send, busy } = useSendStatement(customer.key);
-  return <Button variant={variant} label={sendLabel(customer)} onPress={send} busy={busy} icon={<MaterialIcons name="receipt-long" size={20} color={colors.primary} />} />;
+/**
+ * Sends what one customer owes (see useSendStatement): an invoice for one order, a single statement for several. `reminder`
+ * labels it "Send reminder", for a bill still unpaid two days after it went.
+ */
+export function SendStatementButton({ customer, variant = 'soft', reminder = false, onSent }: {
+  customer: Pick<PaymentDueSummary, 'key' | 'orderCount'>; variant?: 'soft' | 'quiet' | 'outline'; reminder?: boolean; onSent?: () => void;
+}) {
+  const { send, busy } = useSendStatement(customer.key, onSent);
+  return <Button variant={variant} label={reminder ? 'Send reminder' : sendLabel(customer)} onPress={send} busy={busy} icon={<MaterialIcons name={reminder ? 'notifications-active' : 'receipt-long'} size={20} color={colors.primary} />} />;
 }

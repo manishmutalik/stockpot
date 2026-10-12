@@ -275,6 +275,11 @@ export interface Order {
    * owner confirms it (or says it was not received). Written by the server on every unpaid item the bill covered; cleared (set
    * to null) whenever the order is marked paid or unpaid. */
   paymentClaim?: PaymentClaim | null;
+  /** When a bill or statement covering this order was last sent from the phone app (Unix ms): written when WhatsApp or the
+   * share sheet opened with it (POST /api/mobile/bills/sent). Two days later, still unpaid, the owner is reminded. */
+  billSentAt?: number;
+  /** When the owner was last reminded that this order's bill is unpaid (Unix ms); one reminder for each sending. */
+  billRemindedAt?: number;
 }
 
 /** A customer's "I've paid" from the bill page: when, how much the bill asked for then, and how they said they paid. */

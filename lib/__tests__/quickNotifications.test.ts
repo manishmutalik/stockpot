@@ -89,11 +89,20 @@ describe('notification settings', () => {
 
   it('saves a choice and gives it back, per owner', async () => {
     const { deps } = world();
-    const saved = await call(createQuickNotificationSettingsPutHandler(deps), all);
+    const saved = await call(createQuickNotificationSettingsPutHandler(deps), { ...all, unpaidBills: false });
     expect(saved.code).toBe(200);
-    expect(saved.body).toEqual(all);
-    expect((await call(createQuickNotificationSettingsGetHandler(deps))).body).toEqual(all);
+    expect(saved.body).toEqual({ ...all, unpaidBills: false });
+    expect((await call(createQuickNotificationSettingsGetHandler(deps))).body).toEqual({ ...all, unpaidBills: false });
     expect((await call(createQuickNotificationSettingsGetHandler(deps), undefined, 'someone-else')).body).toEqual(DEFAULT_NOTIFICATION_SETTINGS);
+  });
+
+  it('keeps the unpaid-bills choice when a phone built before it saves the others', async () => {
+    const { deps } = world();
+    const put = createQuickNotificationSettingsPutHandler(deps);
+    expect((await call(put, all)).body.unpaidBills).toBe(true); // the default
+    await call(put, { ...all, unpaidBills: false });
+    expect((await call(put, all)).body.unpaidBills).toBe(false);
+    expect((await call(put, { ...all, unpaidBills: 'yes' })).code).toBe(400);
   });
 
   it('refuses a half-sent update, a bad time, and anything that is not on or off, saving nothing', async () => {

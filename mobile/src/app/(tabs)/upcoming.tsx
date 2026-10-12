@@ -8,6 +8,7 @@ import { formatAmount } from '../../../../src/utils/money';
 import { useAuth } from '../../auth/AuthContext';
 import { Button } from '../../components/Button';
 import { HandOverSheet } from '../../components/HandOverSheet';
+import { MarkPaidSheet } from '../../components/MarkPaidSheet';
 import { PaymentDueCard } from '../../components/PaymentDueCard';
 import { UpcomingCard } from '../../components/UpcomingCard';
 import { ordersLabel, recordPaymentText, reviewClaim } from '../../lib/paymentsDue';
@@ -87,6 +88,13 @@ export default function Upcoming() {
     }
   };
 
+  // Mark as paid: the whole amount by one method, in one tap; a different amount goes to the Payment screen.
+  const [marking, setMarking] = useState<PaymentDueSummary | null>(null);
+  const markPaid = (c: PaymentDueSummary) => {
+    if (isDemo) { Alert.alert('Not available in the demo', 'Recording a payment is not available in the demo kitchen. Sign in with your own account to use it.'); return; }
+    setMarking(c);
+  };
+
   const recordPayment = (c: PaymentDueSummary) => {
     if (isDemo) { Alert.alert('Not available in the demo', 'Recording a payment is not available in the demo kitchen. Sign in with your own account to use it.'); return; }
     const text = recordPaymentText(c);
@@ -134,7 +142,7 @@ export default function Upcoming() {
                 </View>
               )}
               {owed.data?.customers.map(c => (
-                <PaymentDueCard key={c.key} customer={c} currency={owed.data!.currency} onRecord={() => recordPayment(c)}
+                <PaymentDueCard key={c.key} customer={c} currency={owed.data!.currency} onMarkPaid={() => markPaid(c)} onSent={refreshOwed}
                   onConfirmClaim={() => review(c, 'confirm')} onDismissClaim={() => review(c, 'dismiss')} claimBusy={reviewing === c.key} />
               ))}
               {!!owed.data && owed.data.customers.length > 0 && (
@@ -174,7 +182,7 @@ export default function Upcoming() {
                 </View>
                 {section.orders.map(o => (
                   <UpcomingCard key={o.orderId} order={o} today={view.data!.today} currency={view.data!.currency} overdue={section.kind === 'overdue'}
-                    onHandOver={() => setHanding(o)} onConfirm={() => confirm(o)} />
+                    onHandOver={() => setHanding(o)} onConfirm={() => confirm(o)} onInvoiceSent={() => { refresh(); refreshOwed(); }} />
                 ))}
               </View>
             ))}
@@ -182,6 +190,10 @@ export default function Upcoming() {
         )}
       </ScrollView>
 
+      <MarkPaidSheet customer={marking} currency={owed.data?.currency ?? { code: 'INR', symbol: '₹' }} api={api}
+        onClose={() => setMarking(null)}
+        onDone={() => { setMarking(null); refreshOwed(); refresh(); }}
+        onDifferent={c => { setMarking(null); recordPayment(c); }} />
       <HandOverSheet order={handing} currency={view.data?.currency ?? { code: 'INR', symbol: '₹' }} api={api}
         onClose={() => { setHanding(null); view.refresh(); }} onDone={() => { setHanding(null); view.refresh(); owed.refresh(); }} />
     </>

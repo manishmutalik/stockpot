@@ -8,6 +8,7 @@ import { ApiError, describeApiError, type Api } from '../lib/api';
 import { formatDay, slotLabel } from '../lib/dates';
 import { METHODS, METHOD_LABEL, handOverRequest, stockProblem, summarizeHandOver } from '../lib/handOver';
 import { shareMessage } from '../lib/share';
+import { markBillSent } from '../lib/billSent';
 import { Button } from './Button';
 import { Card } from './Card';
 import { colors, fonts, radius } from '../theme';
@@ -68,7 +69,12 @@ function Sheet({ order, currency, api, onClose, onDone }: { order: UpcomingOrder
             <View style={{ alignSelf: 'stretch', gap: 10 }}>
               {summary.canShare && saved?.shareMessage && (
                 <Button variant="soft" label="Share bill on WhatsApp" icon={<MaterialIcons name="chat" size={20} color={colors.primary} />}
-                  onPress={() => { shareMessage({ message: saved.shareMessage!, whatsappUrl: saved.whatsappUrl }).catch(() => {}); }} />
+                  onPress={() => {
+                    shareMessage({ message: saved.shareMessage!, whatsappUrl: saved.whatsappUrl })
+                      // Still owed after the hand-over: the bill now counts as sent, for the reminder in two days.
+                      .then(() => ((saved.balanceDue ?? 0) > (saved.balanceReceived ?? 0) ? markBillSent(api, saved.orderIds, randomUUID()) : null))
+                      .catch(() => {});
+                  }} />
               )}
               <Button label="Done" onPress={onDone} />
             </View>

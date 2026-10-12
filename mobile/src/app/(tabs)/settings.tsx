@@ -161,6 +161,7 @@ export default function Settings() {
                 <Row title="Due tomorrow" hint="An evening reminder of tomorrow's pre-orders" value={s.dueTomorrow.enabled} onChange={on => prefs.change(withSwitch(s, 'dueTomorrow', on))}>
                   <TimeChips label="SEND AT" times={EVENING_TIMES} current={s.dueTomorrow.time} onPick={t => prefs.change(withTime(s, 'dueTomorrow', t))} />
                 </Row>
+                <Row title="Unpaid bills" hint="Once, when a bill you sent is still unpaid two days later" value={s.unpaidBills !== false} onChange={on => prefs.change(withSwitch(s, 'unpaidBills', on))} />
                 <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.grey }}>Times are in your kitchen's time zone, and each kind is sent at most once a day.</Text>
               </>
             )}
