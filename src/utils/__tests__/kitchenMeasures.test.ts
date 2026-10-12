@@ -30,6 +30,9 @@ describe('typical weights and names', () => {
     expect(typicalWeightFor('Garam Masala (MDH)')?.gramsPerTsp).toBe(2);
     expect(typicalWeightFor('jeera powder')?.gramsPerTsp).toBe(2.1);
     expect(typicalWeightFor('dragon fruit')).toBeNull();
+    // The last word says what it is
+    expect(typicalWeightFor('Full Cream Milk')?.names[0]).toBe('milk');
+    expect(typicalWeightFor('fresh cream')?.names[0]).toBe('cream');
   });
   it('matches an ingredient to the owner\'s material by name, never to a different thing', () => {
     const materials = [{ id: 's', name: 'Sugar' }, { id: 'i', name: 'Icing Sugar' }, { id: 'b', name: 'Unsalted Butter' }];
@@ -37,6 +40,7 @@ describe('typical weights and names', () => {
     expect(matchMaterialByName('makhan', materials)?.id).toBe('b');
     expect(matchMaterialByName('powdered sugar', materials)?.id).toBe('i');
     expect(matchMaterialByName('cocoa', materials)).toBeNull();
+    expect(matchMaterialByName('fresh cream', [{ id: 'm', name: 'Full Cream Milk' }])).toBeNull();
     // Two butters: the owner chooses
     expect(matchMaterialByName('butter', [...materials, { id: 'b2', name: 'Salted Butter' }])).toBeNull();
   });
@@ -63,11 +67,17 @@ describe('resolveLine', () => {
     if (r.status === 'ok') expect(r.batchAmount).toBeCloseTo(2 * 48 * 2.6, 6);
   });
 
-  it('asks about a cup of butter, where a guess could move the cost, suggesting the typical weight', () => {
-    const r = resolveLine(line({ materialName: 'Unsalted Butter', costPerUnit: 570 }, { nameAsWritten: 'butter', amountAsWritten: '1' }));
-    expect(r).toEqual({ status: 'ask', recipeUnit: 'g', question: { kind: 'measure_weight', measure: 'cup', suggestion: 225.6 } });
-    const answered = resolveLine(line({ materialName: 'Unsalted Butter', costPerUnit: 570, answers: { gramsPerMeasure: 227 } }, { nameAsWritten: 'butter', amountAsWritten: '1' }));
-    expect(answered).toMatchObject({ status: 'ok', batchAmount: 227, remember: { gramsPerTsp: 4.729 } });
+  it('uses a staple\'s standard cup weight however much it costs, as for a cake\'s butter', () => {
+    const r = resolveLine(line({ materialName: 'Unsalted Butter', costPerUnit: 570, makes: 1 }, { nameAsWritten: 'butter', amountAsWritten: '1' }));
+    expect(r).toMatchObject({ status: 'ok', batchAmount: 225.6, typical: true });
+  });
+
+  it('asks about a cup of chocolate chips, where a guess could move the cost, suggesting the typical weight', () => {
+    const chips = { nameAsWritten: 'choco chips', amountAsWritten: '1' };
+    const r = resolveLine(line({ materialName: 'Chocolate Chips', costPerUnit: 600 }, chips));
+    expect(r).toEqual({ status: 'ask', recipeUnit: 'g', question: { kind: 'measure_weight', measure: 'cup', suggestion: 168 } });
+    const answered = resolveLine(line({ materialName: 'Chocolate Chips', costPerUnit: 600, answers: { gramsPerMeasure: 170 } }, chips));
+    expect(answered).toMatchObject({ status: 'ok', batchAmount: 170, remember: { gramsPerTsp: 3.542 } });
   });
 
   it('uses a weight the owner confirmed before', () => {

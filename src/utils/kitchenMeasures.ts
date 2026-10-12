@@ -10,9 +10,9 @@
  *  - Spoons and cups are volumes (tsp 5 ml, tbsp 15 ml, cup 240 ml). For a material kept in ml or l that is the
  *    answer. For one kept by weight, a cup of maida is not 240 g (it is about 125 g), so it is weighed with the
  *    material's own grams-per-teaspoon when the owner has confirmed one, otherwise with the typical weight in
- *    `TYPICAL_WEIGHTS`, and only when that guess cannot matter much: a line that costs more than
- *    `ASK_ABOVE_COST_PER_ITEM` per item on a typical weight is asked about, with the typical weight as the
- *    suggestion (a cup of butter, a spoon of kesar).
+ *    `TYPICAL_WEIGHTS`: staples' cup weights are standard and used as they are; for anything else the guess is used
+ *    only when it cannot matter much, and a line that costs more than `ASK_ABOVE_COST_PER_ITEM` per item on a typical
+ *    weight is asked about, with the typical weight as the suggestion (a cup of chocolate chips or cashews).
  *  - Household measures (a katori, a glass, a handful) differ from home to home and are always asked about.
  *  - "A pinch" or "to taste" of something cheap is left out by default; of something expensive it is asked about.
  *  - Pieces ("4 elaichi") of something kept by weight are asked about once, then remembered on the material.
@@ -90,6 +90,8 @@ export interface TypicalWeight {
   liquid?: boolean;
   /** So dear that even a pinch is asked about. */
   dear?: boolean;
+  /** A staple whose cup weight is standard (flour, sugar, butter): its typical weight is used without asking. */
+  standard?: boolean;
 }
 
 /**
@@ -99,36 +101,36 @@ export interface TypicalWeight {
  */
 export const TYPICAL_WEIGHTS: TypicalWeight[] = [
   // Flours and grains
-  { names: ['maida', 'all purpose flour', 'all-purpose flour', 'plain flour', 'refined flour', 'apf', 'मैदा'], gramsPerTsp: 2.6 },
-  { names: ['atta', 'whole wheat flour', 'wheat flour', 'gehun ka atta', 'आटा'], gramsPerTsp: 2.5 },
-  { names: ['cornflour', 'corn flour', 'cornstarch', 'corn starch'], gramsPerTsp: 2.7 },
-  { names: ['besan', 'gram flour', 'chickpea flour', 'बेसन'], gramsPerTsp: 1.9 },
-  { names: ['rice flour', 'chawal ka atta'], gramsPerTsp: 3.3 },
-  { names: ['sooji', 'suji', 'semolina', 'rava', 'rawa', 'सूजी'], gramsPerTsp: 3.5 },
+  { names: ['maida', 'all purpose flour', 'all-purpose flour', 'plain flour', 'refined flour', 'apf', 'मैदा'], gramsPerTsp: 2.6, standard: true },
+  { names: ['atta', 'whole wheat flour', 'wheat flour', 'gehun ka atta', 'आटा'], gramsPerTsp: 2.5, standard: true },
+  { names: ['cornflour', 'corn flour', 'cornstarch', 'corn starch'], gramsPerTsp: 2.7, standard: true },
+  { names: ['besan', 'gram flour', 'chickpea flour', 'बेसन'], gramsPerTsp: 1.9, standard: true },
+  { names: ['rice flour', 'chawal ka atta'], gramsPerTsp: 3.3, standard: true },
+  { names: ['sooji', 'suji', 'semolina', 'rava', 'rawa', 'सूजी'], gramsPerTsp: 3.5, standard: true },
   { names: ['oats', 'rolled oats'], gramsPerTsp: 1.9 },
   { names: ['desiccated coconut', 'coconut powder'], gramsPerTsp: 1.7 },
   // Sugars
-  { names: ['sugar', 'chini', 'cheeni', 'caster sugar', 'granulated sugar', 'चीनी'], gramsPerTsp: 4.2 },
-  { names: ['icing sugar', 'powdered sugar', 'confectioners sugar', 'pisi chini'], gramsPerTsp: 2.5 },
-  { names: ['brown sugar'], gramsPerTsp: 4.6 },
-  { names: ['honey', 'shahad'], gramsPerTsp: 7.1 },
-  { names: ['condensed milk', 'milkmaid'], gramsPerTsp: 6.4 },
+  { names: ['sugar', 'chini', 'cheeni', 'caster sugar', 'granulated sugar', 'चीनी'], gramsPerTsp: 4.2, standard: true },
+  { names: ['icing sugar', 'powdered sugar', 'confectioners sugar', 'pisi chini'], gramsPerTsp: 2.5, standard: true },
+  { names: ['brown sugar'], gramsPerTsp: 4.6, standard: true },
+  { names: ['honey', 'shahad'], gramsPerTsp: 7.1, standard: true },
+  { names: ['condensed milk', 'milkmaid'], gramsPerTsp: 6.4, standard: true },
   // Fats and dairy
-  { names: ['butter', 'makhan', 'makkhan', 'मक्खन'], gramsPerTsp: 4.7 },
-  { names: ['ghee', 'घी'], gramsPerTsp: 4.5 },
-  { names: ['oil', 'vegetable oil', 'refined oil', 'sunflower oil', 'tel'], gramsPerTsp: 4.5, liquid: true },
-  { names: ['milk', 'doodh', 'दूध'], gramsPerTsp: 5.1, liquid: true },
-  { names: ['curd', 'dahi', 'yogurt', 'yoghurt', 'दही'], gramsPerTsp: 5.1 },
-  { names: ['cream', 'fresh cream', 'whipping cream', 'malai'], gramsPerTsp: 5.0, liquid: true },
-  { names: ['water', 'paani', 'pani'], gramsPerTsp: 5.0, liquid: true },
+  { names: ['butter', 'makhan', 'makkhan', 'मक्खन'], gramsPerTsp: 4.7, standard: true },
+  { names: ['ghee', 'घी'], gramsPerTsp: 4.5, standard: true },
+  { names: ['oil', 'vegetable oil', 'refined oil', 'sunflower oil', 'tel'], gramsPerTsp: 4.5, liquid: true, standard: true },
+  { names: ['milk', 'doodh', 'दूध'], gramsPerTsp: 5.1, liquid: true, standard: true },
+  { names: ['curd', 'dahi', 'yogurt', 'yoghurt', 'दही'], gramsPerTsp: 5.1, standard: true },
+  { names: ['cream', 'fresh cream', 'whipping cream', 'malai'], gramsPerTsp: 5.0, liquid: true, standard: true },
+  { names: ['water', 'paani', 'pani'], gramsPerTsp: 5.0, liquid: true, standard: true },
   { names: ['vanilla essence', 'vanilla extract'], gramsPerTsp: 4.3, liquid: true },
   { names: ['rose water', 'gulab jal'], gramsPerTsp: 5.0, liquid: true },
   // Baking
-  { names: ['cocoa', 'cocoa powder'], gramsPerTsp: 1.8 },
-  { names: ['baking powder'], gramsPerTsp: 4.6 },
-  { names: ['baking soda', 'soda bicarbonate', 'bicarbonate of soda', 'meetha soda', 'cooking soda'], gramsPerTsp: 4.6 },
-  { names: ['yeast', 'instant yeast', 'dry yeast'], gramsPerTsp: 3.1 },
-  { names: ['salt', 'namak', 'नमक'], gramsPerTsp: 6.0 },
+  { names: ['cocoa', 'cocoa powder'], gramsPerTsp: 1.8, standard: true },
+  { names: ['baking powder'], gramsPerTsp: 4.6, standard: true },
+  { names: ['baking soda', 'soda bicarbonate', 'bicarbonate of soda', 'meetha soda', 'cooking soda'], gramsPerTsp: 4.6, standard: true },
+  { names: ['yeast', 'instant yeast', 'dry yeast'], gramsPerTsp: 3.1, standard: true },
+  { names: ['salt', 'namak', 'नमक'], gramsPerTsp: 6.0, standard: true },
   { names: ['chocolate chips', 'choco chips'], gramsPerTsp: 3.5 },
   // Ground spices
   { names: ['turmeric', 'haldi', 'हल्दी'], gramsPerTsp: 3.0 },
@@ -168,14 +170,19 @@ const KIND_GRAMS_PER_TSP: Partial<Record<ParsedIngredient['kind'], number>> = { 
 /** Names compared as whole words, ignoring case and punctuation. */
 const words = (s: string) => ` ${squash(s)} `;
 
-/** The table entry a name belongs to: the longest name in the table found in it as whole words. */
+/**
+ * The table entry a name belongs to: the name in the table with the most words found in it as whole words, and between
+ * names of as many words the one at the end ("Full Cream Milk" is milk, not cream: the last word says what a thing is).
+ */
 export function typicalWeightFor(name: string): TypicalWeight | null {
   const hay = words(name);
-  let best: { entry: TypicalWeight; length: number } | null = null;
+  let best: { entry: TypicalWeight; score: number } | null = null;
   for (const entry of TYPICAL_WEIGHTS) {
     for (const n of entry.names) {
       const needle = words(n);
-      if (hay.includes(needle) && (!best || needle.length > best.length)) best = { entry, length: needle.length };
+      if (!hay.includes(needle)) continue;
+      const score = needle.trim().split(' ').length + (hay.endsWith(needle) ? 0.5 : 0);
+      if (!best || score > best.score) best = { entry, score };
     }
   }
   return best?.entry ?? null;
@@ -345,8 +352,9 @@ export function resolveLine(input: LineInput): LineResolution {
     if (!typicalTsp) return ask({ kind: 'measure_weight', measure: unit });
     const g = typicalTsp * TSP_PER[unit];
     const batchGrams = measures * g;
-    // A typical weight is a guess: fine for a spoon of haldi, asked about for a cup of butter.
-    if (perGram !== null && (batchGrams * perGram) / makes > ASK_ABOVE_COST_PER_ITEM) return ask({ kind: 'measure_weight', measure: unit, suggestion: round(g, 1) });
+    // A typical weight is a guess: a staple's cup weight is standard, and a spoon of haldi costs paise either way;
+    // anything else that costs more than a little per item (a cup of chocolate chips, cashews) is asked about.
+    if (!entry?.standard && perGram !== null && (batchGrams * perGram) / makes > ASK_ABOVE_COST_PER_ITEM) return ask({ kind: 'measure_weight', measure: unit, suggestion: round(g, 1) });
     return ok(batchGrams, { typical: true, basis: `1 ${unit} ≈ ${fmt(g)} g, typical${heaped > 1 ? ', heaped' : ''}` });
   }
 

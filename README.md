@@ -79,6 +79,7 @@ enabled), a Razorpay account.
 | `NOTIFICATIONS_CRON_SECRET` | For phone notifications | A long random string (16+ characters) that the scheduler sends to `POST /api/internal/notifications/run`. Without it that route answers 503 and no notifications go out. See "Phone app notifications" below. |
 | `EXPO_ACCESS_TOKEN` | No | Only if the Expo project has "enhanced push security" switched on; sent when pushing through Expo. |
 | `AI_QUICK_DAILY_LIMIT` | No | Voice/text readings per user per day for the phone app (default 60), separate from the web's `AI_PARSE_DAILY_LIMIT`. |
+| `AI_RECIPE_DAILY_LIMIT` / `AI_RECIPE_MONTHLY_LIMIT` | No | Recipes the recipe reader may read per user per day and per calendar month (defaults 15 and 75). A page of several recipes counts each one. The recipe reader uses Claude Opus 5.5; every other AI feature uses Claude Haiku 4.5. |
 | `COOKIE_SECRET` | No | Reserved for future cookie signing; currently only the CSRF token cookie is set, and it isn't signed. |
 | `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` | No | Only needed if you want to enable the Shopify order-import integration. |
 | `USDA_API_KEY` | No | Free key from [fdc.nal.usda.gov](https://fdc.nal.usda.gov/api-key-signup.html), used by the Inventory tab's nutrition "Look up" feature. Without it, that one search source returns a clear "not configured" error — Open Food Facts (queried alongside it) needs no key. |

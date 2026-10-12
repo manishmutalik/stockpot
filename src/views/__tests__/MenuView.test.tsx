@@ -283,4 +283,24 @@ describe('MenuView pricing', () => {
     fireEvent.click(screen.getByRole('button', { name: /What if/ }));
     expect(screen.getByRole('dialog', { name: /What if I change prices/ })).toBeTruthy();
   });
+
+  it('offers to read a recipe only where the reader is available, for a new item or into an existing one', () => {
+    const { unmount } = render(<MenuView {...makeProps()} />);
+    expect(screen.queryByRole('button', { name: 'Read a recipe' })).toBeNull();
+    unmount();
+    const openRecipeReader = vi.fn();
+    render(<MenuView {...makeProps({ openRecipeReader, expandedRecipeId: 'cake' })} />);
+    const buttons = screen.getAllByRole('button', { name: 'Read a recipe' });
+    fireEvent.click(buttons[0]);
+    expect(openRecipeReader).toHaveBeenLastCalledWith();
+    fireEvent.click(buttons[1]);
+    expect(openRecipeReader).toHaveBeenLastCalledWith('cake');
+  });
+
+  it('marks an item whose recipe uses a material with no price as cost incomplete', () => {
+    const withUnpriced = [...materials, { id: 'kesar', name: 'Kesar', unit: 'g', costPerUnit: 0, category: 'Raw Materials' }];
+    const items = [{ ...menu[1], recipe: [...menu[1].recipe, { materialId: 'kesar', amount: 0.01, unit: 'g' }] }];
+    render(<MenuView {...makeProps({ materials: withUnpriced, menu: items })} />);
+    expect(within(card('Bread')).getByText('Cost incomplete').getAttribute('title')).toBe('No price yet for Kesar. Add one in Stock, or restock it.');
+  });
 });

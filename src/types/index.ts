@@ -523,6 +523,8 @@ export interface AppViewProps {
   /** Sets the Menu tab's margin filter when it opens from the Dashboard's "needs repricing" card. */
   menuFilterOnOpen?: 'repricing';
   openRepricing: () => void;
+  /** Opens the recipe reader (a menu item's id fills that item); absent where AI is not available. */
+  openRecipeReader?: (menuItemId?: string) => void;
   /** Hands an order over. A pre-order claims its stock now (all items, or none); resolves to whether it was handed over. */
   fulfillOrder: (order: Order) => Promise<boolean>;
   /** Cancels a pre-order not yet handed over; `advanceOutcome` is required when an advance was paid. Resolves to whether it was cancelled. */

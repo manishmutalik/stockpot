@@ -66,6 +66,10 @@ A thing bought and kept in stock.
 - `threshold` is the low-stock alert level; `leadTimeDays` feeds reorder suggestions (`src/utils/reorder.ts`).
 - `category` groups items; materials in the category `Packaging Materials` (`PACKAGING_CATEGORY`) are costed as
   packaging, everything else as ingredients.
+- `costPerUnit` of 0 means **no price yet** (the recipe reader may create materials without one); items using such a material
+  show "Cost incomplete" (`unpricedMaterials` in `src/utils/menuStats.ts`).
+- `gramsPerTsp` and `gramsPerPiece` (optional) are weights the owner confirmed when a recipe gave the material in spoons, cups
+  or pieces; the recipe reader uses them next time instead of asking (`src/utils/kitchenMeasures.ts`).
 - Optional nutrition and allergens, filled from USDA FoodData Central or Open Food Facts (`lib/nutritionSearch.ts`).
 
 ### `MenuItem` (`users/{uid}/menu`)

@@ -268,6 +268,15 @@ Nothing is queued. The AI list in the handoff is complete.
 
 ## Open items for the user (none blocking)
 
+- **Recipe reader: web built, phone and real-recipe test to do.** Read a recipe (Recipes & Menus) reads text or up to three
+  photos with Claude Opus 5.5 (only this feature; everything else stays on Haiku 4.5), 15 recipes a day and 75 a month
+  (docs/developer-guide/06-ai.md, "The recipe reader"). Decided: ask the owner whether a whipped cream / ganache / custard
+  recipe is sold or part of another item; save new materials without a price, shown as "Cost incomplete". Next: run 10 to 15
+  real recipes (typed, Hinglish, WhatsApp forwards, neat and messy handwriting, Hindi) through the real model with an
+  allow-listed account, then tune the prompt, the typical weights and the limits; then the phone app's camera screen
+  (`/api/mobile/recipes/read` and `/save`, expo-image-picker and expo-image-manipulator, needs a new APK). Not tested
+  against the real model yet: only with a faked answer in a browser.
+
 - **Stockpot Quick (phone companion app): planned, not started.** Spec and screen-design review:
   `docs/handoffs/stockpot-quick-mobile.md` (read its "Review notes" first). Decided: saving needs a connection and
   the draft is kept (no offline queue in the first version). Not yet decided: what "Remind" does and whether
