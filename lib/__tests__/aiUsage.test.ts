@@ -22,7 +22,7 @@ const fakeDb: any = {
 };
 vi.mock('firebase-admin/firestore', () => ({ getFirestore: () => fakeDb }));
 
-import { globalDay, peekAiUsage, reserveAiUse, usageDayFor } from '../aiUsage';
+import { addRecipeUse, globalDay, peekAiUsage, reserveAiUse, reserveRecipeUse, usageDayFor } from '../aiUsage';
 
 const base = { uid: 'u1', feature: 'chat' as const, perUserLimit: 3, globalLimit: 5, userDay: '2026-06-30', globalDayKey: '2026-06-30' };
 beforeEach(() => store.clear());
@@ -81,12 +81,12 @@ describe('peekAiUsage', () => {
   it('reports what has been used without using any', async () => {
     await reserveAiUse(base); await reserveAiUse(base); await reserveAiUse({ ...base, feature: 'briefing' });
     const before = JSON.stringify([...store.entries()]);
-    expect(await peekAiUsage('u1', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 2, briefing: 1, parse: 0, quick: 0 }, global: 3 });
+    expect(await peekAiUsage('u1', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 2, briefing: 1, parse: 0, quick: 0, recipe: 0 }, recipeMonth: 0, global: 3 });
     expect(JSON.stringify([...store.entries()])).toBe(before);
   });
 
   it('is all zero for a user with no use', async () => {
-    expect(await peekAiUsage('nobody', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 0, briefing: 0, parse: 0, quick: 0 }, global: 0 });
+    expect(await peekAiUsage('nobody', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 0, briefing: 0, parse: 0, quick: 0, recipe: 0 }, recipeMonth: 0, global: 0 });
   });
 });
 
@@ -108,5 +108,40 @@ describe('the day an allowance runs on', () => {
 
   it('the global day is UTC', () => {
     expect(globalDay(lateEvening)).toBe('2026-03-10');
+  });
+});
+
+describe('recipe readings', () => {
+  const recipe = { uid: 'u1', userDay: '2026-10-12', globalDayKey: '2026-10-12', dailyLimit: 15, monthlyLimit: 75, globalLimit: 100, globalWeight: 4 };
+
+  it('reserves one recipe against the day and the month, and four calls against everyone', async () => {
+    expect(await reserveRecipeUse(recipe)).toEqual({ ok: true, day: 1, month: 1 });
+    expect(store.get('users/u1/aiUsage/2026-10-12')).toEqual({ recipe: 1 });
+    expect(store.get('users/u1/aiUsage/2026-10')).toEqual({ recipe: 1 });
+    expect(store.get('aiUsageGlobal/2026-10-12')).toEqual({ total: 4 });
+  });
+
+  it('counts the rest of a page afterwards, even past the limit, since the reading is paid for', async () => {
+    store.set('users/u1/aiUsage/2026-10-12', { recipe: 13 });
+    await reserveRecipeUse(recipe);
+    expect(await addRecipeUse({ uid: 'u1', userDay: '2026-10-12', count: 3 })).toEqual({ day: 17, month: 4 });
+    expect(await reserveRecipeUse(recipe)).toEqual({ ok: false, reason: 'user_limit' });
+  });
+
+  it('stops at the monthly limit, and at the global limit', async () => {
+    store.set('users/u1/aiUsage/2026-10', { recipe: 75 });
+    expect(await reserveRecipeUse(recipe)).toEqual({ ok: false, reason: 'month_limit' });
+    store.clear();
+    store.set('aiUsageGlobal/2026-10-12', { total: 97 });
+    expect(await reserveRecipeUse(recipe)).toEqual({ ok: false, reason: 'global_limit' });
+    expect(store.get('users/u1/aiUsage/2026-10-12')).toBeUndefined();
+  });
+
+  it('shows the day and the month in the usage peek', async () => {
+    store.set('users/u1/aiUsage/2026-10-12', { recipe: 2, chat: 1 });
+    store.set('users/u1/aiUsage/2026-10', { recipe: 9 });
+    const usage = await peekAiUsage('u1', '2026-10-12', '2026-10-12');
+    expect(usage.byFeature.recipe).toBe(2);
+    expect(usage.recipeMonth).toBe(9);
   });
 });

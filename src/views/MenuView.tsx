@@ -9,7 +9,7 @@ import { MetricCard } from '../components/MetricCard';
 import { NutritionCard } from '../components/NutritionCard';
 import { convertAmount } from '../utils/conversions';
 import { calculateRecipeNutrition } from '../utils/nutritionCalculations';
-import { getMarginInfo, MarginTier, recipeCost, SALES_PERIODS, SalesPeriod, salesPeriodRange, summarizeMenu } from '../utils/menuStats';
+import { getMarginInfo, MarginTier, recipeCost, SALES_PERIODS, SalesPeriod, salesPeriodRange, summarizeMenu, unpricedMaterials } from '../utils/menuStats';
 import { basePriceOf } from '../utils/gstCalculations';
 import { DEFAULT_TARGET_MARGIN, itemsNeedingRepricing, marginDrift, suggestedPriceFor } from '../utils/pricing';
 import { MarginDriftPanel } from '../components/MarginDriftPanel';
@@ -114,7 +114,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
   const {
     materials, categories, menu, orders, settings, currency, expandedRecipeId, setExpandedRecipeId,
     setIsIngredientSelectorOpen, setActiveRecipeItemId, addMenuItem, updateMenuItem, updateMenuItemField,
-    deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, menuFilterOnOpen
+    deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, menuFilterOnOpen, openRecipeReader
   } = props;
 
   // Purely local, ephemeral UI state for the shareable nutrition card — not
@@ -220,13 +220,24 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
             Define how much of each material goes into every item, and watch food cost and margin update as prices change.
           </p>
         </div>
-        <button
-          onClick={addMenuItem}
-          className="h-10 flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 rounded-lg text-sm font-semibold shadow-sm transition-colors"
-        >
-          <Plus size={18} />
-          Add Menu Item
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {openRecipeReader && (
+            <button
+              onClick={() => openRecipeReader()}
+              className="h-10 flex items-center justify-center gap-2 bg-primary/10 hover:bg-primary/20 text-primary px-5 rounded-lg text-sm font-semibold transition-colors"
+            >
+              <BookOpen size={18} />
+              Read a recipe
+            </button>
+          )}
+          <button
+            onClick={addMenuItem}
+            className="h-10 flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 rounded-lg text-sm font-semibold shadow-sm transition-colors"
+          >
+            <Plus size={18} />
+            Add Menu Item
+          </button>
+        </div>
       </div>
 
       <datalist id="menu-categories">
@@ -311,7 +322,20 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
             <Utensils size={30} />
           </div>
           <h3 className="text-xl font-bold text-ink mb-2">No menu items yet</h3>
-          <p className="text-muted text-sm mb-6">Add your first item, then build its recipe from your raw materials.</p>
+          <p className="text-muted text-sm mb-6">
+            {openRecipeReader
+              ? 'Take a photo of your recipe book, or paste a recipe, and Stockpot sets up the item and its ingredients for you.'
+              : 'Add your first item, then build its recipe from your raw materials.'}
+          </p>
+          {openRecipeReader && (
+            <button
+              onClick={() => openRecipeReader()}
+              className="inline-flex items-center gap-2 h-10 bg-primary/10 hover:bg-primary/20 text-primary px-6 rounded-lg text-sm font-semibold transition-colors mr-2 mb-2"
+            >
+              <BookOpen size={18} />
+              Read a recipe
+            </button>
+          )}
           <button
             onClick={addMenuItem}
             className="inline-flex items-center gap-2 h-10 bg-primary hover:bg-primary-dark text-white px-6 rounded-lg text-sm font-semibold shadow-sm transition-colors"
@@ -335,6 +359,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
           const drift = marginDrift(item, materials, settings);
           const ingredientLines = item.recipe.filter(r => !isPackaging(r));
           const packagingLines = item.recipe.filter(r => isPackaging(r));
+          const unpriced = unpricedMaterials(item, materials);
           return (
             <div key={item.id} className={`surface-card overflow-hidden ${expanded ? 'ring-1 ring-primary/30' : ''}`}>
               <div className="p-4 sm:p-5 space-y-4">
@@ -362,6 +387,14 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                       />
                       <div className="flex flex-wrap items-center gap-2 mt-1">
                         <span className="font-mono text-[11px] text-muted">Cost: {money(cost)}</span>
+                        {unpriced.length > 0 && (
+                          <span
+                            className="font-mono text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-800"
+                            title={`No price yet for ${unpriced.join(', ')}. Add one in Stock, or restock it.`}
+                          >
+                            Cost incomplete
+                          </span>
+                        )}
                         <span className={`font-mono text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ${MARGIN_PILL[tier]}`}>
                           {isLoss ? `Loss (${margin.toFixed(0)}%)` : `${margin.toFixed(0)}% Margin`}
                         </span>
@@ -591,6 +624,15 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                             <Sparkles size={14} />
                             Quick Add
                           </button>
+                          {openRecipeReader && (
+                            <button
+                              onClick={() => openRecipeReader(item.id)}
+                              className="flex items-center gap-2 h-9 bg-primary/10 text-primary px-4 rounded-lg text-sm font-semibold hover:bg-primary/20 transition-colors"
+                            >
+                              <BookOpen size={14} />
+                              Read a recipe
+                            </button>
+                          )}
                           {categories.map(cat => (
                             <button
                               key={cat}

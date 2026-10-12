@@ -11,7 +11,7 @@ const deps = (over: Partial<AiStatusDeps> & { env?: Record<string, string> } = {
     hasActiveAccess: vi.fn().mockResolvedValue(true),
     usageDay: vi.fn().mockResolvedValue('2026-06-30'),
     globalDay: () => '2026-06-30',
-    peek: vi.fn().mockResolvedValue({ byFeature: { chat: 12, briefing: 1, parse: 0 }, global: 40 }),
+    peek: vi.fn().mockResolvedValue({ byFeature: { chat: 12, briefing: 1, parse: 0, recipe: 3 }, recipeMonth: 70, global: 40 }),
     ...rest,
   } as any;
 };
@@ -23,7 +23,9 @@ describe('GET /ai/status', () => {
     const r = await call(d);
     expect(r.body).toEqual({
       available: true,
-      limits: { briefing: { used: 1, limit: 4, remaining: 3 }, chat: { used: 12, limit: 30, remaining: 18 }, parse: { used: 0, limit: 30, remaining: 30 }, quick: { used: 0, limit: 60, remaining: 60 } },
+      limits: { briefing: { used: 1, limit: 4, remaining: 3 }, chat: { used: 12, limit: 30, remaining: 18 }, parse: { used: 0, limit: 30, remaining: 30 }, quick: { used: 0, limit: 60, remaining: 60 },
+        // Recipes: 12 left today, but only 5 this month
+        recipe: { used: 3, limit: 15, monthUsed: 70, monthLimit: 75, remaining: 5 } },
     });
     expect(d.peek).toHaveBeenCalledWith('u1', '2026-06-30', '2026-06-30');
   });

@@ -326,6 +326,11 @@ import { withShelfStock } from './utils/batchStock';
 import { AskBusiness } from './components/AskBusiness';
 import { useOrderParser } from './hooks/useOrderParser';
 import { useProductionParser } from './hooks/useProductionParser';
+import { useRecipeReader } from './hooks/useRecipeReader';
+import { RecipeReaderModal } from './components/RecipeReaderModal';
+import { planImportRecipes } from './utils/plans/planRecipes';
+import { addWritesToBatch } from './utils/plans/clientCommit';
+import type { DraftImport } from './utils/recipeDraft';
 import { buildCustomerDirectory } from './utils/customers';
 import { actualOrders } from './utils/preorders';
 import { todayInZone } from './utils/localDate';
@@ -847,6 +852,28 @@ function BakeryApp() {
   // Reading a pasted order message into the Add Order form (offered only where AI is available).
   const orderParser = useOrderParser({ orders, menu, materials: remainingInventory, settings, signedIn: !!user, dataReady });
   const productionParser = useProductionParser({ menu, settings, signedIn: !!user, dataReady });
+  // Reading recipes from photos or text into menu items (offered only where AI is available).
+  const recipeReader = useRecipeReader({ signedIn: !!user, dataReady });
+  const [recipeReaderFor, setRecipeReaderFor] = useState<{ menuItemId?: string } | null>(null);
+  const openRecipeReader = recipeReader ? (menuItemId?: string) => setRecipeReaderFor({ menuItemId }) : undefined;
+  /** Saves what the recipe check screen settled: new materials and menu items in one batch, all or nothing. */
+  const saveImportedRecipes = async (data: DraftImport): Promise<{ ok: true; count: number } | { ok: false; message: string }> => {
+    if (!auth.currentUser) return { ok: false, message: 'You are signed out. Sign in again and retry.' };
+    const plan = planImportRecipes({
+      ...data, materials, menu, today: todayInZone(settings.timezone),
+      ctx: { newId: () => Math.random().toString(36).slice(2, 11), now: () => Date.now() },
+    });
+    if (plan.ok === false) return { ok: false, message: 'Something in these recipes changed while you were checking them. Start again to read them fresh.' };
+    try {
+      const batch = writeBatch(db);
+      addWritesToBatch(batch, auth.currentUser.uid, plan.writes);
+      await batch.commit();
+      return { ok: true, count: plan.menuItemIds.length };
+    } catch (err) {
+      console.error('Saving recipes failed:', err);
+      return { ok: false, message: 'The recipes could not be saved. Check your connection and try again.' };
+    }
+  };
 
   // `remainingInventory` sorted by the user's chosen column and direction.
   const sortedRemainingInventory = useMemo(() => {
@@ -1254,7 +1281,7 @@ function BakeryApp() {
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
-    openAddOrderModalFor, openUpcomingOrders, ordersFilterOnOpen, openRepricing, menuFilterOnOpen,
+    openAddOrderModalFor, openUpcomingOrders, ordersFilterOnOpen, openRepricing, menuFilterOnOpen, openRecipeReader,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
@@ -1598,6 +1625,17 @@ function BakeryApp() {
           today={todayInZone(settings.timezone)}
           gst={settings}
         />
+        {recipeReader && recipeReaderFor && (
+          <RecipeReaderModal
+            reader={recipeReader}
+            materials={materials}
+            menu={menu}
+            currency={currency.symbol}
+            forMenuItemId={recipeReaderFor.menuItemId}
+            onClose={() => setRecipeReaderFor(null)}
+            onSave={saveImportedRecipes}
+          />
+        )}
         <IngredientSelectorModal
           isOpen={isIngredientSelectorOpen}
           onClose={() => {

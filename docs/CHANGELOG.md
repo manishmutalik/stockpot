@@ -1,5 +1,35 @@
 # Changelog
 
+## Read a recipe: recipes from a photo or text, on the web
+
+**Recipes & Menus** has a **Read a recipe** button (where AI is available). The owner adds a photo of a notebook page, a
+printed recipe or a screenshot (up to three pages, for a recipe that runs over), or types or pastes the recipe. The recipe
+reader reads every recipe on the page and shows a check screen, one card per recipe:
+
+- each ingredient matched to a stock material (by name, Hindi words included: chini is sugar, makhan is butter), or shown as
+  a **new material** to be created, with an optional price (one new material per name, across all the recipes);
+- each amount worked out for **one item**: recipes are written per batch ("makes 12"), so the batch is divided, and the
+  reader asks when it does not say;
+- cups and spoons turned into grams with typical weights (a cup of maida about 125 g, a teaspoon of garam masala about 2 g;
+  ground spices 2 to 3 g a teaspoon), shown and changeable. Staples use their standard weight. Anything else whose guess
+  could move an item's cost by more than a little (a cup of chocolate chips) is asked, with the typical weight suggested, and
+  the answer is remembered on the material. A katori, glass or handful is always asked. A pinch is left out, unless it is
+  something dear like kesar;
+- a recipe that looks like part of another (whipped cream, ganache, custard) asks whether it is sold on its own or is part
+  of an item, and how many items one batch covers; its ingredients are then added into that item's recipe;
+- a recipe named like an existing menu item replaces that item's recipe, or adds to it, or saves as new, as the owner chooses.
+
+Nothing is saved until every question is answered and the owner presses Save; everything is then written together. New
+materials have no stock, and those without a price make their items show **Cost incomplete** in the Menu tab until a price is
+added or the first restock sets one. Photos are shrunk in the browser before sending and are not kept.
+
+The recipe reader alone uses **Claude Opus 5.5**, which reads handwriting well; every other AI feature stays on Claude Haiku 4.5.
+Limits: **15 recipes a day and 75 a month** per account (`AI_RECIPE_DAILY_LIMIT`, `AI_RECIPE_MONTHLY_LIMIT`); a page of
+several recipes counts each one, and a reading counts four against the server's global daily total.
+
+Not done yet: the phone app's camera screen, and a run of real recipes (typed, Hinglish, WhatsApp forwards, handwriting in
+English and Hindi) through the real model before opening it beyond the AI allow-list.
+
 ## Fixed costs count up to today, as sales do
 
 A view that runs past today (this month, this week) counted sales up to today but fixed costs for every day of the period, so on

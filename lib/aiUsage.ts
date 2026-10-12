@@ -6,8 +6,9 @@
  * the security rules' allow-list, and `aiUsageGlobal` is a top-level collection
  * the default-deny covers.
  *
- *   users/{uid}/aiUsage/{YYYY-MM-DD}   { chat: n, briefing: n, parse: n }   the user's own day
- *   aiUsageGlobal/{YYYY-MM-DD}         { total: n }                         UTC day, all users
+ *   users/{uid}/aiUsage/{YYYY-MM-DD}   { chat: n, briefing: n, parse: n, quick: n, recipe: n }   the user's own day
+ *   users/{uid}/aiUsage/{YYYY-MM}      { recipe: n }                                       the user's month (recipes only)
+ *   aiUsageGlobal/{YYYY-MM-DD}         { total: n }                                        UTC day, all users
  *
  * A call is reserved *before* the model is called, in one transaction that
  * checks both limits and increments both counters, so two requests arriving
@@ -57,12 +58,63 @@ export async function reserveAiUse(input: {
   });
 }
 
+/**
+ * The recipe reader's reservation: one recipe against the day and the month, and `globalWeight` model calls against
+ * the global day (a recipe reading costs several ordinary readings). A page often holds several recipes; they are
+ * counted after the reading with `addRecipeUse`, since how many there are is only known then.
+ */
+export async function reserveRecipeUse(input: {
+  uid: string;
+  userDay: string;
+  globalDayKey: string;
+  dailyLimit: number;
+  monthlyLimit: number;
+  globalLimit: number;
+  globalWeight: number;
+}): Promise<RecipeReserveResult> {
+  const db = getFirestore();
+  const dayRef = userUsageDoc(input.uid, input.userDay);
+  const monthRef = userUsageDoc(input.uid, input.userDay.slice(0, 7));
+  const globalRef = globalUsageDoc(input.globalDayKey);
+  return db.runTransaction(async tx => {
+    const [daySnap, monthSnap, globalSnap] = await Promise.all([tx.get(dayRef), tx.get(monthRef), tx.get(globalRef)]);
+    const day = Number(daySnap.data()?.recipe ?? 0);
+    const month = Number(monthSnap.data()?.recipe ?? 0);
+    const globalUsed = Number(globalSnap.data()?.total ?? 0);
+    if (day >= input.dailyLimit) return { ok: false as const, reason: 'user_limit' as const };
+    if (month >= input.monthlyLimit) return { ok: false as const, reason: 'month_limit' as const };
+    if (globalUsed + input.globalWeight > input.globalLimit) return { ok: false as const, reason: 'global_limit' as const };
+    tx.set(dayRef, { recipe: day + 1 }, { merge: true });
+    tx.set(monthRef, { recipe: month + 1 }, { merge: true });
+    tx.set(globalRef, { total: globalUsed + input.globalWeight }, { merge: true });
+    return { ok: true as const, day: day + 1, month: month + 1 };
+  });
+}
+
+/** Counts `count` more recipes read (the rest of a page), past the limits if need be: the reading is already paid for. */
+export async function addRecipeUse(input: { uid: string; userDay: string; count: number }): Promise<{ day: number; month: number }> {
+  const db = getFirestore();
+  const dayRef = userUsageDoc(input.uid, input.userDay);
+  const monthRef = userUsageDoc(input.uid, input.userDay.slice(0, 7));
+  return db.runTransaction(async tx => {
+    const [daySnap, monthSnap] = await Promise.all([tx.get(dayRef), tx.get(monthRef)]);
+    const day = Number(daySnap.data()?.recipe ?? 0) + input.count;
+    const month = Number(monthSnap.data()?.recipe ?? 0) + input.count;
+    tx.set(dayRef, { recipe: day }, { merge: true });
+    tx.set(monthRef, { recipe: month }, { merge: true });
+    return { day, month };
+  });
+}
+
+export type RecipeReserveResult = { ok: true; day: number; month: number } | { ok: false; reason: 'user_limit' | 'month_limit' | 'global_limit' };
+
 /** What has been used today, without using any. */
-export async function peekAiUsage(uid: string, userDay: string, globalDayKey: string): Promise<{ byFeature: Partial<Record<AiFeature, number>>; global: number }> {
-  const [userSnap, globalSnap] = await Promise.all([userUsageDoc(uid, userDay).get(), globalUsageDoc(globalDayKey).get()]);
+export async function peekAiUsage(uid: string, userDay: string, globalDayKey: string): Promise<{ byFeature: Partial<Record<AiFeature, number>>; recipeMonth: number; global: number }> {
+  const [userSnap, monthSnap, globalSnap] = await Promise.all([userUsageDoc(uid, userDay).get(), userUsageDoc(uid, userDay.slice(0, 7)).get(), globalUsageDoc(globalDayKey).get()]);
   const data = userSnap.data() ?? {};
   return {
-    byFeature: { chat: Number(data.chat ?? 0), briefing: Number(data.briefing ?? 0), parse: Number(data.parse ?? 0), quick: Number(data.quick ?? 0) },
+    byFeature: { chat: Number(data.chat ?? 0), briefing: Number(data.briefing ?? 0), parse: Number(data.parse ?? 0), quick: Number(data.quick ?? 0), recipe: Number(data.recipe ?? 0) },
+    recipeMonth: Number(monthSnap.data()?.recipe ?? 0),
     global: Number(globalSnap.data()?.total ?? 0),
   };
 }

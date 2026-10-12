@@ -32,10 +32,12 @@ import { getAuth } from "firebase-admin/auth";
 import { createPaymentParseModel, createRestockParseModel } from "./lib/quickReaders";
 import { createOrderParseModel } from "./lib/orderParseModel";
 import { createProductionParseHandler } from "./lib/productionParseRoutes";
+import { createRecipeParseHandler } from "./lib/recipeParseRoutes";
+import { createRecipeParseModel } from "./lib/recipeParseModel";
 import { createProductionParseModel } from "./lib/productionParseModel";
 import { createBriefingModel } from "./lib/briefingModel";
 import { beginGeneration, clearGeneration, getBriefing, saveBriefing } from "./lib/briefingStore";
-import { globalDay, peekAiUsage, reserveAiUse, usageDayFor } from "./lib/aiUsage";
+import { addRecipeUse, globalDay, peekAiUsage, reserveAiUse, reserveRecipeUse, usageDayFor } from "./lib/aiUsage";
 import { searchUsda, searchOpenFoodFacts } from "./lib/nutritionSearch";
 import { createOrRefreshBill, createOrRefreshStatement } from "./lib/billStore";
 import { createBillHandler } from "./lib/billRoutes";
@@ -106,7 +108,11 @@ async function startServer() {
   // scoped to just this one path.
   app.post("/api/billing/webhook", express.raw({ type: "application/json" }), createWebhookHandler(billingDeps));
 
-  app.use(express.json());
+  // Recipe photos need a larger body than anything else (up to three shrunk photos, as base64); every other route keeps
+  // express's 100 kb default, so a large body is refused before it is read.
+  const recipeJson = express.json({ limit: "10mb" });
+  const defaultJson = express.json();
+  app.use((req, res, next) => (req.path === "/api/ai/parse-recipe" ? recipeJson : defaultJson)(req, res, next));
   app.use(cookieParser());
 
   // --- Session / CSRF bootstrap ---
@@ -143,6 +149,7 @@ async function startServer() {
   api.post("/ai/chat", requireCsrf, createChatHandler({ ...aiGuardDeps, model: createChatModel() }));
   api.post("/ai/parse-order", requireCsrf, createOrderParseHandler({ ...aiGuardDeps, model: createOrderParseModel() }));
   api.post("/ai/parse-production-run", requireCsrf, createProductionParseHandler({ ...aiGuardDeps, model: createProductionParseModel() }));
+  api.post("/ai/parse-recipe", requireCsrf, createRecipeParseHandler({ ...aiGuardDeps, model: createRecipeParseModel(), reserveRecipe: reserveRecipeUse, addRecipes: addRecipeUse }));
 
   api.get("/billing/status", createBillingStatusHandler({ ...billingDeps, paywall: account => paywallApplies(account) }));
   // The free trial length is TRIAL_DAYS in src/utils/trial.ts, shared with the landing page.

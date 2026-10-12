@@ -11,6 +11,19 @@ export function recipeCost(recipe: IngredientRequirement[], materials: RawMateri
   }, 0);
 }
 
+/**
+ * The names of the materials in an item's recipe that have no price yet (a material the recipe reader created without
+ * one). While there are any, the item's cost is too low and is shown as "cost incomplete".
+ */
+export function unpricedMaterials(item: Pick<MenuItem, 'recipe'>, materials: RawMaterial[]): string[] {
+  const names = new Set<string>();
+  for (const req of item.recipe ?? []) {
+    const mat = materials.find(m => m.id === req.materialId);
+    if (mat && !(mat.costPerUnit > 0)) names.add(mat.name);
+  }
+  return [...names];
+}
+
 export type MarginTier = 'high' | 'mid' | 'low';
 
 /** Margin at or above 60% is healthy, 40-60% is watch, below 40% (or a loss) needs review. */
