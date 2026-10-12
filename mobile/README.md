@@ -131,7 +131,7 @@ For trying the app on a phone without Expo's cloud build. Needs Android Studio (
 Node 20+ and Git. Use one Command Prompt window for all of it, because the variables below last only for that window.
 
 ```
-set ANDROID_HOME=C:\Users\<you>\AppData\Local\Android\Sdk
+set ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk
 set JAVA_HOME=C:\Program Files\Android\Android Studio\jbr
 set GRADLE_USER_HOME=D:\gradle-home
 cd /d C:\
@@ -141,6 +141,7 @@ npm install
 echo EXPO_PUBLIC_API_URL=https://your-server.example.com>.env
 npx expo prebuild --platform android
 cd android
+echo sdk.dir=%LOCALAPPDATA:\=/%/Android/Sdk> local.properties
 gradlew.bat assembleRelease -PreactNativeArchitectures=arm64-v8a --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m"
 ```
 
@@ -149,6 +150,10 @@ that app when asked). It is signed with a debug key, which is fine for testing a
 folder is generated and ignored by Git.
 
 What has gone wrong, and the fix:
+- "SDK location not found": `android\local.properties` is missing; `prebuild --clean` deletes it. Run the `echo sdk.dir=...`
+  line above again from the `android` folder.
+- "The system cannot find the file specified" on a `set` line: a `<`, `>` or `|` in it (Command Prompt reads them as
+  redirects). Copy the lines as they are; `%LOCALAPPDATA%` already points at your own user folder.
 - `%ANDROID_HOME%` prints as itself: the variable is not set in that window (set it there, or open a new window after saving it).
 - Gradle times out downloading itself: a firewall or proxy that Java cannot get through. Try a phone hotspot, or download the
   `gradle-9.3.1-bin.zip` in a browser and point `distributionUrl` in `android\gradle\wrapper\gradle-wrapper.properties` at the file.

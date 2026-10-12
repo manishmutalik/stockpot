@@ -1,5 +1,22 @@
 # Changelog
 
+## Settings: the brand colour picker is easier to use
+
+In **Settings › App Customisation**, the custom colour was a small square that only said what it was when hovered, and
+choosing a colour with it showed no sign of being chosen; on phone browsers without a colour picker it was a tiny text box.
+The brand colour now has its own picker (`src/components/BrandColourPicker.tsx`):
+
+- The swatches and a rainbow **+** circle, which opens the device's colour picker. The chosen colour is ringed and ticked,
+  a custom one included (the **+** circle then shows it).
+- **Or type a colour code**: a hex code such as `#C0392B` or `c0392b`, taken on Enter or when the box is left; anything
+  else is refused and the box goes back to the current colour.
+- **Buttons look like this**: a button in the colour as the app draws it. A colour too light for white text is darkened a
+  little in the app; the picker now says so, with the colour used.
+- The colour still shows at once, and is kept with **Save Changes**; the help text says so.
+
+The phone APK steps in `mobile/README.md` use `%LOCALAPPDATA%` for the Android SDK, write `android\local.properties`, and
+list the "SDK location not found" fix.
+
 ## Phone: a sent bill shows as sent, with Mark as paid, and a reminder after two days
 
 Sending a bill from the phone left nothing behind: the Send button stayed, so it was not clear what had gone out. Now, once a bill

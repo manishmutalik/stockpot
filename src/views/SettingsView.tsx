@@ -8,12 +8,10 @@ import { AppViewProps, FixedCost, PAYMENT_METHODS, PaymentMethod } from '../type
 import { COMMON_TIME_ZONES, resolveTimeZone } from '../utils/localDate';
 import { FIELD, LABEL, Pill, Section } from '../components/settingsParts';
 import { OnlinePaymentsCard } from '../components/OnlinePaymentsCard';
+import { BrandColourPicker } from '../components/BrandColourPicker';
 
 type SettingsTab = 'bakery' | 'integrations' | 'customisation' | 'account' | 'categories';
 
-// The brand colour themes the app (see utils/themeColour) and the shared nutrition cards. Stockpot teal first; the old default
-// green (#10b981) is not offered, because it now means "not chosen" and keeps the app teal.
-const BRAND_SWATCHES = ['#00797B', '#006143', '#1FA97A', '#2563EB', '#7C3AED', '#2B313D', '#E4536B', '#F59E0B'];
 
 const Toggle: React.FC<{ checked: boolean; onChange: () => void; label: string }> = ({ checked, onChange, label }) => (
   <button
@@ -613,33 +611,8 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div>
                   <span className={LABEL}>Brand Colour</span>
-                  <p className="text-xs text-muted mb-3">Colours the app's buttons and highlights, and the nutrition cards you share. A very light colour is darkened a little in the app so white text stays readable.</p>
-                  <div className="flex flex-wrap gap-3">
-                    {BRAND_SWATCHES.map(color => (
-                      <button
-                        key={color}
-                        onClick={() => updateSettingsField('primaryColor', color)}
-                        aria-label={`Use ${color}`}
-                        aria-pressed={settings.primaryColor?.toLowerCase() === color.toLowerCase()}
-                        className={`w-10 h-10 rounded-full border-4 transition-transform hover:scale-110 shadow-sm ${
-                          settings.primaryColor?.toLowerCase() === color.toLowerCase() ? 'border-white ring-2 ring-primary scale-110 shadow-md' : 'border-transparent'
-                        }`}
-                        style={{ backgroundColor: color }}
-                      />
-                    ))}
-                    <div className="relative group">
-                      <input
-                        type="color"
-                        aria-label="Custom colour"
-                        value={settings.primaryColor}
-                        onChange={(e) => updateSettingsField('primaryColor', e.target.value)}
-                        className="w-10 h-10 rounded-full border-none p-0 overflow-hidden cursor-pointer shadow-sm hover:scale-110 transition-transform"
-                      />
-                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-ink text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                        Custom Colour
-                      </div>
-                    </div>
-                  </div>
+                  <p className="text-xs text-muted mb-3">Colours the app's buttons and highlights, and the nutrition cards you share. It shows straight away; press <strong>Save Changes</strong> to keep it.</p>
+                  <BrandColourPicker value={settings.primaryColor} onChange={hex => updateSettingsField('primaryColor', hex)} />
                 </div>
 
                 <div>
