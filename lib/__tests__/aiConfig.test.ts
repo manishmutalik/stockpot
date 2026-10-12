@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AI_MODEL, DEFAULT_GLOBAL_LIMIT, DEFAULT_LIMITS, isDemoAccountEmail, parseLimit, readAiConfig } from '../aiConfig';
+import { AI_MODEL, DEFAULT_GLOBAL_LIMIT, DEFAULT_LIMITS, isDemoAccountEmail, parseLimit, readAiConfig, RECIPE_AI_MODEL } from '../aiConfig';
 
 describe('readAiConfig', () => {
   it('is off by default, with nothing allowed through and the documented limits', () => {
@@ -8,7 +8,8 @@ describe('readAiConfig', () => {
     expect(c.keyConfigured).toBe(false);
     expect(c.allowedEmails).toEqual([]);
     expect(c.allowedUids).toEqual([]);
-    expect(c.limits).toEqual({ chat: 30, briefing: 4, parse: 30, quick: 60 });
+    expect(c.limits).toEqual({ chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15 });
+    expect(c.recipeMonthlyLimit).toBe(75);
     expect(c.globalLimit).toBe(1500);
     expect(DEFAULT_LIMITS.chat).toBe(30);
     expect(DEFAULT_GLOBAL_LIMIT).toBe(1500);
@@ -41,14 +42,22 @@ describe('readAiConfig', () => {
     expect(readAiConfig({ AI_QUICK_DAILY_LIMIT: '25' }).limits).toMatchObject({ quick: 25, parse: 30 });
   });
 
+  it('gives recipe reading its own daily and monthly limits, 15 and 75 unless set', () => {
+    expect(readAiConfig({}).limits.recipe).toBe(15);
+    const c = readAiConfig({ AI_RECIPE_DAILY_LIMIT: '10', AI_RECIPE_MONTHLY_LIMIT: '40' });
+    expect(c.limits.recipe).toBe(10);
+    expect(c.recipeMonthlyLimit).toBe(40);
+  });
+
   it('reads allow-lists, trimming, lower-casing emails and ignoring blanks', () => {
     const c = readAiConfig({ AI_ALLOWED_EMAILS: ' Owner@Example.com , ,b@x.com', AI_ALLOWED_UIDS: 'uid1, uid2 ,' });
     expect(c.allowedEmails).toEqual(['owner@example.com', 'b@x.com']);
     expect(c.allowedUids).toEqual(['uid1', 'uid2']);
   });
 
-  it('uses Claude Haiku 4.5', () => {
+  it('uses Claude Haiku 4.5, and Claude Opus 5.5 for reading recipes only', () => {
     expect(AI_MODEL).toBe('claude-haiku-4-5');
+    expect(RECIPE_AI_MODEL).toBe('claude-opus-5-5');
   });
 });
 

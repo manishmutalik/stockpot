@@ -35,6 +35,12 @@ export function createAiStatusHandler(deps: AiStatusDeps) {
       const limits = Object.fromEntries(AI_FEATURES.map((f: AiFeature) => {
         const limit = config.limits[f];
         const used = usage.byFeature[f] ?? 0;
+        if (f === 'recipe') {
+          // Recipes also have a monthly limit; what is left is the smaller of the two.
+          const monthLimit = config.recipeMonthlyLimit;
+          const monthUsed = usage.recipeMonth ?? 0;
+          return [f, { used, limit, monthUsed, monthLimit, remaining: Math.max(Math.min(limit - used, monthLimit - monthUsed), 0) }];
+        }
         return [f, { used, limit, remaining: Math.max(limit - used, 0) }];
       }));
       return res.json({ available: true, limits });

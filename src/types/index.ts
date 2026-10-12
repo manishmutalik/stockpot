@@ -60,6 +60,11 @@ export interface RawMaterial {
   dateAdded: string;
   expiryDate?: string; // YYYY-MM-DD — expiry of the current/latest stock batch
   gstRate?: number; // Input GST %, applied to this material's own cost/unit — drives the "GST Paid" figure in getFinancialsForRange, not the restock modal's display-only fallback.
+  /** How many grams one level teaspoon of it weighs, as the owner confirmed when a recipe gave it in spoons or cups
+   * (utils/kitchenMeasures). A tablespoon is 3 and a cup 48 teaspoons. Absent until a recipe needed it. */
+  gramsPerTsp?: number;
+  /** How many grams one piece weighs ("4 elaichi", "1 banana"), for a material kept by weight. Absent until a recipe needed it. */
+  gramsPerPiece?: number;
   /** Estimated nutrition per 100g/ml of this material, however it's actually
    * purchased/stocked (see `unit`). Used to roll up per-serving nutrition for
    * any menu item using this material. Optional — a material with no
