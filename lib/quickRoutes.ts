@@ -77,7 +77,7 @@ export function createAccessGate(deps: {
 
 // ─── Request reading ────────────────────────────────────────────────────────
 
-type Read<T> = { ok: true; value: T } | { ok: false; error: string };
+export type Read<T> = { ok: true; value: T } | { ok: false; error: string };
 const bad = (error: string): { ok: false; error: string } => ({ ok: false, error });
 const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -172,14 +172,14 @@ export function readProductionBody(body: unknown): Read<{ date?: string; rows: P
 
 // ─── Answering ──────────────────────────────────────────────────────────────
 
-const failure = (status: number, error: string, extra: Record<string, unknown> = {}): StoredResult => ({ status, body: { error, ...extra } });
+export const failure = (status: number, error: string, extra: Record<string, unknown> = {}): StoredResult => ({ status, body: { error, ...extra } });
 
 /** A plan that said no: out of stock is a conflict with what is on the shelf; the rest is something the owner can correct. */
 const planFailure = (e: PlanError): StoredResult =>
   failure(e.code === 'insufficient_stock' ? 409 : 422, e.message, { code: e.code, title: e.title });
 
 /** Reads, validates and runs a save under its idempotency key, then sends the answer. */
-function writeHandler<T>(
+export function writeHandler<T>(
   deps: QuickRouteDeps,
   scope: string,
   read: (body: unknown) => Read<T>,

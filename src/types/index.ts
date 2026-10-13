@@ -1,6 +1,44 @@
-import type React from 'react';
-import { ProductionRun } from '../components/ProductionRunModal';
 // ─── Type Definitions ─────────────────────────────────────────────────────────
+
+/**
+ * Describes why a production batch was made. Currently determines whether
+ * finished-goods stock is incremented after logging (see STOCK_PURPOSES in
+ * useProductionActions.logProductionRun).
+ *
+ * Being retired from new production runs: going forward, every run adds to
+ * stock regardless of purpose — what an item is used for (sold to a
+ * customer, kept as personal use, etc.) is decided later, when it's
+ * consumed from stock, not at bake time. This type and PURPOSE_OPTIONS
+ * below stay only so ProductionRun.purpose can still be read on runs
+ * logged before that change.
+ */
+export type ProductionPurpose = 'customer_order' | 'market_stock' | 'sampling' | 'personal_use' | 'other';
+
+/**
+ * Represents a single logged production run.
+ * Stored in the `productionRuns` Firestore collection.
+ */
+export interface ProductionRun {
+  id: string;
+  recipeId: string;
+  quantityProduced: number;
+  remainingQuantity?: number; // Added for FIFO stock deduction
+  quantityYield?: number;  // Sellable units after waste. Defaults to quantityProduced if not set.
+  date: string;            // YYYY-MM-DD
+  /** See ProductionPurpose above — set on existing records, no longer
+   * written by new production-run logging. */
+  purpose?: ProductionPurpose;
+  notes?: string;
+  costTotal: number;       // Material cost snapshotted at creation time (not live-calculated)
+  createdAt: number;       // Unix ms timestamp
+  expiryDate?: string;     // YYYY-MM-DD
+  /** Groups several single-recipe ProductionRun documents that were logged
+   * together in one session (e.g. "today's baking run made cookies and a
+   * cake"). Same semantics as Order.orderGroupId — display/UX grouping only,
+   * each run stays an independent, fully-functioning document underneath. */
+  productionSessionId?: string;
+}
+
 
 /**
  * A raw ingredient or packaging material tracked in inventory.
@@ -544,7 +582,8 @@ export interface AppViewProps {
   resetOrders: () => void;
   saveSettings: () => void;
   updateSettingsField: (field: any, value: any) => void;
-  handleRestock: (e: React.FormEvent) => void;
+  /** Takes the form's submit event (only its preventDefault is used). */
+  handleRestock: (e: { preventDefault: () => void }) => void;
   restockMaterial: RawMaterial | null;
   setDiscardTarget: (t: { id: string; name: string; type: 'material' | 'recipe'; batchId?: string; maxQty: number; unit: string; costPerUnit: number; presetReason?: string } | null) => void;
   setRestockMaterial: (m: RawMaterial | null) => void;
@@ -593,7 +632,8 @@ export interface AppViewProps {
   isRefreshing: boolean;
   lastSynced: Date;
   handleDownloadTemplate: () => void;
-  handleImportCSV: (e: React.ChangeEvent<HTMLInputElement>, targetCategory: string) => void;
+  /** Takes the file input's change event. */
+  handleImportCSV: (e: { target: HTMLInputElement }, targetCategory: string) => void;
   setAddMaterialCategory: (c: string) => void;
   setShowAddMaterialModal: (b: boolean) => void;
 

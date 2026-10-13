@@ -31,6 +31,12 @@ export default function Today() {
     router.push(kind || opts?.listen ? { pathname: '/capture', params: { ...(kind && { kind }), ...(opts?.listen && { listen: '1' }) } } : '/capture');
   };
 
+  // Read a recipe from a photo (or typed) into the menu. The screen says itself if reading recipes is not available.
+  const readRecipe = () => {
+    if (isDemo) { Alert.alert('Not available in the demo', 'Reading recipes is not available in the demo kitchen. Sign in with your own account to use it.'); return; }
+    router.push('/recipe');
+  };
+
   // Payments due is a view on the Upcoming tab; the parameter opens it there.
   const openPayments = () => router.navigate({ pathname: '/upcoming', params: { tab: 'payments' } });
 
@@ -106,6 +112,9 @@ export default function Today() {
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <ShortcutChip icon="soup-kitchen" label="Production" onPress={() => capture('production')} />
           <ShortcutChip icon="currency-rupee" label="Payment" onPress={() => capture('payment')} />
+        </View>
+        <View style={{ flexDirection: 'row' }}>
+          <ShortcutChip icon="menu-book" label="Read a recipe from a photo" onPress={readRecipe} />
         </View>
       </View>
     </ScrollView>

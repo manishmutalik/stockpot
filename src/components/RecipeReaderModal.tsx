@@ -7,7 +7,7 @@ import { perItem } from '../utils/kitchenMeasures';
 import { squash } from '../utils/orderParse';
 import { RECIPE_MAX_PHOTOS } from '../utils/recipeParse';
 import {
-  BUY_UNIT, batchShare, buildDraft, draftIssues, draftToImport, lineCostPerItem, lineMaterial, resolveDraftLine, usedNewMaterials,
+  BUY_UNIT, batchShare, buildDraft, chooseLineMaterial, draftIssues, draftToImport, lineCostPerItem, lineMaterial, questionPrompt, resolveDraftLine, usedNewMaterials,
   type DraftImport, type DraftLine, type DraftRecipe, type RecipeDraft,
 } from '../utils/recipeDraft';
 
@@ -327,17 +327,8 @@ const IngredientRow: React.FC<{
   const ownNew = draft.newMaterials.find(n => squash(n.name) === squash(ing.nameAsWritten));
   const sorted = [...materials].sort((a, b) => a.name.localeCompare(b.name));
 
-  const choose = (v: string) => set((l, d) => {
-    l.answers = {};
-    if (v === 'skip') l.choice = { kind: 'skip' };
-    else if (v.startsWith('e:')) l.choice = { kind: 'existing', id: v.slice(2) };
-    else if (v === 'n:+') {
-      const key = `n${d.newMaterials.length + 1}`;
-      const name = ing.nameAsWritten.trim();
-      d.newMaterials.push({ key, name: name.charAt(0).toUpperCase() + name.slice(1), unit: 'g', pricePerBuyUnit: null });
-      l.choice = { kind: 'new', key };
-    } else l.choice = { kind: 'new', key: v.slice(2) };
-  });
+  const choose = (v: string) => set((l, d) => chooseLineMaterial(d, l,
+    v === 'skip' ? { kind: 'skip' } : v.startsWith('e:') ? { kind: 'existing', id: v.slice(2) } : v === 'n:+' ? { kind: 'new_from_line' } : { kind: 'new', key: v.slice(2) }));
   const answer = (patch: DraftLine['answers']) => set(l => { l.answers = { ...l.answers, ...patch }; });
 
   return (
@@ -379,22 +370,7 @@ const LineQuestionInput: React.FC<{
 }> = ({ line, question, recipeUnit, materialName, onAnswer }) => {
   const [value, setValue] = useState('');
   const id = `${line.key}-answer`;
-  let prompt: string;
-  let unit = recipeUnit;
-  let suggestion: number | undefined;
-  let apply: (n: number) => DraftLine['answers'];
-  switch (question.kind) {
-    case 'measure_weight':
-      prompt = `1 ${question.measure} of ${materialName} weighs`; unit = 'g'; suggestion = question.suggestion; apply = n => ({ gramsPerMeasure: n }); break;
-    case 'piece_weight':
-      prompt = `One ${materialName} weighs`; unit = 'g'; suggestion = question.suggestion; apply = n => ({ gramsPerPiece: n }); break;
-    case 'household':
-      prompt = `How much is ${line.ingredient.amountAsWritten ?? ''} ${question.measure}, for the whole batch?`; apply = n => ({ batchAmount: n }); break;
-    case 'pinch':
-      prompt = 'How much for the whole batch?'; apply = n => ({ batchAmount: n }); break;
-    default:
-      prompt = 'How much for the whole batch?'; apply = n => ({ batchAmount: n });
-  }
+  const { prompt, unit, suggestion, answer: apply } = questionPrompt(question, line, materialName, recipeUnit);
   const submit = (n: number | null) => { if (n !== null) onAnswer(apply(n)); };
   return (
     <div className="rounded-lg bg-amber-50 p-2 space-y-1.5">

@@ -383,3 +383,28 @@ export interface BillSentResponse {
   orderIds: string[];
   at: number;
 }
+
+/** One of the owner's materials, as the phone's recipe check screen needs it (matching, units, costs, remembered weights). */
+export interface RecipeMaterialView {
+  id: string;
+  name: string;
+  unit: string;
+  costPerUnit?: number;
+  gramsPerTsp?: number;
+  gramsPerPiece?: number;
+}
+
+/** GET /api/mobile/recipes/setup: what reading a recipe on the phone starts from. */
+export interface RecipeSetupView {
+  materials: RecipeMaterialView[];
+  menu: { id: string; name: string }[];
+  currency: Currency;
+}
+
+/** POST /api/mobile/recipes: what was saved. */
+export interface RecipesSaved {
+  /** The menu items made or changed, one per recipe sold (a part folded into its item adds none). */
+  menuItemIds: string[];
+  /** How many new materials were added to stock. */
+  newMaterials: number;
+}

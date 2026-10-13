@@ -24,8 +24,11 @@ export interface ApiDeps {
 
 export interface Api {
   get<T>(path: string): Promise<T>;
-  /** Saves need an idempotency key: a fresh unique id for each tap of Save, kept for a retry of the same save. */
-  post<T>(path: string, body?: unknown, opts?: { idempotencyKey?: string }): Promise<T>;
+  /**
+   * Saves need an idempotency key: a fresh unique id for each tap of Save, kept for a retry of the same save. `timeoutMs`
+   * replaces the usual wait, for a request known to be slow (reading a recipe from photos).
+   */
+  post<T>(path: string, body?: unknown, opts?: { idempotencyKey?: string; timeoutMs?: number }): Promise<T>;
   put<T>(path: string, body: unknown): Promise<T>;
   delete<T>(path: string, body?: unknown): Promise<T>;
 }
@@ -36,12 +39,12 @@ export function createApi(deps: ApiDeps): Api {
   const base = deps.baseUrl.replace(/\/+$/, '');
   const doFetch = deps.fetchImpl ?? fetch;
 
-  async function request<T>(method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
+  async function request<T>(method: string, path: string, body?: unknown, idempotencyKey?: string, timeoutMs?: number): Promise<T> {
     const token = await deps.getToken();
     if (!token) throw new ApiError(401, 'not_signed_in', 'Please sign in again.');
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs ?? deps.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     let res: Response;
     try {
       res = await doFetch(`${base}${path}`, {
@@ -70,7 +73,7 @@ export function createApi(deps: ApiDeps): Api {
 
   return {
     get: path => request('GET', path),
-    post: (path, body, opts) => request('POST', path, body ?? {}, opts?.idempotencyKey),
+    post: (path, body, opts) => request('POST', path, body ?? {}, opts?.idempotencyKey, opts?.timeoutMs),
     put: (path, body) => request('PUT', path, body),
     delete: (path, body) => request('DELETE', path, body ?? {}),
   };
