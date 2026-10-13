@@ -56,6 +56,7 @@ Tabs are lazy-loaded (`React.lazy`), so only the active view's code is downloade
 | `experiments` | R&D Lab | R&D | `ExperimentsView` |
 | `wastage` | Wastage | Waste | `WastageView` |
 | `settings` | Settings | More | `SettingsView` |
+| `help` | Help | (**?** in the top bar, in place of sign-out) | `HelpView` |
 
 Two cross-tab shortcuts exist: `openUpcomingOrders()` jumps to Orders with the "upcoming" filter, and `openRepricing()`
 jumps to Recipes with the "repricing" filter (`ordersFilterOnOpen`, `menuFilterOnOpen`).
@@ -108,6 +109,7 @@ out money themselves; they call `src/utils/profit.ts` and friends.
 | `ProductionView` | Production runs and batches, freshness, discard | `batchStock.ts`, `stockAging.ts`, `productionStats.ts` |
 | `ExperimentsView` | R&D Lab: draft recipes and their cost | `rndStats.ts` |
 | `WastageView` | Wastage log and totals | `wastageStats.ts` |
+| `HelpView` | How to use Stockpot: search, topics by section, one topic at a time; phone-app topics listed too, marked | `helpTopics.ts` |
 | `SettingsView` | Business profile, GST, time zone, fees, fixed costs, pricing choices, UPI, online payments, integrations, categories, subscription | `settingsParts.tsx`, `OnlinePaymentsCard` |
 
 ## Components (`src/components/`)
@@ -125,6 +127,14 @@ Reusable modals, cards and panels. A few are worth knowing:
 - `OnlinePaymentsCard.tsx`: Settings card for the owner's own Razorpay/Cashfree keys.
 - `settingsParts.tsx`: field styles and the `Section` card used by Settings.
 - `AuthScreens.tsx`: `LoadingScreen`, `AuthScreen` (Google, email, demo), `PaywallScreen`.
+
+## Help (`src/utils/helpTopics.ts`)
+
+The help for both apps is one list of topics in `src/utils/helpTopics.ts`, plain data with no imports so the phone bundles it
+too. Each topic has a section, the apps it is about (`web`, `phone` or both), search keywords (Hinglish included), and a body of
+paragraphs, numbered steps and points. Button and screen names are written in `**double stars**` and drawn bold. **When a screen
+or button is renamed, change its name there too**; `helpTopics.test.ts` checks the shape, and `searchHelp`/`searchAllHelp` rank a
+title match above a match in the text. Shown by `views/HelpView.tsx` and `mobile/src/app/help.tsx`.
 
 ## Utilities (`src/utils/`)
 

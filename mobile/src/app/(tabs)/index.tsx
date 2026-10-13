@@ -60,7 +60,11 @@ export default function Today() {
       contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: 32, paddingHorizontal: 16, gap: 20 }}
       refreshControl={<RefreshControl refreshing={today.refreshing} onRefresh={today.refresh} tintColor={colors.primary} colors={[colors.primary]} />}
     >
-      <View>
+      <View style={{ paddingRight: 44 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Help" onPress={() => router.push('/help')} hitSlop={8}
+          style={({ pressed }) => ({ position: 'absolute', right: 0, top: 0, zIndex: 1, width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? `${colors.primary}1A` : 'transparent' })}>
+          <MaterialIcons name="help-outline" size={24} color={colors.grey} />
+        </Pressable>
         <Text style={{ fontFamily: fonts.mono, fontSize: 11, letterSpacing: 1.5, color: colors.primary }}>STOCKPOT QUICK</Text>
         <Text accessibilityRole="header" numberOfLines={1} style={{ fontFamily: fonts.bold, fontSize: 22, color: colors.ink, marginTop: 2 }}>
           {greeting(new Date().getHours(), user?.displayName)}
