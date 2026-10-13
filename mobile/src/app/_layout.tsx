@@ -49,6 +49,7 @@ function Routes() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="capture" options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="recipe" options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="help" options={{ animation: 'slide_from_right' }} />
       </Stack.Protected>
       <Stack.Protected guard={!user}>
         <Stack.Screen name="sign-in" />

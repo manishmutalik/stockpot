@@ -130,6 +130,8 @@ Handler refusals worth knowing: `no_menu` (422, add menu items in the web app fi
   theirs has been (`billSentAtFor`), so a new order brings Send back. For two days the cards show "Bill sent" and Mark as paid
   (Send again is a small link); after that "Send reminder", and the notification job sends one **Unpaid bills** reminder per sending
   (`billRemindedAt`, daytime, hourly; a reminder no phone took is given back).
+- **Help** (`mobile/src/app/help.tsx`, the **?** on Today and Settings › Help): the same topics as the web's Help tab
+  (`src/utils/helpTopics.ts`), the phone's first, then those done on the website; a search box.
 - **Read a recipe** (`mobile/src/app/recipe.tsx`, Today's "Read a recipe from a photo"): photos from the camera or gallery (up to
   three, shrunk to 1600 px JPEG on the phone by `lib/recipePhotos.ts` with expo-image-manipulator) or typed text go to
   `POST /mobile/recipes/read`. The check screen runs the web's own logic (`src/utils/recipeDraft.ts`: matching, spoon and piece

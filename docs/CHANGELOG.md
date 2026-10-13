@@ -1,5 +1,19 @@
 # Changelog
 
+## Help, on the website and in Stockpot Quick
+
+Both apps now have a Help section, written for the owner, from one list of topics (`src/utils/helpTopics.ts`) so they cannot
+disagree:
+
+- **Website:** **Help** in the sidebar, or the **?** in the top bar on a phone-sized screen (where it takes the sign-out button's
+  place; sign out stays in More › User Account). A search box, the topics by section (getting started, stock, recipes and menu,
+  production and wastage, orders and payments, profit and costs, settings, common questions), and the phone app's topics marked
+  **Phone**. On a wide screen a topic opens beside the list.
+- **Phone:** the **?** at the top of Today, and **Settings › Help**. Its own topics first (voice, pre-orders, getting paid,
+  notifications, reading a recipe), then what is done on the website, with the same search. Needs a new APK.
+
+Button and screen names are bold in the text; when one is renamed, its help needs the new name too.
+
 ## Read a recipe on the phone
 
 Stockpot Quick can now read recipes, as the web's Recipes & Menus tab does. **Read a recipe from a photo** on Today opens it:

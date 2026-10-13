@@ -125,6 +125,11 @@ order's invoice; one with several gets a single statement (each order's items wi
 balance due, the UPI ID and a link to the statement online), so they are asked once rather than once per order. It opens
 WhatsApp straight to them when there is a phone number, or the share sheet when not. Nothing about any order changes.
 
+## Help
+
+The **?** at the top of Today, or **Settings › Help**, opens how-to help for the app and for the website (the same topics
+as the website's Help tab, from `src/utils/helpTopics.ts`), with a search box.
+
 ## Read a recipe
 
 **Read a recipe from a photo** on Today opens the recipe reader, the same one as the web's Recipes & Menus tab (and the same

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, Switch, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -85,6 +85,7 @@ function CustomerPayments() {
 export default function Settings() {
   const { user, isDemo, api, signOut } = useAuth();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const prefs = useNotificationSettings(api, !isDemo);
   const voice = useVoicePrefs();
   const [permission, setPermission] = useState<PushPermission | null>(null);
@@ -180,6 +181,15 @@ export default function Settings() {
           </Card>
         </View>
       )}
+
+      <Pressable accessibilityRole="button" onPress={() => router.push('/help')}
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderRadius: radius.lg, padding: 16, opacity: pressed ? 0.8 : 1 })}>
+        <View style={{ flexShrink: 1 }}>
+          <Text style={{ fontFamily: fonts.semibold, fontSize: 16, color: colors.ink }}>Help</Text>
+          <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.grey }}>How to use Stockpot Quick and the website</Text>
+        </View>
+        <MaterialIcons name="help-outline" size={22} color={colors.grey} />
+      </Pressable>
 
       <Pressable accessibilityRole="link" onPress={() => { if (API_URL) Linking.openURL(API_URL).catch(() => {}); }}
         style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderRadius: radius.lg, padding: 16, opacity: pressed ? 0.8 : 1 })}>

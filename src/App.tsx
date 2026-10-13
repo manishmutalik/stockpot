@@ -28,6 +28,7 @@ import {
   ArrowRight,
   Clock,
   Settings,
+  CircleHelp,
   Settings2,
   Layers,
   UserCog,
@@ -87,6 +88,7 @@ const ExperimentsView = React.lazy(() => import('./views/ExperimentsView').then(
 const SummaryView = React.lazy(() => import('./views/SummaryView').then(m => ({ default: m.SummaryView })));
 const WastageView = React.lazy(() => import('./views/WastageView').then(m => ({ default: m.WastageView })));
 const SettingsView = React.lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })));
+const HelpView = React.lazy(() => import('./views/HelpView').then(m => ({ default: m.HelpView })));
 
 import { IngredientSelectorModal } from './components/IngredientSelectorModal';
 import { ProductionRunModal, ProductionRun } from './components/ProductionRunModal';
@@ -356,7 +358,7 @@ export default function App() {
   );
 }
 
-export type TabId = 'inventory' | 'menu' | 'orders' | 'experiments' | 'production' | 'summary' | 'settings' | 'wastage';
+export type TabId = 'inventory' | 'menu' | 'orders' | 'experiments' | 'production' | 'summary' | 'settings' | 'wastage' | 'help';
 
 /**
  * Renders a styled sidebar tab navigation button; the active tab is a solid
@@ -1335,6 +1337,7 @@ function BakeryApp() {
         </div>
 
         <div className="p-4 mt-auto flex flex-col gap-2">
+          <SidebarTabButton id="help" label="Help" icon={CircleHelp} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
           <SidebarTabButton id="settings" label="Settings" icon={Settings} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
           <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-stone-50 min-w-0">
             {settings.logo ? (
@@ -1541,9 +1544,19 @@ function BakeryApp() {
                   <span className="text-xs font-semibold text-ink truncate max-w-[10rem]">{user?.name}</span>
                   <span className="font-mono text-[11px] text-muted truncate max-w-[10rem]">{user?.email}</span>
                 </div>
+                {/* Help: in the sidebar on a wide screen; here on a phone, where the bottom bar has no room for it. It takes
+                    the sign-out button's place there (sign out is in More › User Account), so the bar is no fuller. */}
+                <button
+                  onClick={() => setActiveTab('help')}
+                  aria-label="Help"
+                  title="Help"
+                  className={`md:hidden flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${activeTab === 'help' ? 'bg-primary/10 text-primary' : 'text-muted hover:bg-stone-100 hover:text-ink'}`}
+                >
+                  <CircleHelp size={18} />
+                </button>
                 <button
                   onClick={handleLogout}
-                  className="flex items-center justify-center w-8 h-8 rounded-lg text-muted hover:bg-coral/10 hover:text-coral transition-colors"
+                  className="hidden md:flex items-center justify-center w-8 h-8 rounded-lg text-muted hover:bg-coral/10 hover:text-coral transition-colors"
                   title="Log Out"
                 >
                   <LogOut size={18} />
@@ -1569,6 +1582,7 @@ function BakeryApp() {
               {activeTab === 'summary' && <SummaryView key="summary" {...appProps} />}
               {activeTab === 'wastage' && <WastageView key="wastage" {...appProps} />}
               {activeTab === 'settings' && <SettingsView key="settings" {...appProps} />}
+              {activeTab === 'help' && <HelpView key="help" businessName={settings.name} />}
           </AnimatePresence>
         </React.Suspense>
       
