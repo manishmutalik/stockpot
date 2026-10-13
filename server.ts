@@ -33,6 +33,7 @@ import { createPaymentParseModel, createRestockParseModel } from "./lib/quickRea
 import { createOrderParseModel } from "./lib/orderParseModel";
 import { createProductionParseHandler } from "./lib/productionParseRoutes";
 import { createRecipeParseHandler } from "./lib/recipeParseRoutes";
+import { createQuickRecipeSaveHandler, createQuickRecipeSetupHandler } from "./lib/quickRecipes";
 import { createRecipeParseModel } from "./lib/recipeParseModel";
 import { createProductionParseModel } from "./lib/productionParseModel";
 import { createBriefingModel } from "./lib/briefingModel";
@@ -112,7 +113,8 @@ async function startServer() {
   // express's 100 kb default, so a large body is refused before it is read.
   const recipeJson = express.json({ limit: "10mb" });
   const defaultJson = express.json();
-  app.use((req, res, next) => (req.path === "/api/ai/parse-recipe" ? recipeJson : defaultJson)(req, res, next));
+  const RECIPE_PATHS = new Set(["/api/ai/parse-recipe", "/api/mobile/recipes/read"]);
+  app.use((req, res, next) => (RECIPE_PATHS.has(req.path) ? recipeJson : defaultJson)(req, res, next));
   app.use(cookieParser());
 
   // --- Session / CSRF bootstrap ---
@@ -149,7 +151,9 @@ async function startServer() {
   api.post("/ai/chat", requireCsrf, createChatHandler({ ...aiGuardDeps, model: createChatModel() }));
   api.post("/ai/parse-order", requireCsrf, createOrderParseHandler({ ...aiGuardDeps, model: createOrderParseModel() }));
   api.post("/ai/parse-production-run", requireCsrf, createProductionParseHandler({ ...aiGuardDeps, model: createProductionParseModel() }));
-  api.post("/ai/parse-recipe", requireCsrf, createRecipeParseHandler({ ...aiGuardDeps, model: createRecipeParseModel(), reserveRecipe: reserveRecipeUse, addRecipes: addRecipeUse }));
+  // The recipe reader, shared by the web and the phone (POST /mobile/recipes/read below), with the same limits.
+  const recipeParseHandler = createRecipeParseHandler({ ...aiGuardDeps, model: createRecipeParseModel(), reserveRecipe: reserveRecipeUse, addRecipes: addRecipeUse });
+  api.post("/ai/parse-recipe", requireCsrf, recipeParseHandler);
 
   api.get("/billing/status", createBillingStatusHandler({ ...billingDeps, paywall: account => paywallApplies(account) }));
   // The free trial length is TRIAL_DAYS in src/utils/trial.ts, shared with the landing page.
@@ -211,6 +215,9 @@ async function startServer() {
   api.post("/mobile/payments/statement", quickGate, createQuickStatementHandler(quickDeps));
   api.post("/mobile/payments/claim", quickGate, createQuickClaimHandler(quickDeps));
   api.post("/mobile/bills/sent", quickGate, createQuickBillSentHandler(quickDeps));
+  api.get("/mobile/recipes/setup", quickGate, createQuickRecipeSetupHandler(quickDeps));
+  api.post("/mobile/recipes/read", quickGate, recipeParseHandler);
+  api.post("/mobile/recipes", quickGate, createQuickRecipeSaveHandler(quickDeps));
   api.get("/mobile/payment-setup", quickGate, createQuickPaymentSetupHandler(quickDeps));
   api.get("/mobile/payments-due", quickGate, createQuickPaymentsDueHandler(quickDeps));
   api.get("/mobile/today", quickGate, createQuickTodayHandler(quickDeps));

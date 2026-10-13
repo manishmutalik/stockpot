@@ -1,5 +1,23 @@
 # Changelog
 
+## Read a recipe on the phone
+
+Stockpot Quick can now read recipes, as the web's Recipes & Menus tab does. **Read a recipe from a photo** on Today opens it:
+take a photo of a notebook page, a printout or a screenshot (up to three pages), choose photos from the gallery, or type the recipe.
+The check screen shows one card per recipe, with every ingredient matched to a material and worked out for one item; anything it
+needs to know (how much a cup of something weighs, whether whipped cream is sold or part of a cake) is asked in place, and Save adds
+the recipes to the menu. It is the same reader and the same daily and monthly limits as the web, and the same check-screen logic
+(`src/utils/recipeDraft.ts`), so a recipe costs the same whichever way it was read.
+
+- Server: `GET /api/mobile/recipes/setup` (materials and menu for the check screen), `POST /api/mobile/recipes/read` (the web's
+  recipe reader, 10 MB body) and `POST /api/mobile/recipes` (save, via `planImportRecipes`, checked again against the stored
+  materials and items; `lib/quickRecipes.ts`).
+- Phone: photos are shrunk to 1600 px JPEG on the phone before they are sent (expo-image-picker, expo-image-manipulator; the
+  camera permission is asked only when a photo is taken). Needs a new APK; the server part goes live with the Render deploy.
+- Shared code: `src/types/index.ts` no longer imports from a web component (the production run's types moved into it), so plain
+  logic that uses the app's types can be shared with the phone. The material chooser's "new material" and the question wording
+  are now in `recipeDraft` (`chooseLineMaterial`, `questionPrompt`) for the web and the phone alike.
+
 ## Settings: the brand colour picker is easier to use
 
 In **Settings › App Customisation**, the custom colour was a small square that only said what it was when hovered, and

@@ -54,6 +54,13 @@
             "com.google.android.googlequicksearchbox"
           ]
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Stockpot Quick uses the camera only when you photograph a recipe, so it can be read into your menu.",
+          "photosPermission": "Stockpot Quick opens your photos only when you choose a recipe to read."
+        }
       ]
     ],
     "experiments": {

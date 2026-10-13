@@ -87,6 +87,9 @@ needs an `Idempotency-Key`. Shapes are in `src/utils/quickApiTypes.ts`.
 | `POST /mobile/payments/statement` | Statement or invoice for one customer's unpaid orders | `StatementResponse` |
 | `POST /mobile/payments/claim` | Confirm (paid by UPI) or dismiss a customer's "I've paid by UPI" from the bill page | `ClaimReviewSaved` |
 | `POST /mobile/bills/sent` | A bill or statement for these orders was just shared: stamps `billSentAt` on the unpaid ones | `BillSentResponse` |
+| `GET /mobile/recipes/setup` | The owner's materials (with prices and remembered spoon/piece weights) and menu, for the recipe check screen | `RecipeSetupView` |
+| `POST /mobile/recipes/read` | The web's recipe reader (`lib/recipeParseRoutes.ts`), same limits; text or up to three photos; 10 MB body; no idempotency key (nothing is saved) | `{ parsed, remaining }` |
+| `POST /mobile/recipes` | Save checked recipes (`DraftImport`, checked by `lib/quickRecipes.ts`) via `planImportRecipes`; a material or item deleted meanwhile is a 409 | `RecipesSaved` (201) |
 | `GET /mobile/payments-due` | Everyone who owes, largest first, with any "says they paid" claim; card payments started from a bill are asked about first | `PaymentsDueView` |
 | `GET /mobile/payment-setup` | Whether bills ask for UPI, and which card payments are set up (Settings) | `PaymentSetupView` |
 | `GET /mobile/today` | Status lines, due today/tomorrow, overdue, "to collect" (top three), low stock, use-by soon, today's takings | `TodayView` |
@@ -127,6 +130,13 @@ Handler refusals worth knowing: `no_menu` (422, add menu items in the web app fi
   theirs has been (`billSentAtFor`), so a new order brings Send back. For two days the cards show "Bill sent" and Mark as paid
   (Send again is a small link); after that "Send reminder", and the notification job sends one **Unpaid bills** reminder per sending
   (`billRemindedAt`, daytime, hourly; a reminder no phone took is given back).
+- **Read a recipe** (`mobile/src/app/recipe.tsx`, Today's "Read a recipe from a photo"): photos from the camera or gallery (up to
+  three, shrunk to 1600 px JPEG on the phone by `lib/recipePhotos.ts` with expo-image-manipulator) or typed text go to
+  `POST /mobile/recipes/read`. The check screen runs the web's own logic (`src/utils/recipeDraft.ts`: matching, spoon and piece
+  weights, components such as whipped cream, `draftIssues`), so a recipe read on the phone is costed exactly as on the web; Save
+  sends `draftToImport`'s answer. `GET /api/ai/status` says whether reading is on for the account and how many are left today.
+  The app can import `recipeDraft` because `src/types/index.ts` imports nothing (the production run's types live there now) and
+  `metro.config.js` lets Metro read `src/types` as well as `src/utils`.
 - **Sharing**: the server writes the message and builds a `wa.me` URL when the order has a phone; the app opens it, or the phone's share
   sheet when there is no number.
 

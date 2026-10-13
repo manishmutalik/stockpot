@@ -6,44 +6,9 @@ import type { ProductionParser } from '../hooks/useProductionParser';
 import type { NotFoundItem } from '../utils/orderParse';
 import type { UnplacedWaste } from '../utils/productionParse';
 
-/**
- * Describes why a production batch was made. Currently determines whether
- * finished-goods stock is incremented after logging (see STOCK_PURPOSES in
- * useProductionActions.logProductionRun).
- *
- * Being retired from new production runs: going forward, every run adds to
- * stock regardless of purpose — what an item is used for (sold to a
- * customer, kept as personal use, etc.) is decided later, when it's
- * consumed from stock, not at bake time. This type and PURPOSE_OPTIONS
- * below stay only so ProductionRun.purpose can still be read on runs
- * logged before that change.
- */
-export type ProductionPurpose = 'customer_order' | 'market_stock' | 'sampling' | 'personal_use' | 'other';
-
-/**
- * Represents a single logged production run.
- * Stored in the `productionRuns` Firestore collection.
- */
-export interface ProductionRun {
-  id: string;
-  recipeId: string;
-  quantityProduced: number;
-  remainingQuantity?: number; // Added for FIFO stock deduction
-  quantityYield?: number;  // Sellable units after waste. Defaults to quantityProduced if not set.
-  date: string;            // YYYY-MM-DD
-  /** See ProductionPurpose above — set on existing records, no longer
-   * written by new production-run logging. */
-  purpose?: ProductionPurpose;
-  notes?: string;
-  costTotal: number;       // Material cost snapshotted at creation time (not live-calculated)
-  createdAt: number;       // Unix ms timestamp
-  expiryDate?: string;     // YYYY-MM-DD
-  /** Groups several single-recipe ProductionRun documents that were logged
-   * together in one session (e.g. "today's baking run made cookies and a
-   * cake"). Same semantics as Order.orderGroupId — display/UX grouping only,
-   * each run stays an independent, fully-functioning document underneath. */
-  productionSessionId?: string;
-}
+// The run's types live in types/index.ts (so plain logic can use them without this component); kept importable from here.
+import type { ProductionRun } from '../types';
+export type { ProductionPurpose, ProductionRun } from '../types';
 
 interface MenuItem {
   id: string;

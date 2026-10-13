@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDraft, draftIssues, draftToImport, lineCostPerItem, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
+import { buildDraft, chooseLineMaterial, draftIssues, draftToImport, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
 import type { ParsedIngredient, ParsedRecipe, ParsedRecipes } from '../recipeParse';
 import type { MenuItem, RawMaterial } from '../../types';
 import { planImportRecipes } from '../plans/planRecipes';
@@ -135,5 +135,40 @@ describe('draftToImport', () => {
     const out = draftToImport(d, materials, menu)!;
     expect(out.items[0].lines).toHaveLength(3);
     expect(out.newMaterials).toEqual([]);
+  });
+});
+
+describe('chooseLineMaterial', () => {
+  it('points a line at another material, a new one named after it (made once), or none, and asks again', () => {
+    const d = draftOf();
+    const line = d.recipes[0].lines[1]; // chini, matched to Sugar
+    line.answers = { gramsPerMeasure: 200 };
+    chooseLineMaterial(d, line, { kind: 'new_from_line' });
+    expect(line.choice).toEqual({ kind: 'new', key: 'n4' });
+    expect(d.newMaterials[3]).toEqual({ key: 'n4', name: 'Chini', unit: 'g', pricePerBuyUnit: null });
+    expect(line.answers).toEqual({});
+    const again = d.recipes[0].lines[0];
+    again.ingredient = { ...again.ingredient, nameAsWritten: 'chini' };
+    chooseLineMaterial(d, again, { kind: 'new_from_line' });
+    expect(again.choice).toEqual({ kind: 'new', key: 'n4' });
+    expect(d.newMaterials).toHaveLength(4);
+    chooseLineMaterial(d, line, { kind: 'skip' });
+    expect(line.choice).toEqual({ kind: 'skip' });
+    chooseLineMaterial(d, line, { kind: 'existing', id: 'm_sugar' });
+    expect(line.choice).toEqual({ kind: 'existing', id: 'm_sugar' });
+  });
+});
+
+describe('questionPrompt', () => {
+  const line = draftOf().recipes[0].lines[0];
+  it('puts each kind of question in words, with the unit and what an answer sets', () => {
+    const w = questionPrompt({ kind: 'measure_weight', measure: 'cup', suggestion: 125 }, line, 'Maida', 'g');
+    expect(w).toMatchObject({ prompt: '1 cup of Maida weighs', unit: 'g', suggestion: 125, canLeaveOut: false });
+    expect(w.answer(120)).toEqual({ gramsPerMeasure: 120 });
+    expect(questionPrompt({ kind: 'piece_weight' }, line, 'Eggs', 'g').answer(50)).toEqual({ gramsPerPiece: 50 });
+    expect(questionPrompt({ kind: 'household', measure: 'katori' }, line, 'Maida', 'g').prompt).toBe('How much is 2 katori, for the whole batch?');
+    const pinch = questionPrompt({ kind: 'pinch' }, line, 'Saffron', 'g');
+    expect(pinch).toMatchObject({ canLeaveOut: true, unit: 'g' });
+    expect(pinch.answer(0.5)).toEqual({ batchAmount: 0.5 });
   });
 });

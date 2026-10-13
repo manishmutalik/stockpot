@@ -125,6 +125,22 @@ order's invoice; one with several gets a single statement (each order's items wi
 balance due, the UPI ID and a link to the statement online), so they are asked once rather than once per order. It opens
 WhatsApp straight to them when there is a phone number, or the share sheet when not. Nothing about any order changes.
 
+## Read a recipe
+
+**Read a recipe from a photo** on Today opens the recipe reader, the same one as the web's Recipes & Menus tab (and the same
+daily and monthly limits). Take a photo of a notebook page, a printout or a screenshot (up to three pages, for a recipe that runs
+over), choose them from the gallery, or type the recipe. Every recipe on the page is read and shown to check, one card each:
+
+- each ingredient matched to one of your materials (tap it to choose another, a new material, or leave it out), with its amount
+  for one item and what it costs;
+- a line the reader could not work out asks in place: how much one cup or teaspoon of it weighs (with the typical weight to use in
+  one tap), how much one piece weighs, or how much a pinch of something expensive is;
+- whipped cream, ganache and the like ask whether you sell it or it is part of another item, and how many items one batch covers;
+- a recipe named like something on your menu replaces its recipe, adds to it, or is saved as a new item;
+- new materials are listed at the end, with a unit and, if you know it, a price.
+
+Nothing is saved until **Save**, and photos are not kept. The camera is asked for only when you take a photo. Needs a new APK.
+
 ## Build an APK on your own computer (Android, Windows)
 
 For trying the app on a phone without Expo's cloud build. Needs Android Studio (for the SDK and its bundled Java),

@@ -15,10 +15,14 @@
  */
 import type { MenuItem, RawMaterial } from '../types';
 import { convertAmount } from './conversions';
-import { matchMaterialByName, perItem, resolveLine, suggestMaterialUnit, type LineAnswers, type LineResolution } from './kitchenMeasures';
+import { matchMaterialByName, perItem, resolveLine, suggestMaterialUnit, type LineAnswers, type LineQuestion, type LineResolution } from './kitchenMeasures';
 import { squash } from './orderParse';
 import type { MaterialMemory, NewMaterialInput, RecipeImportItem, RecipeImportLine } from './plans/planRecipes';
 import type { ParsedIngredient, ParsedRecipes } from './recipeParse';
+
+/** What the draft needs of a material and a menu item (the phone has only these: quickApiTypes' RecipeSetupView). */
+export type DraftMaterial = Pick<RawMaterial, 'id' | 'name' | 'unit'> & Partial<Pick<RawMaterial, 'costPerUnit' | 'gramsPerTsp' | 'gramsPerPiece'>>;
+export type DraftMenuItem = Pick<MenuItem, 'id' | 'name'>;
 
 export type LineChoice = { kind: 'existing'; id: string } | { kind: 'new'; key: string } | { kind: 'skip' };
 
@@ -69,7 +73,7 @@ const PER_BUY_UNIT: Record<DraftNewMaterial['unit'], number> = { g: 1000, ml: 10
 
 const capitalise = (s: string) => s.trim().charAt(0).toUpperCase() + s.trim().slice(1);
 
-export function buildDraft(parsed: ParsedRecipes, input: { materials: RawMaterial[]; menu: MenuItem[]; fromPhotos: boolean; forMenuItemId?: string }): RecipeDraft {
+export function buildDraft(parsed: ParsedRecipes, input: { materials: DraftMaterial[]; menu: DraftMenuItem[]; fromPhotos: boolean; forMenuItemId?: string }): RecipeDraft {
   const newMaterials: DraftNewMaterial[] = [];
   const newKeyFor = (ingredient: ParsedIngredient): string => {
     const name = squash(ingredient.nameAsWritten);
@@ -114,7 +118,7 @@ export function buildDraft(parsed: ParsedRecipes, input: { materials: RawMateria
 /** What a line's material is, for working it out: unit, price per unit, remembered weights, name. */
 export interface LineMaterial { name: string; unit: string; costPerUnit?: number; gramsPerTsp?: number; gramsPerPiece?: number }
 
-export function lineMaterial(draft: RecipeDraft, line: DraftLine, materials: RawMaterial[]): LineMaterial | null {
+export function lineMaterial(draft: RecipeDraft, line: DraftLine, materials: DraftMaterial[]): LineMaterial | null {
   if (line.choice.kind === 'skip') return null;
   if (line.choice.kind === 'existing') {
     const id = line.choice.id;
@@ -127,8 +131,48 @@ export function lineMaterial(draft: RecipeDraft, line: DraftLine, materials: Raw
   return { name: nm.name, unit: nm.unit, ...(nm.pricePerBuyUnit && nm.pricePerBuyUnit > 0 && { costPerUnit: nm.pricePerBuyUnit / PER_BUY_UNIT[nm.unit] }) };
 }
 
+/**
+ * Points a line at another material: an existing one, a new one already in the draft, a new one named after the
+ * ingredient (`new_from_line`, made here), or none (left out). What was answered for the old material starts again.
+ * Changes `draft` in place: callers pass a copy.
+ */
+export function chooseLineMaterial(draft: RecipeDraft, line: DraftLine, choice: LineChoice | { kind: 'new_from_line' }): void {
+  line.answers = {};
+  if (choice.kind !== 'new_from_line') { line.choice = choice; return; }
+  const own = draft.newMaterials.find(n => squash(n.name) === squash(line.ingredient.nameAsWritten));
+  if (own) { line.choice = { kind: 'new', key: own.key }; return; }
+  const key = `n${draft.newMaterials.length + 1}`;
+  draft.newMaterials.push({ key, name: capitalise(line.ingredient.nameAsWritten), unit: suggestMaterialUnit(line.ingredient), pricePerBuyUnit: null });
+  line.choice = { kind: 'new', key };
+}
+
+/** How a line's question is put to the owner: the words, the unit of the answer, a typical value to offer, what an answer sets. */
+export interface QuestionPrompt {
+  prompt: string;
+  unit: string;
+  suggestion?: number;
+  answer: (n: number) => LineAnswers;
+  /** A pinch of something expensive can still be left out. */
+  canLeaveOut: boolean;
+}
+
+export function questionPrompt(question: LineQuestion, line: DraftLine, materialName: string, recipeUnit: string): QuestionPrompt {
+  switch (question.kind) {
+    case 'measure_weight':
+      return { prompt: `1 ${question.measure} of ${materialName} weighs`, unit: 'g', suggestion: question.suggestion, answer: n => ({ gramsPerMeasure: n }), canLeaveOut: false };
+    case 'piece_weight':
+      return { prompt: `One ${materialName} weighs`, unit: 'g', suggestion: question.suggestion, answer: n => ({ gramsPerPiece: n }), canLeaveOut: false };
+    case 'household':
+      return { prompt: `How much is ${line.ingredient.amountAsWritten ?? ''} ${question.measure}, for the whole batch?`.replace(/\s+/g, ' '), unit: recipeUnit, answer: n => ({ batchAmount: n }), canLeaveOut: false };
+    case 'pinch':
+      return { prompt: 'How much for the whole batch?', unit: recipeUnit, answer: n => ({ batchAmount: n }), canLeaveOut: true };
+    default:
+      return { prompt: 'How much for the whole batch?', unit: recipeUnit, answer: n => ({ batchAmount: n }), canLeaveOut: false };
+  }
+}
+
 /** One line worked out for the whole batch, or what to ask; null when it is left out. */
-export function resolveDraftLine(draft: RecipeDraft, recipe: DraftRecipe, line: DraftLine, materials: RawMaterial[]): LineResolution | null {
+export function resolveDraftLine(draft: RecipeDraft, recipe: DraftRecipe, line: DraftLine, materials: DraftMaterial[]): LineResolution | null {
   const material = lineMaterial(draft, line, materials);
   if (!material) return null;
   return resolveLine({
@@ -144,7 +188,7 @@ export const batchShare = (recipe: DraftRecipe): number | null =>
   recipe.use.kind === 'part' ? recipe.use.covers : recipe.use.kind === 'sell' ? recipe.makes : null;
 
 /** The cost of a line for one item, when the line is worked out and its material has a price. */
-export function lineCostPerItem(draft: RecipeDraft, recipe: DraftRecipe, line: DraftLine, materials: RawMaterial[]): number | null {
+export function lineCostPerItem(draft: RecipeDraft, recipe: DraftRecipe, line: DraftLine, materials: DraftMaterial[]): number | null {
   const r = resolveDraftLine(draft, recipe, line, materials);
   const share = batchShare(recipe);
   const material = lineMaterial(draft, line, materials);
@@ -155,7 +199,7 @@ export function lineCostPerItem(draft: RecipeDraft, recipe: DraftRecipe, line: D
 export interface DraftIssue { recipeKey?: string; lineKey?: string; message: string }
 
 /** Everything still to settle before the draft can be saved. */
-export function draftIssues(draft: RecipeDraft, materials: RawMaterial[], menu: MenuItem[]): DraftIssue[] {
+export function draftIssues(draft: RecipeDraft, materials: DraftMaterial[], menu: DraftMenuItem[]): DraftIssue[] {
   const issues: DraftIssue[] = [];
   const included = draft.recipes.filter(r => r.include);
   if (included.length === 0) issues.push({ message: 'Tick at least one recipe to save.' });
@@ -196,7 +240,7 @@ export function usedNewMaterials(draft: RecipeDraft): DraftNewMaterial[] {
 export type DraftImport = { items: RecipeImportItem[]; newMaterials: NewMaterialInput[]; remember: MaterialMemory[] };
 
 /** What to save, once `draftIssues` is empty. Components are folded into the item they are part of. */
-export function draftToImport(draft: RecipeDraft, materials: RawMaterial[], menu: MenuItem[]): DraftImport | null {
+export function draftToImport(draft: RecipeDraft, materials: DraftMaterial[], menu: DraftMenuItem[]): DraftImport | null {
   if (draftIssues(draft, materials, menu).length > 0) return null;
   const remember = new Map<string, MaterialMemory>();
   const newMeta = new Map<string, { gramsPerTsp?: number; gramsPerPiece?: number }>();
