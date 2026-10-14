@@ -28,6 +28,21 @@ describe('the profit breakdown', () => {
     expect(steps.at(-1)!.amount).toBe(10900);
   });
 
+  it('takes off what batches came out short of, or adds what they made over', () => {
+    const lost = profitSteps({ ...base, productionLoss: 300, profit: 25700, trueProfit: 10100 });
+    expect(lost.map(s => s.key)).toEqual(['sales', 'materials', 'couriers', 'wastage', 'productionLoss', 'beforeOverheads', 'paymentFees', 'fixedCosts', 'trueProfit']);
+    expect(lost[4]).toMatchObject({ label: 'Lost in production', amount: -300, kind: 'cost' });
+    const gained = profitSteps({ ...base, productionLoss: -100, profit: 26100, trueProfit: 10500 });
+    expect(gained[4]).toMatchObject({ label: 'Gained in production', amount: 100, kind: 'add' });
+    for (const steps of [lost, gained]) {
+      let running = 0;
+      for (const s of steps) {
+        if (s.kind === 'subtotal' || s.kind === 'total') expect(s.amount).toBeCloseTo(running, 6);
+        else running += s.amount;
+      }
+    }
+  });
+
   it('gives the trend chart what came in, every cost, and what was kept', () => {
     expect(trendFigures(base)).toEqual({ income: 50000, costs: 39600, trueProfit: 10400 });
     expect(trendFigures({ income: 1000, trueProfit: -250, forfeitedAdvances: 100 })).toEqual({ income: 1100, costs: 1350, trueProfit: -250 });

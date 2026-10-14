@@ -81,6 +81,7 @@ export function planProductionRun(runData: ProductionRunInput, state: Working, c
     createdAt: ctx.now(),
   };
   if (runData.quantityYield !== undefined) run.quantityYield = runData.quantityYield;
+  if (runData.batches && runData.batches > 0) run.batches = runData.batches;
   if (runData.notes) run.notes = runData.notes;
   if (runData.productionSessionId) run.productionSessionId = runData.productionSessionId;
 

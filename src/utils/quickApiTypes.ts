@@ -169,7 +169,7 @@ export interface RestockDraft {
 /** The body of POST /api/mobile/production-runs. */
 export interface ProductionDraft {
   date?: string;
-  rows: { recipeId: string; quantityProduced: number; quantityYield?: number; notes?: string }[];
+  rows: { recipeId: string; quantityProduced: number; quantityYield?: number; batches?: number; notes?: string }[];
 }
 
 /** The body of POST /api/mobile/payments, with whatever is not settled yet left out. */

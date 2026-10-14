@@ -243,10 +243,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       text('If you make something ahead and use it in other items (a sponge base for cream cakes, a ganache, a masala base, cookies that go into hampers), add it as its own item and use it in the others. Its cost then flows into every item built on it.'),
       steps(
-        'On the website, in **Recipes & Menus**, add the base as an item, with its recipe for **one** base. A batch that makes 4.5 bases? Write the recipe for one (the recipe reader divides by 4.5 for you).',
+        'On the website, in **Recipes & Menus**, add the base as an item, with its recipe for **one** base. A batch that makes 4.5 bases? Set **One batch makes** to 4.5; if you typed the recipe for the whole batch, Stockpot offers to divide it (the recipe reader does both for you).',
         'Open its recipe and turn off **Sold on the menu**. It moves to **Made for other items**, and stays out of orders, the shared menu and margin figures.',
         'In each cream cake, click **Add a made item** and choose the base: 1 for a 1 kg cake, 0.5 for a half-kg cake.',
-        'When you bake bases, log a **Production Run** for them (made 4.5). When you make cream cakes, log a run for the cakes: the bases come out of base stock, and the cream and fruit out of your materials.',
+        'When you bake bases, log a **Production Run** for them in batches (2 batches is 9 bases), with what actually came out. When you make cream cakes, log a run for the cakes: the bases come out of base stock, and the cream and fruit out of your materials.',
       ),
       points(
         'If there are not enough bases, Stockpot warns you but lets you go ahead. Log the bases you made, and the count comes right.',
@@ -332,12 +332,34 @@ export const HELP_TOPICS: HelpTopic[] = [
       steps(
         'On the website, open **Production Runs** and click **Log Production Run**. On the phone, say "Made forty croissants, three burnt", or tap **Production**.',
         'Choose the item and how many you made. Add more items if you baked several things.',
-        'If some were burnt or broken, enter the **Sellable units (after waste)**.',
+        'If some were burnt or broken, or a batch went further, tap **Came out different?** and enter how many actually came out.',
         'Save. The batch shows with its cost and use-by date (from the recipe\'s shelf life).',
       ),
       points(
         'On the website, **Fill from a note** reads a message like "Made 40 croissants and 24 muffins, 3 croissants burnt" into the form.',
         'An order from stock can only sell what you have made. If it says **Not Enough Stock**, log the production first.',
+        'Made in batches? See **Batches, and what actually came out**.',
+      ),
+    ],
+  },
+  {
+    id: 'batches', section: 'production', apps: ['web', 'phone'],
+    title: 'Batches, and what actually came out',
+    summary: 'One mix makes about 4.5 cakes: log batches, and Stockpot keeps the real count and cost.',
+    keywords: ['batch', 'batches', 'yield', 'makes', 'came out', 'got', 'short', 'extra', 'actual', 'lost in production', 'paneer', 'cookies', 'sponge', 'mix'],
+    body: [
+      text('For anything made in batches (sponge bases from a tub of cake gel, cookies by the tray, paneer from a pot of milk), tell Stockpot how many one batch makes and log production in batches.'),
+      steps(
+        'In **Recipes & Menus**, open the item and set **One batch makes** (4.5, 24, whatever it is). The recipe stays for **one** piece.',
+        'When you make it, open **Log Production Run**: the item is counted in **Batches**. Enter 2, and Stockpot works out 9 pieces and takes that much from stock.',
+        'Enter what **Actually made**, if it was different: 8 bases, not 9. Leave it empty if it came out as planned.',
+      ),
+      points(
+        'Only what came out goes on the shelf. What did not is shown on the Dashboard as **Lost in production**, and taken off True profit (a batch that went further is **Gained in production**).',
+        'The Production log shows each run\'s real cost per piece: a short batch makes each one dearer.',
+        'After a few batches, the item says what they really made on average. Tap **Use 4.2** to make that the batch size: one batch keeps the same ingredients, so each piece now carries its true cost.',
+        'Prefer pieces? Switch the row to **Pieces**. Quantities can have decimals (4.5).',
+        'On the phone, say "Made 2 batches of sponge, got 8". The item needs its batch size set on the website first.',
       ),
     ],
   },
@@ -463,7 +485,8 @@ export const HELP_TOPICS: HelpTopic[] = [
       text('The Dashboard\'s **True profit** is what the business kept after every cost. It starts from your sales and takes off, in order:'),
       points(
         'Ingredients and packaging of what you sold (at the prices when you sold it).',
-        'Courier costs, wastage and R&D trials.',
+        'Courier costs and wastage. (R&D trials are shown on their own, not taken off profit.)',
+        'What batches came out short of (**Lost in production**), at what each piece was planned to cost.',
         'Payment fees (set what UPI, cards and others cost you in Settings).',
         'Fixed monthly costs such as rent and salaries, spread over the days shown, up to today.',
       ),

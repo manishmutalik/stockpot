@@ -77,7 +77,7 @@ describe('parsing', () => {
     await act(async () => { outcome = await result.current!.parse('Made 40 croissants yesterday, 3 burnt, new oven'); });
     expect(outcome.ok).toBe(true);
     expect(outcome.remaining).toBe(28);
-    expect(outcome.form).toMatchObject({ rows: [{ recipeId: 'croissant', quantity: 40 }], yieldQty: 37, notes: 'new oven' });
+    expect(outcome.form).toMatchObject({ rows: [{ recipeId: 'croissant', quantity: 40, made: 37 }], notes: 'new oven' });
     expect(outcome.form.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 

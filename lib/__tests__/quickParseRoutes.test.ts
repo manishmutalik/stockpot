@@ -468,6 +468,22 @@ describe('something made', () => {
     expect(r.body.preview.rows[0].stockAfter).toBe(20);
   });
 
+  it('turns batches into pieces from the item\'s batch size, keeps what came out, and saves both', async () => {
+    const { deps, mem } = world();
+    mem.seed(UID, 'menu', 'base', { name: 'Sponge Base', sellingPrice: 0, notForSale: true, batchMakes: 4.5, finishedGoodsStock: 0, recipe: [{ materialId: 'flour', amount: 100, unit: 'g' }] });
+    deps.productionModel.mockResolvedValue({ raw: production({ lineItems: [{ nameAsWritten: 'sponge', menuItemId: 'base', quantity: 2, unit: 'batches', wasteUnits: null, madeUnits: 8 }] }) });
+    const r = await call(deps, made('made 2 batches of sponge, got 8'));
+    expect(r.body.draft.rows).toEqual([{ recipeId: 'base', quantityProduced: 9, quantityYield: 8, batches: 2 }]);
+    expect(r.body.preview.rows[0]).toMatchObject({ quantityProduced: 9, quantityYield: 8, stockAfter: 8 });
+  });
+
+  it('leaves out batches of an item with no batch size, and says how to fix it', async () => {
+    const { deps } = world();
+    deps.productionModel.mockResolvedValue({ raw: production({ lineItems: [{ nameAsWritten: 'sourdough', menuItemId: 'sourdough', quantity: 2, unit: 'batches', wasteUnits: null, madeUnits: null }] }) });
+    const r = await call(deps, made('made 2 batches of sourdough'));
+    expect(r.body.notes).toEqual([expect.stringMatching(/Left out 2 batches of Sourdough: set how many one batch makes/)]);
+  });
+
   it('says which ingredients it would run out of, and still lets the owner decide', async () => {
     const { deps } = world();
     deps.productionModel.mockResolvedValue({ raw: production({ lineItems: [{ nameAsWritten: 'cake', menuItemId: 'cake', quantity: 20, wasteUnits: null }] }) });

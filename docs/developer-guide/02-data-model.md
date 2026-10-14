@@ -84,6 +84,8 @@ A thing the owner sells.
 - `parts`: `{itemId, quantity}[]`, other items this one is made from, per one of it (a sponge base in a cream cake, 0.5 for a
   half-kg cake). `notForSale`: made only to go into other items (kept off orders, the shared menu and margin figures). See
   `src/utils/itemParts.ts` and [Money, plans and bills](04-money-plans-bills.md).
+- `batchMakes`: how many one batch makes (4.5 sponge bases). The recipe stays per one item; production can be logged in
+  batches. See `src/utils/batches.ts`.
 
 ### `Order` (`users/{uid}/orders`)
 
@@ -117,7 +119,8 @@ figure counts only orders due today or earlier.
 
 ### `ProductionRun`
 
-`recipeId`, `quantityProduced`, `quantityYield` (sellable units after waste), `date`, `costTotal` (snapshotted at
+`recipeId`, `quantityProduced` (what the ingredients were for), `quantityYield` (what came out and went on the shelf: may
+be less, or up to 3 times more), `batches` (when logged in batches), `date`, `costTotal` (snapshotted at
 creation, never recalculated), `remainingQuantity`, `expiryDate`, and `productionSessionId` (groups runs logged
 together). `purpose` is legacy. A run of an item with parts also has `partsUsed` (taken from the parts' finished stock;
 deleting the run puts them back) and `partsCost` (their value, inside `costTotal`; production spend is `runSpend`, the

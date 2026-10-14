@@ -136,6 +136,12 @@ describe('readRecipeImportBody', () => {
   it('takes a well-formed import', () => {
     expect(readRecipeImportBody(ok)).toEqual({ ok: true, value: ok });
   });
+  it('keeps what one batch makes, when it is above nothing', () => {
+    const batch = { ...ok, items: [{ ...ok.items[0], batchMakes: 4.5 }] };
+    expect(readRecipeImportBody(batch)).toEqual({ ok: true, value: batch });
+    expect(readRecipeImportBody({ ...ok, items: [{ ...ok.items[0], batchMakes: 0 }] }).ok).toBe(false);
+    expect(readRecipeImportBody({ ...ok, items: [{ ...ok.items[0], batchMakes: '4' }] }).ok).toBe(false);
+  });
   it.each([
     ['no items', { items: [], newMaterials: [], remember: [] }],
     ['a nameless new item', { items: [{ target: { kind: 'new', name: ' ' }, lines: [line] }] }],

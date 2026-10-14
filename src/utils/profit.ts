@@ -21,7 +21,8 @@
  *
  * Pure: no React, Firebase or DOM, so it is unit tested on its own.
  */
-import type { BakerySettings, FixedCost, MenuItem, Order, RawMaterial, RecipeExperiment, WastageLog } from '../types';
+import type { BakerySettings, FixedCost, MenuItem, Order, ProductionRun, RawMaterial, RecipeExperiment, WastageLog } from '../types';
+import { productionLossForRange, type RunFigures } from './batches';
 import { convertAmount } from './conversions';
 import { splitSaleForGst } from './gstCalculations';
 import { attributeDeliveryFieldByGroup, clusterOrdersByGroup } from './orderClustering';
@@ -290,9 +291,14 @@ export interface Financials {
   /** Courier fees. */
   deliveryExpenses: number;
   wastageExpenses: number;
+  /**
+   * What production runs in the range came out short of what their ingredients were for, at their planned cost (burnt, broken,
+   * a poor batch); a run that made more takes it down, and a total below nothing is a gain. utils/batches `runYieldLoss`.
+   */
+  productionLoss: number;
   gstCollected: number;
   gstPaid: number;
-  /** Income minus ingredients, packaging, courier fees and wastage. Payment fees and fixed costs come off in `trueProfit`. */
+  /** Income minus ingredients, packaging, courier fees, wastage and production loss. Payment fees and fixed costs come off in `trueProfit`. */
   profit: number;
   /** Discounts given in the range (already out of `income`). */
   discounts: number;
@@ -304,7 +310,7 @@ export interface Financials {
   forfeitedAdvances: number;
   /** Sum of every order's contribution (income minus order costs, courier and payment fees). */
   totalContribution: number;
-  /** Contribution minus wastage minus fixed costs: what the business really made. */
+  /** Contribution minus wastage, production loss and fixed costs: what the business really made. */
   trueProfit: number;
   orderCount: number;
   avgOrderContribution: number;
@@ -328,6 +334,8 @@ export function financialsForRange(input: {
   materials: RawMaterial[];
   experiments: RecipeExperiment[];
   wastageLogs: WastageLog[];
+  /** For what came out short of (or over) what was made for: utils/batches. Absent: none counted. */
+  productionRuns?: (RunFigures & Pick<ProductionRun, 'date'>)[];
   settings: GstSettings & Pick<BakerySettings, 'fixedCosts'>;
   start: string;
   end: string;
@@ -386,27 +394,31 @@ export function financialsForRange(input: {
     .filter(w => w.date >= start && w.date <= last)
     .reduce((total, w) => total + (w.cost || 0), 0);
 
+  // Lost in production (made for 24, 21 came out), at the planned cost; once, here, like wastage.
+  const productionLoss = productionLossForRange(input.productionRuns ?? [], start, last);
+
   // Up to today, as sales are: the rest of this month's rent is not yet spent, and taking it off now would set a whole month's
   // overheads against the days of sales so far.
   const fixedCosts = fixedCostsForRange(settings.fixedCosts, start, last);
   const orderExpenses = ingredients + packaging;
   return {
     income,
-    expenses: orderExpenses + experimentExpenses + courierFees + wastageExpenses,
+    expenses: orderExpenses + experimentExpenses + courierFees + wastageExpenses + productionLoss,
     orderExpenses,
     packagingExpenses: packaging,
     experimentExpenses,
     deliveryExpenses: courierFees,
     wastageExpenses,
+    productionLoss,
     gstCollected,
     gstPaid,
-    profit: income + forfeitedAdvances - orderExpenses - courierFees - wastageExpenses,
+    profit: income + forfeitedAdvances - orderExpenses - courierFees - wastageExpenses - productionLoss,
     discounts,
     paymentFees,
     fixedCosts,
     forfeitedAdvances,
     totalContribution,
-    trueProfit: totalContribution + forfeitedAdvances - forfeitedFees - wastageExpenses - fixedCosts,
+    trueProfit: totalContribution + forfeitedAdvances - forfeitedFees - wastageExpenses - productionLoss - fixedCosts,
     orderCount,
     avgOrderContribution: orderCount > 0 ? totalContribution / orderCount : 0,
     unpaidIncome,
@@ -454,7 +466,7 @@ export function bookedAhead(input: {
 
 /** One line of the step-down from sales to true profit. Costs are negative. */
 export interface ProfitStep {
-  key: 'sales' | 'advancesKept' | 'materials' | 'couriers' | 'wastage' | 'beforeOverheads' | 'paymentFees' | 'fixedCosts' | 'trueProfit';
+  key: 'sales' | 'advancesKept' | 'materials' | 'couriers' | 'wastage' | 'productionLoss' | 'beforeOverheads' | 'paymentFees' | 'fixedCosts' | 'trueProfit';
   label: string;
   /** Signed: what this line adds (positive) or takes away (negative); for a subtotal or the total, the running figure. */
   amount: number;
@@ -464,7 +476,7 @@ export interface ProfitStep {
 }
 
 type BreakdownFigures = Pick<Financials, 'income' | 'orderExpenses' | 'deliveryExpenses' | 'wastageExpenses' | 'profit' | 'paymentFees' | 'fixedCosts' | 'trueProfit'>
-  & Partial<Pick<Financials, 'forfeitedAdvances' | 'packagingExpenses' | 'discounts'>>;
+  & Partial<Pick<Financials, 'forfeitedAdvances' | 'packagingExpenses' | 'discounts' | 'productionLoss'>>;
 
 /**
  * Sales down to true profit, one cost at a time, from the same figures `financialsForRange` returns, so the lines always add up
@@ -484,6 +496,9 @@ export function profitSteps(f: BreakdownFigures, opts: { gstApplicable?: boolean
   });
   if (f.deliveryExpenses > 0) steps.push({ key: 'couriers', label: 'Courier fees', amount: -f.deliveryExpenses, kind: 'cost', hint: 'Third-party delivery' });
   if (f.wastageExpenses > 0) steps.push({ key: 'wastage', label: 'Wastage', amount: -f.wastageExpenses, kind: 'cost', hint: 'Stock thrown away' });
+  const loss = f.productionLoss ?? 0;
+  if (loss > 0) steps.push({ key: 'productionLoss', label: 'Lost in production', amount: -loss, kind: 'cost', hint: 'Batches that made fewer than planned' });
+  if (loss < 0) steps.push({ key: 'productionLoss', label: 'Gained in production', amount: -loss, kind: 'add', hint: 'Batches that made more than planned' });
   steps.push({ key: 'beforeOverheads', label: 'Profit before overheads', amount: f.profit, kind: 'subtotal' });
   if (f.paymentFees > 0) steps.push({ key: 'paymentFees', label: 'Payment fees', amount: -f.paymentFees, kind: 'cost', hint: 'Card and UPI charges' });
   if (f.fixedCosts > 0) steps.push({ key: 'fixedCosts', label: 'Fixed costs', amount: -f.fixedCosts, kind: 'cost', hint: 'Rent, salaries and other overheads, for these days' });

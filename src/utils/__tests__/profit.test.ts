@@ -160,6 +160,28 @@ describe('financialsForRange', () => {
     expect(f.expenses).toBe(30 + 10 + 20);
   });
 
+  it('takes off what runs in the range came out short of, and adds back what they made over', () => {
+    const runs = [
+      { date: '2026-03-05', quantityProduced: 9, quantityYield: 8, costTotal: 90 },
+      { date: '2026-03-06', quantityProduced: 10, quantityYield: 12, costTotal: 50 },
+      { date: '2026-02-01', quantityProduced: 10, quantityYield: 0, costTotal: 999 },
+    ];
+    const without = financialsForRange({ ...base, ...range, orders: [stamped('a')] });
+    const f = financialsForRange({ ...base, ...range, orders: [stamped('a')], productionRuns: runs });
+    // 1 short at 10 each, 2 over at 5 each.
+    expect(f.productionLoss).toBe(0);
+    const lossOnly = financialsForRange({ ...base, ...range, orders: [stamped('a')], productionRuns: [runs[0], runs[2]] });
+    expect(lossOnly.productionLoss).toBe(10);
+    expect(lossOnly.profit).toBe(without.profit - 10);
+    expect(lossOnly.trueProfit).toBe(without.trueProfit - 10);
+    expect(lossOnly.expenses).toBe(without.expenses + 10);
+    const gainOnly = financialsForRange({ ...base, ...range, orders: [stamped('a')], productionRuns: [runs[1]] });
+    expect(gainOnly.productionLoss).toBe(-10);
+    expect(gainOnly.trueProfit).toBe(without.trueProfit + 10);
+    expect(without.productionLoss).toBe(0);
+    expect(f.trueProfit).toBe(without.trueProfit);
+  });
+
   it('reports the same profit for an inclusive and an exclusive business selling the same base amount', () => {
     const excl = financialsForRange({
       ...base, ...range, menu: [cake(100)], settings: { gstApplicable: true, gstRate: 18, gstPricingMode: 'exclusive' },

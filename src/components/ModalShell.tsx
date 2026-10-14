@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useId, useState } from 'react';
 import { Minus, Plus, X } from 'lucide-react';
 
 /** Mono, uppercase caption used above every form field in a modal. */
@@ -86,36 +86,70 @@ export const ModalShell: React.FC<{
   );
 };
 
-/** − [n] + control for an item quantity; the input keeps the "Qty" placeholder. */
+/**
+ * − [n] + control for an item quantity; the input keeps the "Qty" placeholder. Whole numbers, unless `decimal` (4.5
+ * bases, 1.5 batches): then what is typed is kept as text until it is a number, so "4." can become "4.5".
+ */
 export const QuantityStepper: React.FC<{
   value: number;
   onChange: (n: number) => void;
   invalid?: boolean;
-}> = ({ value, onChange, invalid }) => (
-  <div className={`flex items-center bg-stone-50 border rounded-xl shrink-0 ${invalid ? 'border-coral' : 'border-transparent'}`}>
-    <button
-      type="button"
-      onClick={() => onChange(Math.max(0, value - 1))}
-      aria-label="Decrease quantity"
-      className="p-3 text-muted hover:text-primary transition-colors"
-    >
-      <Minus size={16} />
-    </button>
-    <input
-      type="number"
-      min={1}
-      value={value === 0 ? '' : value}
-      onChange={e => onChange(parseInt(e.target.value) || 0)}
-      placeholder="Qty"
-      className="w-12 bg-transparent text-center font-mono text-sm font-semibold text-ink outline-none py-3 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-    />
-    <button
-      type="button"
-      onClick={() => onChange(value + 1)}
-      aria-label="Increase quantity"
-      className="p-3 text-muted hover:text-primary transition-colors"
-    >
-      <Plus size={16} />
-    </button>
-  </div>
-);
+  decimal?: boolean;
+  label?: string;
+}> = ({ value, onChange, invalid, decimal, label }) => {
+  const [text, setText] = useState(value === 0 ? '' : String(value));
+  // A new value from outside (a step, a filled form) replaces what is typed; one the typing produced leaves it alone.
+  const [shown, setShown] = useState(value);
+  if (shown !== value) {
+    setShown(value);
+    if (Number(text.replace(',', '.')) !== value) setText(value === 0 ? '' : String(value));
+  }
+  const step = (by: number) => onChange(Math.max(0, Math.round((value + by) * 1000) / 1000));
+  return (
+    <div className={`flex items-center bg-stone-50 border rounded-xl shrink-0 ${invalid ? 'border-coral' : 'border-transparent'}`}>
+      <button
+        type="button"
+        onClick={() => step(-1)}
+        aria-label="Decrease quantity"
+        className="p-3 text-muted hover:text-primary transition-colors"
+      >
+        <Minus size={16} />
+      </button>
+      {decimal ? (
+        <input
+          type="text"
+          inputMode="decimal"
+          aria-label={label}
+          value={text}
+          onChange={e => {
+            const t = e.target.value;
+            if (!/^\d*[.,]?\d{0,3}$/.test(t)) return;
+            setText(t);
+            const n = Number(t.replace(',', '.'));
+            onChange(Number.isFinite(n) ? n : 0);
+          }}
+          placeholder="Qty"
+          className="w-14 bg-transparent text-center font-mono text-sm font-semibold text-ink outline-none py-3"
+        />
+      ) : (
+        <input
+          type="number"
+          min={1}
+          aria-label={label}
+          value={value === 0 ? '' : value}
+          onChange={e => onChange(parseInt(e.target.value) || 0)}
+          placeholder="Qty"
+          className="w-12 bg-transparent text-center font-mono text-sm font-semibold text-ink outline-none py-3 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+      )}
+      <button
+        type="button"
+        onClick={() => step(1)}
+        aria-label="Increase quantity"
+        className="p-3 text-muted hover:text-primary transition-colors"
+      >
+        <Plus size={16} />
+      </button>
+    </div>
+  );
+};

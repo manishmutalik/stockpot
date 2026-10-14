@@ -44,6 +44,11 @@ export interface ProductionRun {
    * counts `costTotal − partsCost` (utils/itemParts `runSpend`).
    */
   partsCost?: number;
+  /**
+   * The batches made, when logged in batches. `quantityProduced` is then what the ingredients were for (batches × the item's
+   * batch size), and `quantityYield` what actually came out, which may be more or less (utils/batches `runYieldLoss`).
+   */
+  batches?: number;
 }
 
 
@@ -202,6 +207,11 @@ export interface MenuItem {
   parts?: ItemPart[];
   /** Made only to go into other items (a base, a filling): kept off the menu, orders and margin figures. Absent: sold. */
   notForSale?: boolean;
+  /**
+   * How many one batch makes (4.5 bases, 24 cookies, 2 kg of paneer), so production can be logged in batches. The recipe stays
+   * per one item: a batch is `batchMakes` of it (utils/batches). Absent: logged in pieces only.
+   */
+  batchMakes?: number;
 }
 
 /** One other item used in a recipe: how many of it go into one of this item. */
@@ -562,6 +572,8 @@ export interface AppViewProps {
   deleteMenuItem: (id: string) => void;
   /** Sets the other items an item is made from (utils/itemParts). */
   setItemParts: (itemId: string, parts: ItemPart[]) => void;
+  /** Sets how many one batch makes, optionally rescaling the recipe (utils/batches). */
+  setBatchSize: (itemId: string, makes: number | null, scale?: 'keep-batch' | 'from-whole-batch') => void;
   clearFinishedGoodsStock: (id: string) => void;
   addExperiment: () => void;
   updateExperiment: (id: string, f: string, v: any) => void;

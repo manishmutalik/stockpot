@@ -315,7 +315,11 @@ describe('request reading', () => {
     expect(readOrderBody({ lineItems: [{ menuItemId: '../etc', quantity: 1 }], common: {} }).ok).toBe(false);
     expect(readOrderBody({ ...base, common: { date: '06/10/2026' } }).ok).toBe(false);
     expect(readRestockBody({ lines: [{ materialId: 'maida', quantity: 1, total: 0 }] }).ok).toBe(false);
-    expect(readProductionBody({ rows: [{ recipeId: 'cake', quantityProduced: 2, quantityYield: 3 }] }).ok).toBe(false);
+    // What came out may be more than planned, but not wildly more.
+    expect(readProductionBody({ rows: [{ recipeId: 'cake', quantityProduced: 2, quantityYield: 3 }] }).ok).toBe(true);
+    expect(readProductionBody({ rows: [{ recipeId: 'cake', quantityProduced: 2, quantityYield: 7 }] }).ok).toBe(false);
+    expect(readProductionBody({ rows: [{ recipeId: 'cake', quantityProduced: 9, quantityYield: 8, batches: 2 }] })).toEqual({ ok: true, value: { rows: [{ recipeId: 'cake', quantityProduced: 9, quantityYield: 8, batches: 2 }] } });
+    expect(readProductionBody({ rows: [{ recipeId: 'cake', quantityProduced: 9, batches: 0 }] }).ok).toBe(false);
   });
   it('trims text and leaves out what was not sent', () => {
     const r = readOrderBody({ lineItems: [{ menuItemId: 'cake', quantity: 1 }], common: { customerName: '  Priya  ', notes: '' } });

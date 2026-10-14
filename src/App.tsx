@@ -749,7 +749,7 @@ function BakeryApp() {
   // ── Menu / Recipe Actions ────────────────────────────────────────────────────
   // Extracted to src/hooks/useMenuActions.ts as part of the Phase 4 breakup.
   const {
-    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, deleteMenuItem, clearFinishedGoodsStock, setItemParts,
+    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize,
     copyMenuItem, addIngredientToRecipe, addQuickIngredientsToRecipe,
     updateRecipeIngredient, removeIngredientFromRecipe,
   } = useMenuActions(menu, materials, orders, showAlert, { today: () => todayInZone(settings.timezone) });
@@ -945,7 +945,7 @@ function BakeryApp() {
    * past figures. Called for the summary period and once per chart point.
    */
   const getFinancialsForRange = (start: string, end: string) =>
-    financialsForRange({ orders, menu, materials, experiments, wastageLogs, settings, start, end, today: todayInZone(settings.timezone) });
+    financialsForRange({ orders, menu, materials, experiments, wastageLogs, productionRuns, settings, start, end, today: todayInZone(settings.timezone) });
 
   // Round-to-2-decimal wrapper around `getFinancialsForRange` for the summary period.
   // Re-computed when date bounds, orders, experiments, menu prices, or material costs change.
@@ -958,6 +958,7 @@ function BakeryApp() {
       experimentExpenses: parseFloat(fins.experimentExpenses.toFixed(2)),
       deliveryExpenses: parseFloat(fins.deliveryExpenses.toFixed(2)),
       wastageExpenses: parseFloat(fins.wastageExpenses.toFixed(2)),
+      productionLoss: parseFloat(fins.productionLoss.toFixed(2)),
       gstCollected: parseFloat(fins.gstCollected.toFixed(2)),
       gstPaid: parseFloat(fins.gstPaid.toFixed(2)),
       profit: parseFloat(fins.profit.toFixed(2)),
@@ -973,7 +974,7 @@ function BakeryApp() {
       orderCount: fins.orderCount,
       estimated: fins.estimated,
     };
-  }, [summaryDateStart, summaryDateEnd, orders, experiments, menu, materials, wastageLogs, settings.gstApplicable, settings.gstRate, settings.gstPricingMode, settings.fixedCosts]);
+  }, [summaryDateStart, summaryDateEnd, orders, experiments, menu, materials, wastageLogs, productionRuns, settings.gstApplicable, settings.gstRate, settings.gstPricingMode, settings.fixedCosts]);
 
   // Data points for the Recharts AreaChart.
   // Shape adapts based on summaryRange: daily→7 days, weekly→5 weeks, monthly→6 months.
@@ -1059,7 +1060,7 @@ function BakeryApp() {
       }
     }
     return data;
-  }, [orders, menu, materials, wastageLogs, summaryRange, summaryRefDate, summaryDateStart, summaryDateEnd]);
+  }, [orders, menu, materials, wastageLogs, productionRuns, summaryRange, summaryRefDate, summaryDateStart, summaryDateEnd]);
 
   /**
    * Provides visual "refresh" feedback by updating `lastSynced`.
@@ -1294,7 +1295,7 @@ function BakeryApp() {
     inventoryUsage, summaryInventoryUsage, remainingInventory, sortedRemainingInventory, lowStockItems,
     summaryFinancials, activeOrdersCount, averageOrderValue, financials, chartData, handleRangeChange,
     refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
-    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock, setItemParts,
+    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize,
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,

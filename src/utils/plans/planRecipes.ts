@@ -11,7 +11,8 @@
  *    its price history), otherwise none: such an item shows "cost incomplete" until a price is added;
  *  - remembers on existing materials the spoon or piece weights the owner confirmed, so they are not asked again;
  *  - creates menu items, or replaces or adds to an existing item's recipe. A new item with a selling price is stamped
- *    as priced today, as setting a price in the Menu tab does.
+ *    as priced today, as setting a price in the Menu tab does. A recipe that makes several keeps that as the item's
+ *    batch size (utils/batches), unless it only adds to an item's recipe.
  * Matched materials are otherwise never changed: their stock and price stay as they are.
  */
 import type { IngredientRequirement, MenuItem, RawMaterial } from '../../types';
@@ -33,7 +34,12 @@ export type RecipeImportTarget =
   | { kind: 'new'; name: string; sellingPrice?: number; emoji?: string }
   | { kind: 'existing'; menuItemId: string; mode: 'replace' | 'add' };
 
-export interface RecipeImportItem { target: RecipeImportTarget; lines: RecipeImportLine[] }
+export interface RecipeImportItem {
+  target: RecipeImportTarget;
+  lines: RecipeImportLine[];
+  /** How many one batch of the recipe makes. Kept on a new item, or one whose recipe it replaces, when more than one. */
+  batchMakes?: number;
+}
 
 export interface NewMaterialInput {
   /** How the lines refer to it before it has an id. */
@@ -124,12 +130,13 @@ export function planImportRecipes(input: {
       recipe.push({ materialId, amount: line.amount, unit: line.unit });
     }
 
+    const batch = item.batchMakes && item.batchMakes > 0 && item.batchMakes !== 1 ? { batchMakes: item.batchMakes } : {};
     if (item.target.kind === 'new') {
       const name = item.target.name.trim();
       if (!name || name.length > 80) return { ok: false, reason: 'invalid_name' };
       const id = ctx.newId();
       const sellingPrice = item.target.sellingPrice && item.target.sellingPrice > 0 ? item.target.sellingPrice : 0;
-      const menuItem: MenuItem = { id, name, sellingPrice, recipe: mergeRecipeLines(recipe), emoji: item.target.emoji || '🧁' };
+      const menuItem: MenuItem = { id, name, sellingPrice, recipe: mergeRecipeLines(recipe), emoji: item.target.emoji || '🧁', ...batch };
       const stamp = sellingPrice > 0 ? { ...pricingStamp(menuItem, allMaterials, input.today), pricingIsBaseline: false } : {};
       writes.push({ collection: 'menu', id, data: { ...menuItem, ...stamp } as unknown as Record<string, unknown>, merge: false });
       menuItemIds.push(id);
@@ -138,7 +145,7 @@ export function planImportRecipes(input: {
       const existing = input.menu.find(m => m.id === menuItemId);
       if (!existing) return { ok: false, reason: 'unknown_menu_item' };
       const next = mode === 'replace' ? mergeRecipeLines(recipe) : mergeRecipeLines([...(existing.recipe ?? []), ...recipe]);
-      writes.push({ collection: 'menu', id: menuItemId, data: { recipe: next }, merge: true });
+      writes.push({ collection: 'menu', id: menuItemId, data: { recipe: next, ...(mode === 'replace' && batch) }, merge: true });
       menuItemIds.push(menuItemId);
     }
   }

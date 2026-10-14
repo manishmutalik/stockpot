@@ -34,7 +34,8 @@ import {
   limit,
   getDocFromServer,
   writeBatch,
-  increment
+  increment,
+  deleteField
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -91,5 +92,6 @@ export {
   orderBy, 
   limit,
   writeBatch,
-  increment
+  increment,
+  deleteField
 };

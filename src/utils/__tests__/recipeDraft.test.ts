@@ -78,6 +78,8 @@ describe('draftToImport', () => {
     const out = draftToImport(d, materials, menu)!;
     expect(out.items).toHaveLength(1);
     expect(out.items[0].target).toEqual({ kind: 'new', name: 'Vanilla Cupcakes' });
+    // What one batch makes is kept as the item's batch size.
+    expect(out.items[0].batchMakes).toBe(12);
     const lines = out.items[0].lines.map(l => [JSON.stringify(l.material), l.amount, l.unit]);
     expect(lines).toEqual([
       ['{"existingId":"m_flour"}', 20.8, 'g'],          // 2 cups × 124.8 g ÷ 12

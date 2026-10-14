@@ -1,5 +1,31 @@
 # Changelog
 
+## Batches, and what actually came out
+
+For things made in batches (sponge bases from one mix of cake gel, cookies by the tray, paneer from a pot of milk), an item
+can now say how many one batch makes, and a production run records what actually came out:
+
+- **Recipes & Menus:** a recipe has **One batch makes** (4.5, 24…) and shows what one batch costs. The recipe stays per one
+  piece; when a batch size is first set, Stockpot offers to divide a recipe typed in for the whole batch. Once runs are logged
+  in batches, it says what they made on average against the size set, with **Use 4.2**: one batch keeps the same ingredients,
+  so the recipe (and parts) are rescaled and each piece carries its true cost.
+- **Log Production Run:** an item with a batch size is counted in **Batches** (or switch to **Pieces**), with what that makes.
+  Each row has **Actually made** (open by default for batches, **Came out different?** otherwise), for any number of items,
+  replacing the single-item yield section. Quantities take decimals. What came out may be up to 3 times what was planned.
+  **Fill from a note** reads "2 batches of sponge, got 8" (batches into pieces from the item's batch size; one without a
+  batch size is left out with a note), and waste for several items is now placed on each row.
+- **Profit:** what a run came out short of is **Lost in production** on the Dashboard breakdown, at its planned cost per
+  piece, and taken off profit and True profit (a batch that went further is **Gained in production**). It is in the chart,
+  the AI snapshot and the phone's Today figure too. The Production log shows batches, extra pieces and each run's real cost
+  per piece.
+- **Recipe reader:** what one batch makes is kept as the item's batch size (a new item, or one whose recipe is replaced), and
+  may now be 4.5. **Phone:** "Made 2 batches of sponge, got 8" works by voice; a yield above what was planned is accepted.
+- **Demo kitchen:** the Vanilla Sponge Base makes 4.5 a batch; its two batches came out one short. **Help:** a new topic.
+
+Data: one optional field on a menu item (`batchMakes`) and one on a production run (`batches`); `quantityYield` may now be
+more than `quantityProduced`. Existing runs whose yield was below what was made now count that difference as lost in
+production. The logic is in `src/utils/batches.ts`.
+
 ## Items made from other items: bases, fillings, hampers
 
 A bakery that bakes sponge bases ahead and turns them into cream cakes can now say so. Any item can be used in another item's

@@ -268,7 +268,8 @@ export function previewOrder(input: {
 
 /**
  * What was made, as the production endpoint takes it, and what is still open. The date is never in the future (it has
- * happened). With one item and waste written, the sellable yield is the quantity less the waste.
+ * happened). Batches are already pieces (utils/productionParse); what came out, when the note says or gives waste, is the
+ * row's yield.
  * Questions (answer ids): `item:N` which menu item the Nth unmatched item is (a menu id, or `skip`); `date`.
  */
 export function buildProductionDraft(input: {
@@ -281,12 +282,22 @@ export function buildProductionDraft(input: {
   const questions: Question[] = [];
   const notes: string[] = [];
 
-  const quantities = new Map<string, number>(fill.rows.map(r => [r.recipeId, r.quantity]));
+  const rowsById = new Map<string, ProductionDraft['rows'][number]>(fill.rows.map(r => [r.recipeId, {
+    recipeId: r.recipeId, quantityProduced: r.quantity,
+    ...(r.made !== undefined && { quantityYield: r.made }), ...(r.batches && { batches: r.batches }),
+  }]));
+  const addPieces = (id: string, n: number) => {
+    const row = rowsById.get(id);
+    if (!row) { rowsById.set(id, { recipeId: id, quantityProduced: n }); return; }
+    // Pieces added to a row with a different yield keep that difference.
+    row.quantityProduced += n;
+    if (row.quantityYield !== undefined) row.quantityYield += n;
+  };
   fill.notFound.forEach((nf, i) => {
     const id = `item:${i}`;
     const chosen = answers.get(id);
     if (chosen === 'skip') { notes.push(`Left out ${nf.quantity} × ${nf.nameAsWritten}.`); return; }
-    if (chosen && menu.some(m => m.id === chosen)) { quantities.set(chosen, (quantities.get(chosen) ?? 0) + nf.quantity); return; }
+    if (chosen && menu.some(m => m.id === chosen)) { addPieces(chosen, nf.quantity); return; }
     questions.push(itemQuestion(id, nf));
   });
 
@@ -297,10 +308,10 @@ export function buildProductionDraft(input: {
     else questions.push({ id: 'date', type: 'date', prompt: `I could not tell the date from "${fill.dateNotUnderstood}". When was it made?` });
   }
 
-  const rows: ProductionDraft['rows'] = [...quantities].map(([recipeId, quantityProduced]) => ({ recipeId, quantityProduced }));
-  if (fill.yieldQty !== undefined && rows.length === 1 && fill.notFound.length === 0) rows[0].quantityYield = fill.yieldQty;
+  const rows: ProductionDraft['rows'] = [...rowsById.values()];
   if (fill.notes && rows.length > 0) rows[0].notes = fill.notes;
   for (const w of fill.unplacedWaste) notes.push(`${w.units} ${w.name} wasted: record it with Discard in the web app's Production Log.`);
+  for (const b of fill.unplacedBatches) notes.push(`Left out ${b.batches} ${b.batches === 1 ? 'batch' : 'batches'} of ${b.name}: set how many one batch makes on the web app's Menu, or say how many pieces.`);
 
   return { draft: { ...(date !== today && { date }), rows }, questions, notes };
 }
@@ -334,6 +345,7 @@ export function previewProduction(input: {
     const recipe = item ? effectiveRecipe(item, menu) : [];
     return {
       recipeId: r.recipeId, quantityProduced: r.quantityProduced, quantityYield: r.quantityYield ?? r.quantityProduced, date: day, notes: r.notes,
+      ...(r.batches && { batches: r.batches }),
       costTotal: parseFloat(productionRunCost(recipe, materials, r.quantityProduced).toFixed(2)),
     };
   });
