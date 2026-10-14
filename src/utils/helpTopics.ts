@@ -236,6 +236,28 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
   },
   {
+    id: 'made-items', section: 'recipes', apps: ['web', 'phone'],
+    title: 'Bases, fillings and items made from other items',
+    summary: 'A sponge base made ahead for cream cakes, a ganache, cookies in a hamper.',
+    keywords: ['base', 'sponge', 'sub recipe', 'sub-recipe', 'filling', 'ganache', 'custard', 'premix', 'cake gel', 'hamper', 'combo', 'made ahead', 'intermediate', 'not for sale'],
+    body: [
+      text('If you make something ahead and use it in other items (a sponge base for cream cakes, a ganache, a masala base, cookies that go into hampers), add it as its own item and use it in the others. Its cost then flows into every item built on it.'),
+      steps(
+        'On the website, in **Recipes & Menus**, add the base as an item, with its recipe for **one** base. A batch that makes 4.5 bases? Write the recipe for one (the recipe reader divides by 4.5 for you).',
+        'Open its recipe and turn off **Sold on the menu**. It moves to **Made for other items**, and stays out of orders, the shared menu and margin figures.',
+        'In each cream cake, click **Add a made item** and choose the base: 1 for a 1 kg cake, 0.5 for a half-kg cake.',
+        'When you bake bases, log a **Production Run** for them (made 4.5). When you make cream cakes, log a run for the cakes: the bases come out of base stock, and the cream and fruit out of your materials.',
+      ),
+      points(
+        'If there are not enough bases, Stockpot warns you but lets you go ahead. Log the bases you made, and the count comes right.',
+        'When cake gel gets dearer, every cream cake shows it, named as cake gel, in **Items needing repricing**.',
+        'Production spend counts each ingredient once: the cream cake run does not count the base again.',
+        'A base that is used in other items cannot be deleted until you take it out of them.',
+        'On the phone, say "Made 9 vanilla bases" or "Made 3 pineapple cakes" as for anything else.',
+      ),
+    ],
+  },
+  {
     id: 'read-recipe-web', section: 'recipes', apps: ['web'],
     title: 'Reading a recipe from a photo or text',
     summary: 'Add recipes from your notebook without typing every line.',

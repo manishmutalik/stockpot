@@ -1,8 +1,12 @@
 import { IngredientRequirement, MenuItem, RawMaterial } from '../types';
 import { convertAmount } from './conversions';
 import { basePriceOf, type GstPricingMode } from './gstCalculations';
+import { costMenu } from './itemParts';
 
-/** Material cost of one unit of a recipe at current material prices. */
+/**
+ * Material cost of one unit of a recipe at current material prices. For an item made from other items, pass its recipe
+ * as costing sees it (utils/itemParts `costView`), so its parts are counted.
+ */
 export function recipeCost(recipe: IngredientRequirement[], materials: RawMaterial[]): number {
   return recipe.reduce((total, req) => {
     const mat = materials.find(m => m.id === req.materialId);
@@ -12,7 +16,7 @@ export function recipeCost(recipe: IngredientRequirement[], materials: RawMateri
 }
 
 /**
- * The names of the materials in an item's recipe that have no price yet (a material the recipe reader created without
+ * The names of the materials in an item's recipe (as costing sees it: `costView`) that have no price yet (a material the recipe reader created without
  * one). While there are any, the item's cost is too low and is shown as "cost incomplete".
  */
 export function unpricedMaterials(item: Pick<MenuItem, 'recipe'>, materials: RawMaterial[]): string[] {
@@ -57,7 +61,8 @@ export function summarizeMenu(
   const costPercents: number[] = [];
   let best: MenuSummary['best'] = null;
   const needsReview: MenuItem[] = [];
-  for (const item of menu) {
+  // Items made only for other items have no price of their own: they are not part of the menu's figures.
+  for (const item of costMenu(menu).filter(m => !m.notForSale)) {
     const cost = recipeCost(item.recipe, materials);
     const price = basePriceOf(item.sellingPrice || 0, settings);
     if (price <= 0) { needsReview.push(item); continue; }
@@ -67,7 +72,7 @@ export function summarizeMenu(
     if (tier === 'low') needsReview.push(item);
   }
   return {
-    itemCount: menu.length,
+    itemCount: menu.filter(m => !m.notForSale).length,
     avgFoodCostPercent: costPercents.length > 0 ? costPercents.reduce((a, b) => a + b, 0) / costPercents.length : null,
     best,
     needsReview,

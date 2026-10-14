@@ -130,6 +130,9 @@ Handler refusals worth knowing: `no_menu` (422, add menu items in the web app fi
   theirs has been (`billSentAtFor`), so a new order brings Send back. For two days the cards show "Bill sent" and Mark as paid
   (Send again is a small link); after that "Send reminder", and the notification job sends one **Unpaid bills** reminder per sending
   (`billRemindedAt`, daytime, hourly; a reminder no phone took is given back).
+- **Items made from other items** (a cream cake on a sponge base): production by voice or form takes the parts from their
+  stock and reports a short part with the materials (`productionShortages`); the order reader leaves out items that are not
+  for sale; the server loads parts with `itemsWithParts`.
 - **Help** (`mobile/src/app/help.tsx`, the **?** on Today and Settings › Help): the same topics as the web's Help tab
   (`src/utils/helpTopics.ts`), the phone's first, then those done on the website; a search box.
 - **Read a recipe** (`mobile/src/app/recipe.tsx`, Today's "Read a recipe from a photo"): photos from the camera or gallery (up to

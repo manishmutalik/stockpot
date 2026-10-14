@@ -21,6 +21,7 @@ import type { BakerySettings, MenuItem, Order, PriceLogEntry, RawMaterial } from
 import { convertAmount } from './conversions';
 import { basePriceOf } from './gstCalculations';
 import { addDays, daysBetween } from './localDate';
+import { costMenu } from './itemParts';
 import { recipeCost } from './menuStats';
 import { priceHistory } from './priceLog';
 import { productProfits } from './profit';
@@ -125,7 +126,8 @@ export function recipesAffectedBy(materialId: string, menu: MenuItem[], material
   const material = materials.find(m => m.id === materialId);
   if (!material) return [];
   const out: RecipeAffected[] = [];
-  for (const item of menu) {
+  // Through its parts too: a rise in cake gel reaches every cream cake built on the base.
+  for (const item of costMenu(menu)) {
     const lines = item.recipe.filter(r => r.materialId === materialId);
     if (lines.length === 0) continue;
     const mine = lines.reduce((s, r) => s + convertAmount(r.amount, r.unit || 'g', material.unit) * (material.costPerUnit || 0), 0);
@@ -351,13 +353,14 @@ export function pricingScenario(input: {
   const start = addDays(today, -(daysUsed - 1));
   const profits = productProfits(actual.filter(o => o.date >= start && o.date <= today), menu, materials, settings);
   const scale = 30 / daysUsed;
+  const costed = costMenu(menu);
 
   let priceOnlyAfter = 0; // monthly contribution after the price change alone, whatever the volume guess
   let nowTotal = 0;
   const perItem: ScenarioItem[] = changes.map(({ menuItemId, newPrice }) => {
     const p = profits.get(menuItemId);
     if (!p || p.unitsSold <= 0) return { menuItemId, unitsInPeriod: 0, contributionNow: 0, contributionAfter: 0, newPrice, noRecentSales: true };
-    const item = menu.find(m => m.id === menuItemId);
+    const item = costed.find(m => m.id === menuItemId);
     if (!item) return { menuItemId, unitsInPeriod: 0, contributionNow: 0, contributionAfter: 0, newPrice, noRecentSales: true };
     const feeRate = p.revenue > 0 ? p.paymentFees / p.revenue : 0;
     const discountKept = p.grossRevenue > 0 ? p.revenue / p.grossRevenue : 1; // share of billed sales left after discounts
@@ -399,8 +402,10 @@ export function pricingScenario(input: {
 /** Items whose margin has slipped or is below target, with the drift that says why. Largest margin loss first. */
 export function itemsNeedingRepricing(menu: MenuItem[], materials: RawMaterial[], settings: PricingSettings): { item: MenuItem; drift: MarginDrift }[] {
   const out: { item: MenuItem; drift: MarginDrift }[] = [];
-  for (const item of menu) {
-    const drift = marginDrift(item, materials, settings);
+  const costed = costMenu(menu);
+  for (const [i, item] of menu.entries()) {
+    if (item.notForSale) continue;
+    const drift = marginDrift(costed[i], materials, settings);
     if (drift?.alert) out.push({ item, drift });
   }
   return out.sort((a, b) => b.drift.pointsLost - a.drift.pointsLost);

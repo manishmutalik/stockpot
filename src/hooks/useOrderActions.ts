@@ -26,6 +26,7 @@ import { holdsStock, isOpenPreorder } from '../utils/preorders';
 import { stampFor } from '../utils/orderPricing';
 import { planOrderGroup, planHandOver, planMarkPaid, planDismissClaim, paymentFields as planPaymentFields, randomId } from '../utils/plans';
 import { addWritesToBatch } from '../utils/plans/clientCommit';
+import { costView } from '../utils/itemParts';
 
 export function useOrderActions(
   menu: MenuItem[],
@@ -311,7 +312,7 @@ export function useOrderActions(
           menuItemId: newMenuItemId,
           quantity: newQuantity,
           // A different item is priced and costed as that item; only the quantity keeps the agreed price.
-          ...(newMenuItemId === order.menuItemId ? {} : stampFor(targetItem, materials)),
+          ...(newMenuItemId === order.menuItemId ? {} : stampFor(costView(targetItem, menu), materials)),
         }, { merge: true });
       } catch (err) {
         handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${id}`);
@@ -347,7 +348,7 @@ export function useOrderActions(
         batch.set(doc(db, 'users', userId, 'orders', id), {
           menuItemId: newMenuItemId,
           quantity: newQuantity,
-          ...(sameItem ? {} : stampFor(targetItem, materials)),
+          ...(sameItem ? {} : stampFor(costView(targetItem, menu), materials)),
         }, { merge: true });
 
         if (sameItem) {

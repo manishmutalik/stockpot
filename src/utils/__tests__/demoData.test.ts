@@ -8,11 +8,16 @@ const demo = buildDemoData('uid1', TODAY);
 const byId = <T extends { id: string }>(list: T[], id: string) => list.find(x => x.id === id)!;
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
-const recipeCost = (menuId: string) =>
-  byId(demo.menu, menuId).recipe.reduce((total, req) => {
+// What one of an item costs in materials, its parts included (the cream cake counts its sponge base).
+const recipeCost = (menuId: string): number => {
+  const item = byId(demo.menu, menuId);
+  return item.recipe.reduce((total, req) => {
     const mat = byId(demo.materials, req.materialId);
     return total + convertAmount(req.amount, req.unit, mat.unit) * mat.costPerUnit;
-  }, 0);
+  }, 0) + (item.parts ?? []).reduce((total, p) => total + p.quantity * recipeCost(p.itemId), 0);
+};
+// Units of an item later runs used as a part (bases in cream cakes).
+const usedAsPart = (menuId: string) => sum(demo.productionRuns.flatMap(r => (r.partsUsed ?? []).filter(p => p.itemId === menuId).map(p => p.quantity)));
 
 describe('demo data adds up', () => {
   it('has consistent references and unique ids', () => {
@@ -49,7 +54,7 @@ describe('demo data adds up', () => {
     expect(byId(demo.menu, 'menu_muffin').finishedGoodsStock).toBe(74 - 59); // 30 + 19 (one lost) + 25 made
     expect(byId(demo.menu, 'menu_bread').finishedGoodsStock).toBe(45 - 33);
     for (const item of demo.menu) {
-      expect(item.finishedGoodsStock).toBe(produced(item.id) - ordered(item.id));
+      expect(item.finishedGoodsStock).toBe(produced(item.id) - ordered(item.id) - usedAsPart(item.id));
       const left = sum(demo.productionRuns.filter(r => r.recipeId === item.id).map(r => r.remainingQuantity));
       expect(item.finishedGoodsStock).toBe(left);
     }
@@ -113,8 +118,8 @@ describe('demo data adds up', () => {
     }
   });
 
-  it('makes a healthy margin on every item', () => {
-    for (const item of demo.menu) {
+  it('makes a healthy margin on every item sold', () => {
+    for (const item of demo.menu.filter(m => !m.notForSale)) {
       const margin = (item.sellingPrice - recipeCost(item.id)) / item.sellingPrice;
       expect(margin).toBeGreaterThan(0.5);
     }
@@ -128,9 +133,9 @@ describe('demo data adds up', () => {
     // typical Indian retail prices: staples cost tens of rupees a kilo, butter hundreds
     expect(byId(demo.materials, 'm_flour').costPerUnit * 1000).toBeCloseTo(45, 6);
     expect(byId(demo.materials, 'm_butter').costPerUnit * 1000).toBeCloseTo(570, 6);
-    for (const item of demo.menu) {
+    for (const item of demo.menu.filter(m => !m.notForSale)) {
       expect(item.sellingPrice).toBeGreaterThanOrEqual(50);
-      expect(item.sellingPrice).toBeLessThanOrEqual(300);
+      expect(item.sellingPrice).toBeLessThanOrEqual(item.id === 'menu_pinecake' ? 1500 : 300); // a 1 kg cream cake costs more
     }
   });
 
@@ -219,5 +224,19 @@ describe('demo data adds up', () => {
     const hotel = profiles.find(p => p.name === 'Hotel Sai Residency')!;
     expect(hotel).toMatchObject({ orderCount: 3, medianDaysBetweenOrders: 2, status: 'due', hasPhone: true });
     expect(profiles.filter(p => p.status === 'due')).toHaveLength(1);
+  });
+
+  it('builds a cream cake on a sponge base made ahead, as the app would record it', () => {
+    const base = byId(demo.menu, 'menu_base');
+    expect(base.notForSale).toBe(true);
+    // 9 bases made, 3 went into cream cakes
+    expect(base.finishedGoodsStock).toBe(6);
+    const cakeRun = byId(demo.productionRuns, 'run_11');
+    expect(cakeRun.partsUsed).toEqual([{ itemId: 'menu_base', quantity: 3 }]);
+    // a base: 220g gel x 0.3 + 40ml oil x 0.15 = ₹72; the cake adds 150g cream x 0.4 + 100g pineapple x 0.12 = ₹72
+    expect(cakeRun.partsCost).toBe(216);
+    expect(cakeRun.costTotal).toBe(432);
+    // the bases' gel came out when they were baked, not again with the cakes
+    expect(byId(demo.materials, 'm_gel').initialStock).toBe(5000 - 9 * 220);
   });
 });

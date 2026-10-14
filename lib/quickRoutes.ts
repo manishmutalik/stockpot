@@ -19,11 +19,12 @@
 import type { NextFunction, Response } from 'express';
 import type { AuthedRequest } from './auth';
 import { parseIdempotencyKey, withIdempotency, type QuickDb, type QuickDoc, type QuickTx, type StoredResult } from './quickDb';
+import { effectiveRecipe, MAX_PART_DEPTH, partsOf } from '../src/utils/itemParts';
 import { planOrderGroup, planRestock, planProductionSession, planHandOver, planMarkPaid, planDismissClaim, planMarkBillSent, hasPaymentClaim, collapseWrites, productionRunCost } from '../src/utils/plans';
 import type { OrderGroupCommon, OrderLineItem, PlanError, ProductionRunInput } from '../src/utils/plans';
 import { enterableUnits } from '../src/utils/conversions';
 import { speechPhrases } from '../src/utils/speechPhrases';
-import { customerDirectory } from '../src/utils/quickParse';
+import { customerDirectory, productionShortages } from '../src/utils/quickParse';
 import { saleAmounts } from '../src/utils/profit';
 import { buildBill, billBalance, buildBillMessage, buildInvoiceMessage, buildStatementMessage, buildWhatsAppUrl, canPayByUpi, withBillLink } from '../src/utils/billing';
 import { formatAmount } from '../src/utils/money';
@@ -214,6 +215,21 @@ export const asMenu = (docs: Map<string, any>) => [...docs.values()] as MenuItem
 /** The business settings, or an empty object for an account that has not saved any. */
 export const loadSettings = async (tx: QuickTx): Promise<Partial<BakerySettings>> => ((await tx.get('settings', 'bakery')) ?? {}) as Partial<BakerySettings>;
 
+/**
+ * These menu items and every item they are made from (a cream cake's sponge base, and that base's own parts), loaded
+ * together: making or costing an item needs its parts (utils/itemParts).
+ */
+export async function itemsWithParts(tx: QuickTx, ids: string[]): Promise<MenuItem[]> {
+  const found = new Map<string, MenuItem>();
+  let next = [...new Set(ids)];
+  for (let depth = 0; next.length > 0 && depth <= MAX_PART_DEPTH; depth++) {
+    const docs = await tx.getMany('menu', next);
+    for (const [id, d] of docs) found.set(id, d as unknown as MenuItem);
+    next = [...new Set([...docs.values()].flatMap(d => partsOf(d as unknown as MenuItem).map(p => p.itemId)))].filter(id => !found.has(id));
+  }
+  return [...found.values()];
+}
+
 /** The materials the recipes of these menu items use, loaded together. */
 export async function materialsFor(tx: QuickTx, items: MenuItem[]): Promise<RawMaterial[]> {
   const ids = items.flatMap(m => (m.recipe ?? []).map(r => r.materialId));
@@ -226,7 +242,7 @@ export async function materialsFor(tx: QuickTx, items: MenuItem[]): Promise<RawM
 export function createQuickOrderHandler(deps: QuickRouteDeps) {
   return writeHandler(deps, 'orders', readOrderBody, async (tx, { common, lineItems }) => {
     const settings = await loadSettings(tx);
-    const menu = asMenu(await tx.getMany('menu', lineItems.map(l => l.menuItemId)));
+    const menu = await itemsWithParts(tx, lineItems.map(l => l.menuItemId));
     const materials = await materialsFor(tx, menu);
     const today = todayInZone(settings.timezone, new Date(deps.now()));
 
@@ -286,12 +302,13 @@ export function createQuickRestockHandler(deps: QuickRouteDeps) {
 export function createQuickProductionHandler(deps: QuickRouteDeps) {
   return writeHandler(deps, 'production-runs', readProductionBody, async (tx, { date, rows }) => {
     const settings = await loadSettings(tx);
-    const menu = asMenu(await tx.getMany('menu', rows.map(r => r.recipeId)));
+    const menu = await itemsWithParts(tx, rows.map(r => r.recipeId));
     const materials = await materialsFor(tx, menu);
     const day = date ?? todayInZone(settings.timezone, new Date(deps.now()));
 
     const inputs: ProductionRunInput[] = rows.map(r => {
-      const recipe = menu.find(m => m.id === r.recipeId)?.recipe ?? [];
+      const item = menu.find(m => m.id === r.recipeId);
+      const recipe = item ? effectiveRecipe(item, menu) : [];
       return {
         recipeId: r.recipeId,
         quantityProduced: r.quantityProduced,
@@ -308,9 +325,7 @@ export function createQuickProductionHandler(deps: QuickRouteDeps) {
 
     tx.apply(plan.writes);
     // The web lets stock go below nothing; say so, so the owner can correct it.
-    const shortages = plan.state.materials
-      .filter(m => m.initialStock < 0)
-      .map(m => ({ materialId: m.id, name: m.name, unit: m.unit, short: Math.round(-m.initialStock * 10000) / 10000 }));
+    const shortages = productionShortages(plan.state, rows.map(r => r.recipeId));
     return { status: 201, body: { runIds: plan.runIds, sessionId: plan.sessionId ?? null, shortages } };
   });
 }
@@ -345,7 +360,7 @@ export function createQuickHandOverHandler(deps: QuickRouteDeps) {
     if (!order) return failure(404, 'Order not found.', { code: 'not_found' });
     // A multi-item order is always handed over whole.
     const orders = order.orderGroupId ? ((await tx.where('orders', 'orderGroupId', order.orderGroupId)) as Order[]) : [order];
-    const menu = asMenu(await tx.getMany('menu', orders.map(o => o.menuItemId)));
+    const menu = await itemsWithParts(tx, orders.map(o => o.menuItemId));
     const materials = await materialsFor(tx, menu);
     const settings = await loadSettings(tx);
 

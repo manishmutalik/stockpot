@@ -39,6 +39,7 @@ import {
 } from '../src/utils/quickParse';
 import { addDays, todayInZone } from '../src/utils/localDate';
 import type { BakerySettings, MenuItem, Order, RawMaterial } from '../src/types';
+import { forSale } from '../src/utils/itemParts';
 
 export interface QuickParseDeps extends Pick<AiGuardDeps, 'config' | 'billingDisabled' | 'hasActiveAccess' | 'usageDay' | 'globalDay' | 'reserve'> {
   db: QuickDb;
@@ -131,16 +132,18 @@ const bad = (code: string, error: string): Built => ({ draft: null, questions: [
 function orderReader(deps: QuickParseDeps, w: World, raw: string): Reader<any> {
   const customers = customerDirectory(w.orders);
   const prepared = prepareOrderText(raw, customers);
-  const options = w.menu.slice(0, ORDER_MAX_MENU_ITEMS).map(m => ({ id: m.id, name: m.name.slice(0, 80) }));
+  // Only what is sold: a sponge base made for cream cakes is not an order.
+  const sold = forSale(w.menu);
+  const options = sold.slice(0, ORDER_MAX_MENU_ITEMS).map(m => ({ id: m.id, name: m.name.slice(0, 80) }));
   return {
     text: prepared.text, options, model: deps.orderModel,
     check: r => validateParsedOrder(r, { text: prepared.text, menuIds: options.map(m => m.id) }),
     build: (parsed, answers) => {
       const fill = buildOrderForm({
-        parsed, menu: w.menu.map(m => ({ id: m.id, name: m.name, sellingPrice: m.sellingPrice })), today: w.today, phones: prepared.phones,
+        parsed, menu: sold.map(m => ({ id: m.id, name: m.name, sellingPrice: m.sellingPrice })), today: w.today, phones: prepared.phones,
         customers: customers.map(c => ({ label: c.label, name: c.name, phone: c.phone })), askAboutVariants: true,
       });
-      const built = buildOrderDraft({ fill, menu: w.menu, today: w.today, answers });
+      const built = buildOrderDraft({ fill, menu: sold, today: w.today, answers });
       const questions = [...built.questions];
       if (built.draft.lineItems.length === 0 && !questions.some(q => q.id.startsWith('item:'))) {
         return { ...bad('no_items', 'I could not find anything from your menu in that. Please say it again.'), notes: built.notes };

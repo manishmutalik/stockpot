@@ -11,6 +11,8 @@ import { convertAmount } from '../utils/conversions';
 import { calculateRecipeNutrition } from '../utils/nutritionCalculations';
 import { getMarginInfo, MarginTier, recipeCost, SALES_PERIODS, SalesPeriod, salesPeriodRange, summarizeMenu, unpricedMaterials } from '../utils/menuStats';
 import { basePriceOf } from '../utils/gstCalculations';
+import { costMenu, itemsUsing } from '../utils/itemParts';
+import { ItemPartsEditor } from '../components/ItemPartsEditor';
 import { DEFAULT_TARGET_MARGIN, itemsNeedingRepricing, marginDrift, suggestedPriceFor } from '../utils/pricing';
 import { MarginDriftPanel } from '../components/MarginDriftPanel';
 import { PriceInput } from '../components/PriceInput';
@@ -114,7 +116,8 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
   const {
     materials, categories, menu, orders, settings, currency, expandedRecipeId, setExpandedRecipeId,
     setIsIngredientSelectorOpen, setActiveRecipeItemId, addMenuItem, updateMenuItem, updateMenuItemField,
-    deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, menuFilterOnOpen, openRecipeReader
+    deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, menuFilterOnOpen, openRecipeReader,
+    setItemParts,
   } = props;
 
   // Purely local, ephemeral UI state for the shareable nutrition card — not
@@ -169,6 +172,9 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
   const money = (n: number) =>
     `${currency.symbol}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+  // Each item as costing sees it: an item made from others (a cream cake on a sponge base) carries their recipes too.
+  const costed = useMemo(() => new Map(costMenu(menu).map(m => [m.id, m])), [menu]);
+  const cv = (item: MenuItemType): MenuItemType => costed.get(item.id) ?? item;
   const summary = useMemo(() => summarizeMenu(menu, materials, settings), [menu, materials, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]);
   const today = todayInZone(settings.timezone);
   // Items whose margin has slipped or is below the owner's target, each with the drift that says why.
@@ -188,13 +194,19 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     () => menu.filter(item => {
       if (q && !(item.name || '').toLowerCase().includes(q)) return false;
       if (marginFilter === 'all') return true;
+      // Bases and fillings have no price or margin of their own: they only show under All.
+      if (item.notForSale) return false;
       if (marginFilter === 'repricing') return repricingIds.has(item.id);
       // Unpriced items have no margin to speak of: they belong under "needs review".
       if (!(item.sellingPrice > 0)) return marginFilter === 'low';
-      return getMarginInfo(basePriceOf(item.sellingPrice, settings), recipeCost(item.recipe, materials)).tier === marginFilter;
+      return getMarginInfo(basePriceOf(item.sellingPrice, settings), recipeCost(cv(item).recipe, materials)).tier === marginFilter;
     }),
-    [menu, materials, q, marginFilter, repricingIds, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]
+    [menu, costed, materials, q, marginFilter, repricingIds, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]
   );
+
+  // Items sold on the menu first, then those made only for other items (bases, fillings), under their own heading.
+  const ordered = useMemo(() => [...visible.filter(m => !m.notForSale), ...visible.filter(m => m.notForSale)], [visible]);
+  const firstMadeId = ordered.find(m => m.notForSale)?.id;
 
   const isPackaging = (req: IngredientRequirement) => materials.find(m => m.id === req.materialId)?.category === 'Packaging Materials';
 
@@ -350,18 +362,27 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
       )}
 
       <div className="grid gap-4">
-        {visible.map((item) => {
-          const cost = recipeCost(item.recipe, materials);
+        {ordered.map((item) => {
+          const cost = recipeCost(cv(item).recipe, materials);
+          const made = !!item.notForSale;
+          const usedIn = itemsUsing<MenuItemType>(menu, item.id);
           const { margin, tier, isLoss } = getMarginInfo(basePriceOf(item.sellingPrice, settings), cost);
           const expanded = expandedRecipeId === item.id;
-          const suggestion = suggestedPriceFor(item, materials, settings);
+          const suggestion = suggestedPriceFor(cv(item), materials, settings);
           const suggested = suggestion.menuPrice;
-          const drift = marginDrift(item, materials, settings);
+          const drift = marginDrift(cv(item), materials, settings);
           const ingredientLines = item.recipe.filter(r => !isPackaging(r));
           const packagingLines = item.recipe.filter(r => isPackaging(r));
-          const unpriced = unpricedMaterials(item, materials);
+          const unpriced = unpricedMaterials(cv(item), materials);
           return (
-            <div key={item.id} className={`surface-card overflow-hidden ${expanded ? 'ring-1 ring-primary/30' : ''}`}>
+            <React.Fragment key={item.id}>
+            {item.id === firstMadeId && (
+              <div className="pt-4">
+                <h3 className="font-mono text-[11px] font-semibold uppercase tracking-wider text-muted">Made for other items</h3>
+                <p className="text-xs text-muted mt-1">Bases, fillings and anything else you make ahead to go into the items you sell. Not on the menu or in orders.</p>
+              </div>
+            )}
+            <div className={`surface-card overflow-hidden ${expanded ? 'ring-1 ring-primary/30' : ''}`}>
               <div className="p-4 sm:p-5 space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-4 min-w-0 flex-1">
@@ -395,9 +416,15 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                             Cost incomplete
                           </span>
                         )}
-                        <span className={`font-mono text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ${MARGIN_PILL[tier]}`}>
-                          {isLoss ? `Loss (${margin.toFixed(0)}%)` : `${margin.toFixed(0)}% Margin`}
-                        </span>
+                        {made ? (
+                          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                            Made for other items
+                          </span>
+                        ) : (
+                          <span className={`font-mono text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ${MARGIN_PILL[tier]}`}>
+                            {isLoss ? `Loss (${margin.toFixed(0)}%)` : `${margin.toFixed(0)}% Margin`}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -447,7 +474,14 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                 </div>
 
                 {/* Price, shelf life, servings */}
+                {made && (
+                  <p className="text-xs text-muted">
+                    {usedIn.length > 0 ? <>Used in {usedIn.map(u => u.name).join(', ')}. </> : <>Not used in any item yet: add it to one with “Add a made item” in its recipe. </>}
+                    In stock: <span className="font-mono font-semibold text-ink">{Math.round((item.finishedGoodsStock ?? 0) * 100) / 100}</span>
+                  </p>
+                )}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {!made && (
                   <label className="bg-stone-50 rounded-xl px-3 py-2 block">
                     <span className={LABEL}>Sale price</span>
                     <div className="flex items-center gap-1 mt-0.5">
@@ -461,6 +495,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                       />
                     </div>
                   </label>
+                  )}
                   <label className="bg-stone-50 rounded-xl px-3 py-2 block" title="Shelf Life (Days)">
                     <span className={LABEL}>Shelf life (days)</span>
                     <input
@@ -484,6 +519,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                       placeholder="-"
                     />
                   </label>
+                  {!made && (
                   <button
                     onClick={() => updateMenuItemField(item.id, 'sellingPrice', suggested)}
                     className="bg-primary/5 hover:bg-primary/10 rounded-xl px-3 py-2 text-left transition-colors"
@@ -493,9 +529,11 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                     <span className={LABEL}>Suggest</span>
                     <div className="font-mono text-base font-semibold text-primary mt-0.5">{currency.symbol}{suggested.toFixed(2)}</div>
                   </button>
+                  )}
                 </div>
 
                 {/* Target margin, and how the margin has moved since the price was set */}
+                {!made && (<>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <label className="bg-stone-50 rounded-xl px-3 py-2 block self-start" title="The margin you want this item to earn. Leave empty to use the default from Settings.">
                     <span className={LABEL}>Target margin (%)</span>
@@ -561,6 +599,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                     />
                   </label>
                 </div>
+                </>)}
               </div>
 
               <AnimatePresence>
@@ -579,7 +618,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                             <div className="font-mono text-xl font-semibold text-primary">{money(cost)}</div>
                           </div>
                           {(() => {
-                            const rollup = calculateRecipeNutrition(item.recipe, materials, item.servings || 0);
+                            const rollup = calculateRecipeNutrition(cv(item).recipe, materials, item.servings || 0);
                             const noServings = !item.servings || item.servings <= 0;
                             return (
                               <div className="p-3 bg-white rounded-xl shadow-sm min-w-[200px]">
@@ -646,6 +685,23 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                         </div>
                       </div>
 
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-ink">Sold on the menu</p>
+                          <p className="text-xs text-muted">Turn off for a base or filling you make only to go into other items.</p>
+                        </div>
+                        <button
+                          type="button" role="switch" aria-checked={!made} aria-label="Sold on the menu"
+                          onClick={() => updateMenuItemField(item.id, 'notForSale', !made)}
+                          className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${made ? 'bg-stone-300' : 'bg-primary'}`}
+                        >
+                          <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${made ? 'left-0.5' : 'left-[22px]'}`} />
+                        </button>
+                      </div>
+
+                      <ItemPartsEditor item={item} menu={menu} costed={costed} materials={materials} currencySymbol={currency.symbol}
+                        onChange={parts => setItemParts(item.id, parts)} />
+
                       <div className="grid md:grid-cols-2 gap-6">
                         {([
                           { title: 'Ingredients', icon: Utensils, lines: ingredientLines, packaging: false, empty: 'No ingredients added' },
@@ -688,6 +744,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                 )}
               </AnimatePresence>
             </div>
+            </React.Fragment>
           );
         })}
       </div>
@@ -716,7 +773,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
             businessName={settings.name || 'My Food Business'}
             logo={settings.logo}
             primaryColor={settings.primaryColor || '#00797B'}
-            rollup={calculateRecipeNutrition(shareCardItem.recipe, materials, shareCardItem.servings || 0)}
+            rollup={calculateRecipeNutrition(cv(shareCardItem).recipe, materials, shareCardItem.servings || 0)}
           />
         </div>
       </div>

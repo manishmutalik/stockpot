@@ -41,9 +41,9 @@ export const LAYOUT = {
   descriptionChars: 70,
 } as const;
 
-/** What a customer should see: items that have a name and a price. */
+/** What a customer should see: items that have a name and a price (not a base made only for other items). */
 export const menuItemsToShare = (menu: MenuItem[]): MenuItem[] =>
-  menu.filter(m => m.name.trim() && (m.sellingPrice || 0) > 0);
+  menu.filter(m => m.name.trim() && (m.sellingPrice || 0) > 0 && !m.notForSale);
 
 /**
  * Groups items into sections by category, in the order each category first

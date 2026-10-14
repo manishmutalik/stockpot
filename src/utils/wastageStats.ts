@@ -1,5 +1,6 @@
 import { WastageLog } from '../types';
 import type { ProductionRun } from '../components/ProductionRunModal';
+import { runSpend } from './itemParts';
 
 export interface ReasonBreakdown {
   reason: string;
@@ -41,7 +42,7 @@ export function summarizeWastage(logs: WastageLog[], productionRuns: ProductionR
     percent: totalLoss > 0 ? (g.cost / totalLoss) * 100 : 0,
   })).sort((a, b) => b.cost - a.cost || b.count - a.count || a.reason.localeCompare(b.reason));
 
-  const productionCost = productionRuns.reduce((s, r) => s + (r.costTotal || 0), 0);
+  const productionCost = productionRuns.reduce((s, r) => s + runSpend(r), 0);
   return {
     totalLoss,
     count: logs.length,

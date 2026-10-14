@@ -17,6 +17,7 @@ import { formatAmount } from './money';
 import { customerLabels, groupOrdersByCustomer } from './customers';
 import { planOrderGroup, planProductionSession, productionRunCost, type OrderGroupCommon, type OrderLineItem, type ProductionRunInput } from './plans';
 import type { ProductionFormFill } from './productionParse';
+import { effectiveRecipe, partsOf } from './itemParts';
 import type { NotFoundItem, OrderFormFill } from './orderParse';
 import type { Order } from '../types';
 import type { Answer, OrderDraft, OrderPreview, ProductionDraft, ProductionPreview, Question, QuickKind } from './quickApiTypes';
@@ -304,6 +305,20 @@ export function buildProductionDraft(input: {
   return { draft: { ...(date !== today && { date }), rows }, questions, notes };
 }
 
+/**
+ * What a production session leaves below nothing: materials, and the parts it took from finished stock (bases for cream
+ * cakes) beyond what was there. A part's unit is "pcs". Stock is allowed to go short, as on the web; the owner is told.
+ */
+export function productionShortages(state: { materials: RawMaterial[]; menu: MenuItem[] }, madeIds: string[]): ProductionPreview['shortages'] {
+  const made = new Set(madeIds);
+  const partIds = new Set(state.menu.filter(m => made.has(m.id)).flatMap(m => partsOf(m).map(p => p.itemId)));
+  const round = (n: number) => Math.round(-n * 10000) / 10000;
+  return [
+    ...state.materials.filter(m => m.initialStock < 0).map(m => ({ materialId: m.id, name: m.name, unit: m.unit, short: round(m.initialStock) })),
+    ...state.menu.filter(m => partIds.has(m.id) && (m.finishedGoodsStock ?? 0) < 0).map(m => ({ materialId: m.id, name: m.name, unit: 'pcs', short: round(m.finishedGoodsStock ?? 0) })),
+  ];
+}
+
 /** The same plan the save runs, so the cost and the shortfall shown are the ones that will be recorded. */
 export function previewProduction(input: {
   draft: ProductionDraft;
@@ -315,7 +330,8 @@ export function previewProduction(input: {
   const { draft, menu, materials, currency } = input;
   const day = draft.date ?? input.today;
   const inputs: ProductionRunInput[] = draft.rows.map(r => {
-    const recipe = menu.find(m => m.id === r.recipeId)?.recipe ?? [];
+    const item = menu.find(m => m.id === r.recipeId);
+    const recipe = item ? effectiveRecipe(item, menu) : [];
     return {
       recipeId: r.recipeId, quantityProduced: r.quantityProduced, quantityYield: r.quantityYield ?? r.quantityProduced, date: day, notes: r.notes,
       costTotal: parseFloat(productionRunCost(recipe, materials, r.quantityProduced).toFixed(2)),
@@ -332,8 +348,6 @@ export function previewProduction(input: {
     stockAfter: plan.state.menu.find(m => m.id === r.recipeId)?.finishedGoodsStock ?? 0,
   }));
   const total = Math.round(rows.reduce((s, r) => s + r.costTotal, 0) * 100) / 100;
-  const shortages = plan.state.materials
-    .filter(m => m.initialStock < 0)
-    .map(m => ({ materialId: m.id, name: m.name, unit: m.unit, short: Math.round(-m.initialStock * 10000) / 10000 }));
+  const shortages = productionShortages(plan.state, inputs.map(r => r.recipeId));
   return { ok: true, preview: { date: day, rows, shortages, total, label: { total: formatAmount(total, currency) } } };
 }

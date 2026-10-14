@@ -11,10 +11,10 @@
  * that share an ingredient, or the same item entered twice, add up instead of the
  * later write replacing the earlier one.
  */
-import type { MenuItem, RawMaterial } from '../../types';
-import type { ProductionRun } from '../../components/ProductionRunModal';
+import type { MenuItem, ProductionRun, RawMaterial } from '../../types';
 import { planIngredientDeduction } from '../inventoryDeduction';
 import { convertAmount } from '../conversions';
+import { effectiveRecipe, partsNeeded } from '../itemParts';
 import { collapseWrites, type PlanContext, type PlanError, type PlannedWrite } from './types';
 
 /** The stock the next step must start from. */
@@ -84,24 +84,43 @@ export function planProductionRun(runData: ProductionRunInput, state: Working, c
   if (runData.notes) run.notes = runData.notes;
   if (runData.productionSessionId) run.productionSessionId = runData.productionSessionId;
 
-  // 1. Deduct raw materials.
+  // 1. Deduct raw materials: the item's own recipe only (its parts' ingredients were taken when the parts were made).
   const deduction = planIngredientDeduction(state.materials, recipeItem.recipe, runData.quantityProduced);
   const writes: PlannedWrite[] = deduction.updates.map(u => ({
     collection: 'materials' as const, id: u.materialId, data: { initialStock: u.stock }, merge: true,
   }));
 
-  // 2. Add finished goods.
-  const currentStock = recipeItem.finishedGoodsStock ?? 0;
+  // 2. Take its parts (a sponge base in a cream cake) from their finished stock. Short stock goes below nothing, as a short
+  //    ingredient does: the owner was warned, and may have made the parts without logging them.
+  let menu = state.menu;
+  const used = partsNeeded(recipeItem, runData.quantityProduced).filter(p => menu.some(m => m.id === p.itemId));
+  if (used.length > 0) {
+    let partsCost = 0;
+    for (const p of used) {
+      const partItem = menu.find(m => m.id === p.itemId)!;
+      partsCost += productionRunCost(effectiveRecipe(partItem, state.menu), state.materials, p.quantity);
+      const stock = parseFloat(((partItem.finishedGoodsStock ?? 0) - p.quantity).toFixed(4));
+      writes.push({ collection: 'menu', id: p.itemId, data: { finishedGoodsStock: stock }, merge: true });
+      menu = menu.map(m => (m.id === p.itemId ? { ...m, finishedGoodsStock: stock } : m));
+    }
+    run.partsUsed = used;
+    run.partsCost = parseFloat(partsCost.toFixed(2));
+    // The run's cost is its own materials and its parts, whatever the caller worked out from the recipe alone.
+    run.costTotal = parseFloat(productionRunCost(effectiveRecipe(recipeItem, state.menu), state.materials, runData.quantityProduced).toFixed(2));
+  }
+
+  // 3. Add finished goods.
+  const currentStock = menu.find(m => m.id === runData.recipeId)?.finishedGoodsStock ?? 0;
   writes.push({ collection: 'menu', id: runData.recipeId, data: { finishedGoodsStock: currentStock + yieldAmt }, merge: true });
 
-  // 3. The run record.
+  // 4. The run record.
   writes.push({ collection: 'productionRuns', id, data: run, merge: false });
 
   return {
     ok: true, writes, runId: id,
     state: {
       materials: deduction.materials,
-      menu: state.menu.map(m => (m.id === runData.recipeId ? { ...m, finishedGoodsStock: currentStock + yieldAmt } : m)),
+      menu: menu.map(m => (m.id === runData.recipeId ? { ...m, finishedGoodsStock: currentStock + yieldAmt } : m)),
     },
   };
 }

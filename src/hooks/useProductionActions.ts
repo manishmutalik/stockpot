@@ -202,6 +202,15 @@ export function useProductionActions(
         }
       }
 
+      // Give back the parts it took from finished stock (the bases a cream cake run used).
+      for (const part of run.partsUsed ?? []) {
+        const partItem = after.menu.find(m => m.id === part.itemId);
+        if (!partItem) continue;
+        const stock = parseFloat(((partItem.finishedGoodsStock ?? 0) + part.quantity).toFixed(4));
+        batch.set(doc(db, 'users', userId, 'menu', part.itemId), { finishedGoodsStock: stock }, { merge: true });
+        after = { ...after, menu: after.menu.map(m => (m.id === part.itemId ? { ...m, finishedGoodsStock: stock } : m)) };
+      }
+
       batch.delete(doc(db, 'users', userId, 'productionRuns', runId));
 
       // A linked order here is always one of the old auto-created

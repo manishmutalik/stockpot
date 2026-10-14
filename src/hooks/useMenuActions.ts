@@ -12,9 +12,10 @@
  */
 import { auth, db, doc, setDoc, deleteDoc } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { MenuItem, RawMaterial, Order, IngredientRequirement, QuickIngredient, getDefaultRecipeUnit } from '../types';
+import { MenuItem, RawMaterial, Order, IngredientRequirement, ItemPart, QuickIngredient, getDefaultRecipeUnit } from '../types';
 import { needsBaselineStamp, pricingStamp } from '../utils/pricing';
 import { DEFAULT_TIME_ZONE, todayInZone } from '../utils/localDate';
+import { costView, itemsUsing, partsOf, wouldLoop } from '../utils/itemParts';
 
 export function useMenuActions(
   menu: MenuItem[],
@@ -83,7 +84,7 @@ export function useMenuActions(
     const item = menu.find(m => m.id === id);
     try {
       if (item) {
-        const stamp = field === 'sellingPrice' && Number(value) > 0 ? { ...pricingStamp(item, materials, today()), pricingIsBaseline: false } : {};
+        const stamp = field === 'sellingPrice' && Number(value) > 0 ? { ...pricingStamp(costView(item, menu), materials, today()), pricingIsBaseline: false } : {};
         await setDoc(doc(db, 'users', userId, 'menu', id), {
           ...item,
           [field]: value,
@@ -109,7 +110,7 @@ export function useMenuActions(
     let done = 0;
     for (const item of pending) {
       try {
-        await setDoc(doc(db, 'users', userId, 'menu', item.id), { ...pricingStamp(item, materials, today()), pricingIsBaseline: true }, { merge: true });
+        await setDoc(doc(db, 'users', userId, 'menu', item.id), { ...pricingStamp(costView(item, menu), materials, today()), pricingIsBaseline: true }, { merge: true });
         done++;
       } catch (err) {
         handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/menu/${item.id}`);
@@ -125,6 +126,13 @@ export function useMenuActions(
   const deleteMenuItem = async (id: string) => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
+    // An item other items are made from (a sponge base) cannot go while they use it: their costs would quietly drop.
+    const users = itemsUsing(menu, id);
+    if (users.length > 0) {
+      const names = users.slice(0, 3).map(u => u.name).join(', ') + (users.length > 3 ? ` and ${users.length - 3} more` : '');
+      showAlert('Still in use', `${menu.find(m => m.id === id)?.name ?? 'This item'} is used in ${names}. Remove it from ${users.length === 1 ? 'that item' : 'those items'} first.`);
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'users', userId, 'menu', id));
       const ordersToDelete = orders.filter(o => o.menuItemId === id);
@@ -166,7 +174,8 @@ export function useMenuActions(
       ...item,
       id,
       name: `${item.name} (Copy)`,
-      recipe: item.recipe.map(r => ({ ...r }))
+      recipe: item.recipe.map(r => ({ ...r })),
+      ...(item.parts && { parts: item.parts.map(p => ({ ...p })) }),
     };
     try {
       await setDoc(doc(db, 'users', userId, 'menu', id), newItem);
@@ -271,8 +280,29 @@ export function useMenuActions(
     }
   };
 
+  /**
+   * Sets the other items `itemId` is made from (a sponge base in a cream cake), per one of it. A part that would put the
+   * item inside itself, directly or through others, is refused; a quantity of nothing is dropped.
+   */
+  const setItemParts = async (itemId: string, parts: ItemPart[]) => {
+    if (!auth.currentUser) return;
+    const userId = auth.currentUser.uid;
+    const looping = parts.find(p => wouldLoop(menu, itemId, p.itemId));
+    if (looping) {
+      showAlert('Not possible', `${menu.find(m => m.id === looping.itemId)?.name ?? 'That item'} already uses ${menu.find(m => m.id === itemId)?.name ?? 'this item'}, so it cannot go into it.`);
+      return;
+    }
+    const kept = partsOf({ id: itemId, parts: parts.filter(p => p.quantity > 0) }).map(p => ({ itemId: p.itemId, quantity: p.quantity }));
+    try {
+      await setDoc(doc(db, 'users', userId, 'menu', itemId), { parts: kept }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/menu/${itemId}`);
+    }
+  };
+
   return {
     addMenuItem,
+    setItemParts,
     updateMenuItem,
     updateMenuItemField,
     stampPricingBaselines,

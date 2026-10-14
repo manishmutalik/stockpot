@@ -17,6 +17,7 @@ import { numberWritten, squash, suggestMenuItem } from './orderParse';
 import { planRestock } from './plans';
 import type { DraftResult, Question } from './quickParse';
 import type { RestockDraft, RestockPreviewLine } from './quickApiTypes';
+import { costMenu } from './itemParts';
 
 export type { RestockDraft, RestockPreviewLine } from './quickApiTypes';
 
@@ -257,7 +258,7 @@ const displayUnit = (unit: string): { unit: string; factor: number } => (unit ==
 export function previewRestock(input: {
   draft: RestockDraft;
   materials: RawMaterial[];
-  menu: { id: string; name: string; recipe?: { materialId: string; amount: number; unit?: string }[] }[];
+  menu: { id: string; name: string; recipe?: { materialId: string; amount: number; unit?: string }[]; parts?: { itemId: string; quantity: number }[]; notForSale?: boolean }[];
   currency: { code: string; symbol: string };
 }): { ok: true; lines: RestockPreviewLine[]; total: number; label: { total: string } } | { ok: false; message: string } {
   const working = new Map(input.materials.map(m => [m.id, m]));
@@ -277,7 +278,8 @@ export function previewRestock(input: {
     const prev = plan.previousCostPerUnit * shown.factor;
     const next = plan.newCostPerUnit * shown.factor;
     const delta = plan.newCostPerUnit - plan.previousCostPerUnit;
-    const affected = input.menu.flatMap(item => {
+    // Items made from others count their parts' use too (a base's flour reaches the cream cakes).
+    const affected = costMenu(input.menu).filter(item => !item.notForSale).flatMap(item => {
       const use = (item.recipe ?? []).filter(r => r.materialId === material.id);
       if (use.length === 0) return [];
       const perUnit = use.reduce((s, r) => s + (r.unit && r.unit !== own ? convertAmount(r.amount, r.unit, own) : r.amount), 0);

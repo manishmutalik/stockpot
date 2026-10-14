@@ -304,3 +304,34 @@ describe('MenuView pricing', () => {
     expect(within(card('Bread')).getByText('Cost incomplete').getAttribute('title')).toBe('No price yet for Kesar. Add one in Stock, or restock it.');
   });
 });
+
+describe('MenuView: items made from other items', () => {
+  const partsMenu: Record<string, unknown>[] = [
+    { id: 'cake', name: 'Cream Cake', sellingPrice: 20, recipe: [{ materialId: 'box', amount: 1, unit: 'pcs' }], parts: [{ itemId: 'base', quantity: 1 }] }, // 2 + base 3
+    { id: 'base', name: 'Sponge Base', sellingPrice: 0, notForSale: true, finishedGoodsStock: 4.5, recipe: [{ materialId: 'flour', amount: 300, unit: 'g' }] }, // 3
+  ];
+
+  it('costs a cake with its base, and lists bases apart, without price or margin', () => {
+    render(<MenuView {...makeProps({ menu: partsMenu })} />);
+    expect(within(card('Cream Cake')).getByText('Cost: $5.00')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Made for other items' })).toBeTruthy();
+    const base = card('Sponge Base');
+    expect(within(base).getByText('Made for other items')).toBeTruthy();
+    expect(within(base).getByText(/Used in Cream Cake/)).toBeTruthy();
+    expect(within(base).queryByLabelText('Sale price')).toBeNull();
+    expect(screen.getByText('Menu Items').nextElementSibling?.textContent).toBe('1');
+  });
+
+  it('turns "Sold on the menu" off and on, and adds a made item to a recipe', () => {
+    const props = makeProps({ menu: partsMenu, expandedRecipeId: 'base', setItemParts: vi.fn() });
+    const { rerender } = render(<MenuView {...props} />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Sold on the menu' }));
+    expect(props.updateMenuItemField).toHaveBeenCalledWith('base', 'notForSale', false);
+    // The base cannot take the cake (that would loop), so nothing is offered to add to it.
+    expect(screen.queryByLabelText('Add a made item')).toBeNull();
+    const cakeProps = { ...props, menu: [{ ...partsMenu[0], parts: [] }, partsMenu[1]], expandedRecipeId: 'cake' };
+    rerender(<MenuView {...cakeProps} />);
+    fireEvent.change(screen.getByLabelText('Add a made item'), { target: { value: 'base' } });
+    expect(props.setItemParts).toHaveBeenCalledWith('cake', [{ itemId: 'base', quantity: 1 }]);
+  });
+});
