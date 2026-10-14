@@ -1,5 +1,6 @@
 import { convertAmount } from './conversions';
 import { stampFor, type OrderStamp } from './orderPricing';
+import { costView } from './itemParts';
 import type { PaymentMethod, PriceLogEntry } from '../types';
 
 /**
@@ -26,6 +27,10 @@ export interface DemoMaterial {
 export interface DemoMenuItem {
   id: string; name: string; sellingPrice: number; emoji: string; finishedGoodsStock: number;
   recipe: { materialId: string; amount: number; unit: string }[];
+  /** Other items it is made from (utils/itemParts): the cream cake is built on the sponge base. */
+  parts?: { itemId: string; quantity: number }[];
+  /** Made only to go into other items: the sponge base. */
+  notForSale?: boolean;
 }
 export interface DemoOrder {
   id: string; menuItemId: string; quantity: number; date: string;
@@ -36,6 +41,8 @@ export type DemoOrderWithStamp = DemoOrder & OrderStamp & { paymentMethod: Payme
 export interface DemoRun {
   id: string; recipeId: string; quantityProduced: number; quantityYield?: number; remainingQuantity: number;
   date: string; expiryDate: string; purpose: string; costTotal: number; createdAt: number;
+  /** For a run of an item made from others: the parts it took from stock, and what they were worth (inside costTotal). */
+  partsUsed?: { itemId: string; quantity: number }[]; partsCost?: number;
 }
 
 /** Fee % the demo business pays per payment method. */
@@ -68,11 +75,16 @@ export function buildDemoData(userId: string, today: string) {
     { id: 'm_yeast', name: 'Instant Dry Yeast', unit: 'g', bought: 900, costPerUnit: 0.7, category: 'Raw Materials', threshold: 300 }, // ₹700/kg
     { id: 'm_chips', name: 'Chocolate Chips', unit: 'g', bought: 8000, costPerUnit: 0.6, category: 'Raw Materials', threshold: 1500 }, // ₹600/kg
     { id: 'm_box', name: 'Bakery Box', unit: 'pcs', bought: 300, costPerUnit: 12, category: 'Packaging Materials', threshold: 50 }, // ₹12 each
+    // For the cream cakes, built on a sponge base made ahead.
+    { id: 'm_gel', name: 'Cake Gel Premix', unit: 'g', bought: 5000, costPerUnit: 0.3, category: 'Raw Materials', threshold: 1000 }, // ₹300/kg
+    { id: 'm_oil', name: 'Refined Oil', unit: 'ml', bought: 2000, costPerUnit: 0.15, category: 'Raw Materials', threshold: 400 }, // ₹150/litre
+    { id: 'm_cream', name: 'Whipping Cream', unit: 'g', bought: 4000, costPerUnit: 0.4, category: 'Raw Materials', threshold: 1000 }, // ₹400/kg
+    { id: 'm_pineapple', name: 'Pineapple (tinned)', unit: 'g', bought: 3000, costPerUnit: 0.12, category: 'Raw Materials', threshold: 500 }, // ₹120/kg
   ];
 
 
   // ── Menu: recipes are per single unit ──────────────────────────────────────
-  const menuBase = [
+  const menuBase: (Omit<DemoMenuItem, 'finishedGoodsStock'>)[] = [
     {
       id: 'menu_croissant', name: 'Butter Croissant', sellingPrice: 150, emoji: '🥐',
       recipe: [
@@ -103,15 +115,33 @@ export function buildDemoData(userId: string, today: string) {
         { materialId: 'm_yeast', amount: 6, unit: 'g' },
       ],
     },
+    // A base made ahead (a batch makes 4.5: four for 1 kg cakes, one for a half-kg), not sold on its own.
+    {
+      id: 'menu_base', name: 'Vanilla Sponge Base', sellingPrice: 0, emoji: '🍰', notForSale: true,
+      recipe: [
+        { materialId: 'm_gel', amount: 220, unit: 'g' },
+        { materialId: 'm_oil', amount: 40, unit: 'ml' },
+      ],
+    },
+    // A cream cake built on one base.
+    {
+      id: 'menu_pinecake', name: 'Pineapple Cream Cake 1 kg', sellingPrice: 950, emoji: '🎂',
+      recipe: [
+        { materialId: 'm_cream', amount: 150, unit: 'g' },
+        { materialId: 'm_pineapple', amount: 100, unit: 'g' },
+      ],
+      parts: [{ itemId: 'menu_base', quantity: 1 }],
+    },
   ];
 
 
-  const recipeUnitCost = (menuId: string) => {
+  // What one of an item costs in materials, its parts' recipes included (the cream cake counts its base).
+  const recipeUnitCost = (menuId: string): number => {
     const item = menuBase.find(m => m.id === menuId)!;
     return item.recipe.reduce((sum, req) => {
       const mat = purchases.find(m => m.id === req.materialId)!;
       return sum + convertAmount(req.amount, req.unit, mat.unit) * mat.costPerUnit;
-    }, 0);
+    }, 0) + (item.parts ?? []).reduce((sum, p) => sum + p.quantity * recipeUnitCost(p.itemId), 0);
   };
 
   // ── Orders (one per customer) ──────────────────────────────────────────────
@@ -146,7 +176,7 @@ export function buildDemoData(userId: string, today: string) {
     return {
       id: `ord_${i + 1}`, menuItemId, quantity, date: at(daysAgo), customerName, customerPhone,
       fulfilled: daysAgo > 0,
-      ...stampFor(menuBase.find(m => m.id === menuItemId)!, purchases),
+      ...stampFor(costView(menuBase.find(m => m.id === menuItemId)!, menuBase), purchases),
       paymentMethod, paymentFeeRate: DEMO_FEE_RATES[paymentMethod] ?? 0,
       ...(customerName === 'Brew & Bite Café' && { discount: 150 }),
     };
@@ -163,11 +193,17 @@ export function buildDemoData(userId: string, today: string) {
     ['run_7', 'menu_croissant', 25, undefined, 1, 2],
     ['run_8', 'menu_muffin', 25, undefined, 2, 3],
     ['run_9', 'menu_bread', 15, undefined, 2, 2],
+    ['run_10', 'menu_base', 9, undefined, 2, 4], // two batches of sponge base
+    ['run_11', 'menu_pinecake', 3, undefined, 1, 2], // three cream cakes, on three of those bases
   ];
 
-  // Units ordered per item are taken from the oldest batches first (FIFO).
+  // Units ordered per item are taken from the oldest batches first (FIFO); so are the parts later runs used (bases).
   const orderedByItem = new Map<string, number>();
   for (const o of orders) orderedByItem.set(o.menuItemId, (orderedByItem.get(o.menuItemId) ?? 0) + o.quantity);
+  const partsUsedBy = (recipeId: string, produced: number) => (menuBase.find(m => m.id === recipeId)!.parts ?? []).map(p => ({ itemId: p.itemId, quantity: p.quantity * produced }));
+  for (const [, recipeId, produced] of runRows) {
+    for (const p of partsUsedBy(recipeId, produced)) orderedByItem.set(p.itemId, (orderedByItem.get(p.itemId) ?? 0) + p.quantity);
+  }
 
   const remainingByRun = new Map<string, number>();
   for (const item of menuBase) {
@@ -185,6 +221,10 @@ export function buildDemoData(userId: string, today: string) {
 
   const productionRuns: DemoRun[] = runRows.map(([id, recipeId, produced, sellable, daysAgo, shelfLife]) => ({
     id, recipeId,
+    ...(partsUsedBy(recipeId, produced).length > 0 && {
+      partsUsed: partsUsedBy(recipeId, produced),
+      partsCost: round2(partsUsedBy(recipeId, produced).reduce((s, p) => s + p.quantity * recipeUnitCost(p.itemId), 0)),
+    }),
     quantityProduced: produced,
     ...(sellable !== undefined ? { quantityYield: sellable } : {}),
     remainingQuantity: remainingByRun.get(id)!,

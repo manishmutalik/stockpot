@@ -18,6 +18,7 @@ import { actualOrders } from '../utils/preorders';
 import { getRunStatus } from '../utils/productionStats';
 import { getBatchesNeedingAttention } from '../utils/stockAging';
 import type { ProductionRun } from '../components/ProductionRunModal';
+import { runSpend } from '../utils/itemParts';
 
 export const SummaryView: React.FC<AppViewProps> = (props) => {
   const {
@@ -43,7 +44,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     [productionRuns, summaryDateStart, summaryDateEnd]
   );
   const totalProductionCost = useMemo(
-    () => filteredProductionRuns.reduce((sum, r) => sum + (r.costTotal || 0), 0),
+    () => filteredProductionRuns.reduce((sum, r) => sum + runSpend(r), 0),
     [filteredProductionRuns]
   );
   const filteredWastageLogs = useMemo(

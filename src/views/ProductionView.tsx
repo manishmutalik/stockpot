@@ -8,6 +8,7 @@ import { AppViewProps, MenuItem } from '../types';
 import type { ProductionRun } from '../components/ProductionRunModal';
 import { MetricCard } from '../components/MetricCard';
 import { clusterProductionRunsBySession } from '../utils/productionRunClustering';
+import { effectiveRecipe } from '../utils/itemParts';
 import { daysBetween, getWorstUrgencyForItem } from '../utils/stockAging';
 import { getOldestBatchDate, getRunStatus, getYieldInfo, sellableOf, summarizeProduction } from '../utils/productionStats';
 
@@ -130,7 +131,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
   // Material cost per unit for one menu item, at current material prices —
   // shared by every Market Stock action below (Personal Use, Sampling,
   // Discard) since they all log the same kind of wastage entry.
-  const costPerUnitFor = (item: MenuItem) => item.recipe.reduce((total, req) => {
+  const costPerUnitFor = (item: MenuItem) => effectiveRecipe(item, menu).reduce((total, req) => {
     const mat = materials.find(m => m.id === req.materialId);
     if (!mat) return total;
     const convertedAmount = convertAmount(req.amount, req.unit || 'g', mat.unit);
@@ -285,6 +286,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                     )}
                   </div>
                   <div className="flex items-center gap-0.5 shrink-0">
+                    {!item.notForSale && (
                     <button
                       onClick={() => openAddOrderModalFor(item.id)}
                       className={`${iconBtn} hover:text-primary hover:bg-primary/10`}
@@ -293,6 +295,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                     >
                       <ShoppingBag size={16} />
                     </button>
+                    )}
                     <button
                       onClick={() => setDiscardTarget({ ...baseTarget, presetReason: 'Personal Use' })}
                       className={`${iconBtn} hover:text-amber-600 hover:bg-amber-50`}

@@ -1,5 +1,26 @@
 # Changelog
 
+## Items made from other items: bases, fillings, hampers
+
+A bakery that bakes sponge bases ahead and turns them into cream cakes can now say so. Any item can be used in another item's
+recipe, and an item can be marked as not sold on the menu:
+
+- **Recipes & Menus:** a recipe has a new section, **Made from other items**, with **Add a made item** (1 base for a 1 kg cake,
+  0.5 for a half-kg). **Sold on the menu** can be turned off for a base or filling; it then sits under **Made for other
+  items**, shows where it is used and how many are in stock, and stays out of Add Order, the shared menu, the phone's order
+  reading and the margin figures. A base used in other items cannot be deleted until it is taken out of them.
+- **Costs** count an item's parts everywhere: cost and margin, order stamps, drift and repricing (a rise in cake gel is
+  named in every cream cake's alert), What if…, nutrition and "cost incomplete".
+- **Production:** making a cream cake takes its base from the base's stock (and its cream and fruit from materials); the
+  form says how many bases each row takes and warns when there are not enough (it still saves, as for a short ingredient).
+  Deleting the run puts the bases back. Production spend counts each ingredient once (`runSpend`), so the cream cake run
+  does not count the base again; the same goes for Wastage's loss against production.
+- **Phone:** making items with parts works by voice, with a short base reported like a short material; the order reader
+  leaves out bases. **Demo kitchen:** a Vanilla Sponge Base and a Pineapple Cream Cake built on it. **Help:** a new topic.
+
+Data: two optional fields on a menu item (`parts`, `notForSale`) and two on a production run (`partsUsed`, `partsCost`);
+nothing existing changes. The logic is in `src/utils/itemParts.ts`.
+
 ## Help, on the website and in Stockpot Quick
 
 Both apps now have a Help section, written for the owner, from one list of topics (`src/utils/helpTopics.ts`) so they cannot

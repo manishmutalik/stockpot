@@ -1,5 +1,6 @@
 import type { ProductionRun } from '../components/ProductionRunModal';
 import { daysBetween, getStockUrgency } from './stockAging';
+import { runSpend } from './itemParts';
 
 export interface ProductionSummary {
   totalRuns: number;
@@ -25,7 +26,7 @@ export function summarizeProduction(runs: ProductionRun[], today: string): Produ
   for (const r of runs) {
     unitsProduced += r.quantityProduced || 0;
     unitsSellable += sellableOf(r) || 0;
-    totalCost += r.costTotal || 0;
+    totalCost += runSpend(r);
     const age = daysBetween(r.date, today);
     if (age >= 0 && age <= 6) runsThisWeek += 1;
   }

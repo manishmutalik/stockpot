@@ -268,6 +268,12 @@ Nothing is queued. The AI list in the handoff is complete.
 
 ## Open items for the user (none blocking)
 
+- **Items made from other items: step 1 built.** An item's recipe can use other items (`parts`: a sponge base in a cream
+  cake, cookies in a hamper), and an item can be kept off the menu (`notForSale`). Costs flatten through parts everywhere;
+  production takes parts from their finished stock; production spend counts each ingredient once (`src/utils/itemParts.ts`,
+  docs/developer-guide/04-money-plans-bills.md 4.8). Next steps, agreed: (2) batches with an actual yield setting the cost per
+  unit (paneer, ghee, sourdough; "made 2 batches"), (3) made-to-order items (selling uses the ingredients directly, no
+  production run), (4) the recipe reader's "Made ahead and kept" choice and phone voice for batches.
 - **Recipe reader: web and phone built, real-recipe test to do.** Read a recipe (Recipes & Menus on the web; "Read a recipe
   from a photo" on the phone's Today, camera or gallery) reads text or up to three photos with Claude Opus 5.5 (only this
   feature; everything else stays on Haiku 4.5), 15 recipes a day and 75 a month (docs/developer-guide/06-ai.md, "The recipe

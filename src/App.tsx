@@ -337,6 +337,7 @@ import { buildCustomerDirectory } from './utils/customers';
 import { actualOrders } from './utils/preorders';
 import { todayInZone } from './utils/localDate';
 import { getExperimentMaterialUsage } from './utils/experimentMaterialUsage';
+import { forSale, runSpend } from './utils/itemParts';
 import { ALLERGEN_TAGS } from './utils/nutritionCalculations';
 export { UNIT_CONVERSIONS, convertAmount, CURRENCIES };
 
@@ -748,7 +749,7 @@ function BakeryApp() {
   // ── Menu / Recipe Actions ────────────────────────────────────────────────────
   // Extracted to src/hooks/useMenuActions.ts as part of the Phase 4 breakup.
   const {
-    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, deleteMenuItem, clearFinishedGoodsStock,
+    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, deleteMenuItem, clearFinishedGoodsStock, setItemParts,
     copyMenuItem, addIngredientToRecipe, addQuickIngredientsToRecipe,
     updateRecipeIngredient, removeIngredientFromRecipe,
   } = useMenuActions(menu, materials, orders, showAlert, { today: () => todayInZone(settings.timezone) });
@@ -799,9 +800,9 @@ function BakeryApp() {
     return productionRuns.filter(r => r.date >= summaryDateStart && r.date <= summaryDateEnd);
   }, [productionRuns, summaryDateStart, summaryDateEnd]);
 
-  // Sum of `costTotal` across all production runs in the selected period.
+  // What the period's production runs spent on ingredients (a run's parts, such as bases, were counted when they were made).
   const totalProductionCost = useMemo(() => {
-    return filteredProductionRuns.reduce((sum, r) => sum + (r.costTotal || 0), 0);
+    return filteredProductionRuns.reduce((sum, r) => sum + runSpend(r), 0);
   }, [filteredProductionRuns]);
 
   // Aggregated material usage from experiments (not range-filtered). Used
@@ -852,7 +853,9 @@ function BakeryApp() {
   const customerDirectory = useMemo(() => buildCustomerDirectory(orders, menu, todayInZone(settings.timezone)), [orders, menu, settings.timezone]);
 
   // Reading a pasted order message into the Add Order form (offered only where AI is available).
-  const orderParser = useOrderParser({ orders, menu, materials: remainingInventory, settings, signedIn: !!user, dataReady });
+  // Orders are for items sold on the menu: a base made only for cream cakes is left out of the order form and its reader.
+  const saleMenu = useMemo(() => forSale(menu), [menu]);
+  const orderParser = useOrderParser({ orders, menu: saleMenu, materials: remainingInventory, settings, signedIn: !!user, dataReady });
   const productionParser = useProductionParser({ menu, settings, signedIn: !!user, dataReady });
   // Reading recipes from photos or text into menu items (offered only where AI is available).
   const recipeReader = useRecipeReader({ signedIn: !!user, dataReady });
@@ -1291,7 +1294,7 @@ function BakeryApp() {
     inventoryUsage, summaryInventoryUsage, remainingInventory, sortedRemainingInventory, lowStockItems,
     summaryFinancials, activeOrdersCount, averageOrderValue, financials, chartData, handleRangeChange,
     refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
-    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock,
+    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock, setItemParts,
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
@@ -1630,7 +1633,7 @@ function BakeryApp() {
         <AddOrderModal
           isOpen={isAddOrderModalOpen}
           onClose={() => { setIsAddOrderModalOpen(false); setAddOrderPresetItemId(null); }}
-          menu={menu}
+          menu={saleMenu}
           onSave={addOrderGroup}
           currency={currency}
           presetMenuItemId={addOrderPresetItemId}

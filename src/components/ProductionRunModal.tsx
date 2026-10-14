@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Calendar, Check, ChevronDown, ChevronUp, CirclePlus, Factory, Hourglass, Loader2, Package, Sparkles, Trash2 } from 'lucide-react';
 import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
 import { productionRunCost } from '../utils/plans/planProduction';
+import { effectiveRecipe, partsNeeded } from '../utils/itemParts';
 import type { ProductionParser } from '../hooks/useProductionParser';
 import type { NotFoundItem } from '../utils/orderParse';
 import type { UnplacedWaste } from '../utils/productionParse';
@@ -120,9 +121,28 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     const recipe = menu.find(m => m.id === row.recipeId);
     if (!recipe) return 0;
     // Ingredients whose material record is missing are skipped; each amount is unit-converted to the material's stored unit.
-    return productionRunCost(recipe.recipe, materials, row.quantity);
+    // An item made from others (a cream cake on a sponge base) counts its parts too.
+    return productionRunCost(effectiveRecipe(recipe, menu), materials, row.quantity);
   }), [rows, menu, materials]);
   const costTotal = useMemo(() => rowCosts.reduce((sum, c) => sum + c, 0), [rowCosts]);
+  // The other items each row takes from finished stock (bases for cream cakes), counting earlier rows' use and what
+  // earlier rows make (bases logged in the same go are there for the cakes after them).
+  const partUse = useMemo(() => {
+    const stock = new Map(menu.map(m => [m.id, m.finishedGoodsStock ?? 0]));
+    return rows.map(row => {
+      const item = menu.find(m => m.id === row.recipeId);
+      const qty = Number(row.quantity) || 0;
+      const used = item && qty > 0 ? partsNeeded(item, qty) : [];
+      const out = used.map(p => {
+        const inStock = stock.get(p.itemId) ?? 0;
+        stock.set(p.itemId, inStock - p.quantity);
+        return { itemId: p.itemId, name: menu.find(m => m.id === p.itemId)?.name ?? 'item', quantity: p.quantity, inStock, short: p.quantity > inStock + 1e-9 };
+      });
+      if (item && qty > 0) stock.set(item.id, (stock.get(item.id) ?? 0) + qty);
+      return out;
+    });
+  }, [rows, menu]);
+  const fmtQty = (n: number) => String(Math.round(n * 100) / 100);
 
   // ─── Row Management ─────────────────────────────────────────────────────────
   const updateRow = (index: number, patch: Partial<ProductionRow>) => {
@@ -415,6 +435,11 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
                   Material cost <span className="font-semibold text-ink">{currency.symbol}{rowCosts[i].toFixed(2)}</span>
                 </div>
               )}
+              {partUse[i].map(p => (
+                <div key={p.itemId} className={`mt-1 px-1 text-[11px] ${p.short ? 'text-amber-700 font-semibold' : 'text-muted'}`}>
+                  Takes {fmtQty(p.quantity)} {p.name} from stock ({fmtQty(p.inStock)} there){p.short ? ': not enough. Log the batch you made first, or it goes below nothing.' : ''}
+                </div>
+              ))}
             </div>
           ))}
         </div>

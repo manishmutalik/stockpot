@@ -18,6 +18,7 @@
  */
 import type { IngredientRequirement, MenuItem, Order, RawMaterial } from '../types';
 import { convertAmount } from './conversions';
+import { costView } from './itemParts';
 
 /** Materials in this category are packaging; everything else is an ingredient. */
 export const PACKAGING_CATEGORY = 'Packaging Materials';
@@ -60,6 +61,8 @@ export type OrderStamp = Required<Pick<Order,
  * The stamp for an order of `item` made now. `unitPrice` overrides the menu
  * price when the real price paid is known (an imported Shopify or Odoo line;
  * a missing, zero or non-numeric price falls back to the menu price).
+ * Pass the item as costing sees it (`costView(item, menu)`), so the parts it is
+ * made from (a base in a cream cake) are in its cost.
  */
 export function stampFor(item: PricedItem, materials: CostedMaterial[], unitPrice?: number): OrderStamp {
   const costs = recipeUnitCosts(item.recipe || [], materials);
@@ -86,7 +89,7 @@ export function resolveUnitPrice(order: Order, menu: Pick<MenuItem, 'id' | 'sell
  */
 export function resolveUnitCosts(
   order: Order,
-  menu: Pick<MenuItem, 'id' | 'recipe'>[],
+  menu: Pick<MenuItem, 'id' | 'recipe' | 'parts'>[],
   materials: CostedMaterial[]
 ): UnitCosts & { estimated: boolean } {
   const hasCosts = isNumber(order.unitIngredientCostAtSale) && isNumber(order.unitPackagingCostAtSale);
@@ -97,7 +100,7 @@ export function resolveUnitCosts(
     };
   }
   const item = menu.find(m => m.id === order.menuItemId);
-  const current = recipeUnitCosts(item?.recipe || [], materials);
+  const current = recipeUnitCosts(item ? costView(item, menu).recipe || [] : [], materials);
   return {
     ingredients: hasCosts ? order.unitIngredientCostAtSale! : current.ingredients,
     packaging: hasCosts ? order.unitPackagingCostAtSale! : current.packaging,

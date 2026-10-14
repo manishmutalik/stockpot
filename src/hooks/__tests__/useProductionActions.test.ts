@@ -527,3 +527,25 @@ describe('items that share an ingredient, or repeat, in one session', () => {
     });
   });
 });
+
+describe('deleteProductionRun — parts taken from stock', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('gives back the parts the run used (bases into base stock)', async () => {
+    const withBase: MenuItem[] = [
+      { id: 'base', name: 'Base', sellingPrice: 0, notForSale: true, recipe: [], finishedGoodsStock: 1.5 } as MenuItem,
+      { id: 'creamcake', name: 'Cream cake', sellingPrice: 900, recipe: [], parts: [{ itemId: 'base', quantity: 1 }], finishedGoodsStock: 3 } as MenuItem,
+    ];
+    const run = {
+      id: 'run9', recipeId: 'creamcake', quantityProduced: 3, quantityYield: 3, remainingQuantity: 3, date: '2026-10-14',
+      costTotal: 540, partsUsed: [{ itemId: 'base', quantity: 3 }], partsCost: 300,
+    } as ProductionRun;
+    const { result } = renderHook(() => useProductionActions(withBase, materials, [run], [], vi.fn()));
+    await result.current.deleteProductionRun('run9', { skipConfirm: true, silent: true });
+    const writes = Object.fromEntries(batchSet.mock.calls.map(([ref, data]) => [(ref as { path: string }).path.split('/').pop(), data]));
+    expect(writes.base).toEqual({ finishedGoodsStock: 4.5 });
+    expect(writes.creamcake).toEqual({ finishedGoodsStock: 0 });
+  });
+});

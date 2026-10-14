@@ -18,6 +18,7 @@ import { apiFetch } from '../utils/apiClient';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { MenuItem, Order, RawMaterial } from '../types';
 import { stampFor } from '../utils/orderPricing';
+import { costView } from '../utils/itemParts';
 
 export interface ShopifyStatus {
   connected: boolean;
@@ -305,7 +306,7 @@ export function useIntegrations(
               quantity: li.quantity,
               date: orderDate,
               // Stamped at the price the customer actually paid on Shopify, when it sent one.
-              ...stampFor(menuItem, materials, parseFloat(li.price)),
+              ...stampFor(costView(menuItem, menu), materials, parseFloat(li.price)),
               customerName: so.customer ? `${so.customer.first_name || ''} ${so.customer.last_name || ''}`.trim() : '',
               customerPhone: so.customer?.phone || so.phone || ''
             });
@@ -377,7 +378,7 @@ export function useIntegrations(
               quantity: li.product_uom_qty,
               date: orderDate,
               // Stamped at the unit price Odoo sold it for, when it sent one.
-              ...stampFor(menuItem, materials, Number(li.price_unit)),
+              ...stampFor(costView(menuItem, menu), materials, Number(li.price_unit)),
               customerName: oo.partner_id ? oo.partner_id[1] : '',
               customerPhone: ''
             });

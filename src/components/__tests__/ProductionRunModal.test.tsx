@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ProductionRunModal } from '../ProductionRunModal';
+import type { MenuItem } from '../../types';
 
 const menu = [
   { id: 'cake', name: 'Cake', recipe: [], sellingPrice: 20 },
@@ -181,5 +182,18 @@ describe('ProductionRunModal — redesigned form', () => {
     expect(screen.getByRole('button', { name: /Yield & waste accountability/ })).toBeTruthy();
     fireEvent.click(screen.getByText('Add another item'));
     expect(screen.queryByRole('button', { name: /Yield & waste accountability/ })).toBeNull();
+  });
+});
+
+describe('ProductionRunModal — items made from other items', () => {
+  it('says which bases a row takes from stock, and warns when there are not enough', () => {
+    const partsMenu = [
+      { id: 'cream', name: 'Cream Cake', recipe: [], sellingPrice: 900, parts: [{ itemId: 'base', quantity: 1 }] },
+      { id: 'base', name: 'Sponge Base', recipe: [], sellingPrice: 0, notForSale: true, finishedGoodsStock: 2 },
+    ];
+    render(<ProductionRunModal isOpen onClose={vi.fn()} menu={partsMenu as unknown as MenuItem[]} materials={[]} onSave={vi.fn()} currency={currency} />);
+    expect(screen.getByText(/Takes 1 Sponge Base from stock \(2 there\)/)).toBeTruthy();
+    fireEvent.change(screen.getAllByRole('spinbutton')[0], { target: { value: '3' } });
+    expect(screen.getByText(/Takes 3 Sponge Base from stock \(2 there\): not enough/)).toBeTruthy();
   });
 });

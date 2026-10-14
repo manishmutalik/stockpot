@@ -230,7 +230,7 @@ export function buildBusinessSnapshot(input: {
 
   // Items on the menu with no sales in the period.
   const soldIds = new Set(perProduct.keys());
-  const unsoldItems = menu.filter(m => !soldIds.has(m.id)).slice(0, SNAPSHOT_LIMITS.unsoldItems).map(m => nameId('item', m.id, m.name));
+  const unsoldItems = menu.filter(m => !soldIds.has(m.id) && !m.notForSale).slice(0, SNAPSHOT_LIMITS.unsoldItems).map(m => nameId('item', m.id, m.name));
 
   // Trend: the last days up to the period end.
   const trend = Array.from({ length: SNAPSHOT_LIMITS.trendDays }, (_, i) => {

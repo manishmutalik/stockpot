@@ -74,7 +74,8 @@ describe('Demo sandbox', () => {
     await open(/Production Runs/, 'Production Runs & Finished Goods');
     expect(valueOf('Total Runs')).toBe(String(runs.length));
     expect(valueOf('Units Baked')).toBe(String(sum(runs.map((r: any) => r.quantityProduced))));
-    expect(valueOf('Total Prod. Cost')).toBe(money(sum(runs.map((r: any) => r.costTotal))));
+    // What the runs spent: a cream cake run's bases were counted when they were baked (utils/itemParts runSpend).
+    expect(valueOf('Total Prod. Cost')).toBe(money(sum(runs.map((r: any) => r.costTotal - (r.partsCost ?? 0)))));
     expect(valueOf('Finished Goods')).toBe(String(menu.filter((m: any) => m.finishedGoodsStock > 0).length));
     expect(screen.getByText(`${sum(menu.map((m: any) => m.finishedGoodsStock))} units on shelf`)).toBeTruthy();
 

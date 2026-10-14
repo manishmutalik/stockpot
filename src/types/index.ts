@@ -37,6 +37,13 @@ export interface ProductionRun {
    * cake"). Same semantics as Order.orderGroupId — display/UX grouping only,
    * each run stays an independent, fully-functioning document underneath. */
   productionSessionId?: string;
+  /** The other items this run took from finished stock (its item's `parts` × quantity made), so deleting the run puts them back. */
+  partsUsed?: ItemPart[];
+  /**
+   * What those parts were worth, inside `costTotal`. Their ingredients were spent when they were made, so production spend
+   * counts `costTotal − partsCost` (utils/itemParts `runSpend`).
+   */
+  partsCost?: number;
 }
 
 
@@ -188,6 +195,19 @@ export interface MenuItem {
   pricingIsBaseline?: boolean;
   /** Target gross margin % for this item. Absent or null (how clearing it is saved: Firestore rejects undefined) = the settings default. */
   targetMargin?: number | null;
+  /**
+   * Other items this one is made from, per one of it: a sponge base in a cream cake (1, or 0.5 for a half-kg cake),
+   * cookies in a hamper. Making this item takes them from their finished stock (utils/itemParts). Absent: none.
+   */
+  parts?: ItemPart[];
+  /** Made only to go into other items (a base, a filling): kept off the menu, orders and margin figures. Absent: sold. */
+  notForSale?: boolean;
+}
+
+/** One other item used in a recipe: how many of it go into one of this item. */
+export interface ItemPart {
+  itemId: string;
+  quantity: number;
 }
 
 /**
@@ -540,6 +560,8 @@ export interface AppViewProps {
   updateMenuItem: (id: string, m: any) => void;
   updateMenuItemField: (id: string, f: string, v: any) => void;
   deleteMenuItem: (id: string) => void;
+  /** Sets the other items an item is made from (utils/itemParts). */
+  setItemParts: (itemId: string, parts: ItemPart[]) => void;
   clearFinishedGoodsStock: (id: string) => void;
   addExperiment: () => void;
   updateExperiment: (id: string, f: string, v: any) => void;

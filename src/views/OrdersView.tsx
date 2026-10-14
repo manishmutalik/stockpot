@@ -242,7 +242,7 @@ const OrderRow: React.FC<{
           className={`${FIELD} col-span-6 xl:col-span-1 xl:order-1 font-semibold`}
         >
           <option value="" disabled>Select Item</option>
-          {menu.map(m => <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name} ({availableFor(m)} in stock)</option>)}
+          {menu.filter(m => !m.notForSale || m.id === order.menuItemId).map(m => <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name} ({availableFor(m)} in stock)</option>)}
         </select>
         <input
           type="number" min="1" max={maxQty}

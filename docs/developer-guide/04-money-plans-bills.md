@@ -169,7 +169,24 @@ from the stock unit; always convert to the material's own unit before arithmetic
 can be entered for a material. Incompatible units (kg to litres) are not silently converted: a restock plan refuses them
 with `reason: 'unit_mismatch'`. `getDefaultRecipeUnit` (in `types/index.ts`) picks g for kg/g, ml for l/ml.
 
-## 4.8 Rules of thumb when changing money code
+## 4.8 Items made from other items: `src/utils/itemParts.ts`
+
+An item's `parts` lists other items that go into one of it (a sponge base in a cream cake, cookies in a hamper). Two rules:
+
+- **Costs flatten.** Anything worked out from materials (cost and margin, order stamps, drift and repricing, What if…,
+  nutrition, "cost incomplete") uses the item as costing sees it: `costView(item, menu)` / `costMenu(menu)`, its recipe
+  with its parts' recipes written in, scaled. Functions that take the whole menu (`summarizeMenu`, `itemsNeedingRepricing`,
+  `recipesAffectedBy`, `pricingScenario`, `resolveUnitCosts`) flatten inside; single-item ones (`stampFor`, `pricingStamp`,
+  `marginDrift`, `suggestedPriceFor`, `unpricedMaterials`) are passed `costView(item, menu)` by the caller.
+- **Stock does not.** `planProductionRun` takes the item's own recipe from materials and its parts from their finished stock
+  (short stock goes below nothing, with a warning, as a short ingredient does), and records `partsUsed`/`partsCost`; it
+  works the run's `costTotal` out itself for an item with parts. Reorder forecasts use the direct recipe for the same
+  reason. Orders take the item itself, as before; an item `notForSale` cannot be ordered (`not_for_sale`).
+
+`wouldLoop` keeps an item from containing itself (the editor and `setItemParts` both check); flattening also stops after
+`MAX_PART_DEPTH`. The phone's server loads an item's parts with `itemsWithParts` before costing or making it.
+
+## 4.9 Rules of thumb when changing money code
 
 - Add the figure to `profit.ts`/`pricing.ts`/`billing.ts` with a test; do not compute it in a component or route.
 - If it changes what is *written*, change the plan (both web and phone follow), not the hook.
@@ -177,3 +194,4 @@ with `reason: 'unit_mismatch'`. `getDefaultRecipeUnit` (in `types/index.ts`) pic
 - Dates are business-time-zone strings; see [Data model](02-data-model.md).
 - A change to what an old order is "worth" is a bug unless it is behind the `estimated` fallback.
 - Keep the GST invariant: the same base sale gives the same profit in inclusive and exclusive modes. There are tests; keep them.
+- Cost an item through `costView`/`costMenu`, never `item.recipe` alone, or an item made from others loses its parts' cost.

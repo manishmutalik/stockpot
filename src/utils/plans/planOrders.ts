@@ -10,6 +10,7 @@
  * Every message and error string here is the one the hook has always shown.
  */
 import type { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../../types';
+import { costView } from '../itemParts';
 import { stampFor } from '../orderPricing';
 import { saleAmounts } from '../profit';
 import type { PlanContext, PlanError, PlannedWrite } from './types';
@@ -81,6 +82,16 @@ export function planOrderGroup(input: {
     } };
   }
 
+  // An item made only to go into others (a sponge base) is not sold on its own.
+  const notSold = lineItems.map(li => menu.find(m => m.id === li.menuItemId)!).find(m => m.notForSale);
+  if (notSold) {
+    return { ok: false, error: {
+      code: 'not_for_sale', title: 'Not sold on its own',
+      message: `${notSold.name} is made for other items and is not sold on its own. Turn on "Sold on the menu" for it in Recipes & Menus to sell it.`,
+      thrown: `addOrderGroup: menu item "${notSold.id}" is not for sale`,
+    } };
+  }
+
   const preorder = common.preorder === true;
   const requestedByItem = new Map<string, number>();
   for (const li of lineItems) {
@@ -114,7 +125,7 @@ export function planOrderGroup(input: {
       date: common.date,
       bookedOn: today,
       // What the item sells for (or the agreed price) and costs now, kept on the order for good (see utils/orderPricing).
-      ...stampFor(menu.find(m => m.id === item.menuItemId)!, materials, item.unitPrice),
+      ...stampFor(costView(menu.find(m => m.id === item.menuItemId)!, menu), materials, item.unitPrice),
       ...(common.customerName && { customerName: common.customerName }),
       ...(common.customerPhone && { customerPhone: common.customerPhone }),
       // Where it is going belongs to the whole order, so it is on every item of the group.
@@ -221,7 +232,7 @@ export function planHandOver(input: { order: Order; orders: Order[]; menu: MenuI
   const writes: PlannedWrite[] = [];
   for (const o of toHandOver) {
     const item = menu.find(m => m.id === o.menuItemId)!;
-    const costs = stampFor(item, materials);
+    const costs = stampFor(costView(item, menu), materials);
     writes.push({ collection: 'orders', id: o.id, merge: true, data: {
       stockClaimed: true,
       fulfilled: true,

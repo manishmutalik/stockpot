@@ -81,6 +81,9 @@ A thing the owner sells.
   take from it. Stock is a **hard cap**: an order cannot take more than is on the shelf.
 - Pricing stamp used for margin drift: `pricedAt`, `costAtPricing`, `materialCostsAtPricing`, `pricingIsBaseline`,
   and `targetMargin` (overrides `settings.defaultTargetMargin`). See `src/utils/pricing.ts`.
+- `parts`: `{itemId, quantity}[]`, other items this one is made from, per one of it (a sponge base in a cream cake, 0.5 for a
+  half-kg cake). `notForSale`: made only to go into other items (kept off orders, the shared menu and margin figures). See
+  `src/utils/itemParts.ts` and [Money, plans and bills](04-money-plans-bills.md).
 
 ### `Order` (`users/{uid}/orders`)
 
@@ -116,7 +119,9 @@ figure counts only orders due today or earlier.
 
 `recipeId`, `quantityProduced`, `quantityYield` (sellable units after waste), `date`, `costTotal` (snapshotted at
 creation, never recalculated), `remainingQuantity`, `expiryDate`, and `productionSessionId` (groups runs logged
-together). `purpose` is legacy.
+together). `purpose` is legacy. A run of an item with parts also has `partsUsed` (taken from the parts' finished stock;
+deleting the run puts them back) and `partsCost` (their value, inside `costTotal`; production spend is `runSpend`, the
+cost less the parts, which were counted when they were made).
 
 `MenuItem.finishedGoodsStock` is the authoritative shelf count. A run's stored `remainingQuantity` only shrinks when that
 batch is discarded, so `withShelfStock` (`src/utils/batchStock.ts`) spreads the shelf count over the runs, newest first,
