@@ -13,6 +13,7 @@ import { getMarginInfo, MarginTier, recipeCost, SALES_PERIODS, SalesPeriod, sale
 import { basePriceOf } from '../utils/gstCalculations';
 import { costMenu, itemsUsing } from '../utils/itemParts';
 import { ItemPartsEditor } from '../components/ItemPartsEditor';
+import { BatchSizeEditor } from '../components/BatchSizeEditor';
 import { DEFAULT_TARGET_MARGIN, itemsNeedingRepricing, marginDrift, suggestedPriceFor } from '../utils/pricing';
 import { MarginDriftPanel } from '../components/MarginDriftPanel';
 import { PriceInput } from '../components/PriceInput';
@@ -117,7 +118,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     materials, categories, menu, orders, settings, currency, expandedRecipeId, setExpandedRecipeId,
     setIsIngredientSelectorOpen, setActiveRecipeItemId, addMenuItem, updateMenuItem, updateMenuItemField,
     deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, menuFilterOnOpen, openRecipeReader,
-    setItemParts,
+    setItemParts, setBatchSize, productionRuns,
   } = props;
 
   // Purely local, ephemeral UI state for the shareable nutrition card — not
@@ -698,6 +699,9 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                           <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${made ? 'left-0.5' : 'left-[22px]'}`} />
                         </button>
                       </div>
+
+                      <BatchSizeEditor item={item} runs={productionRuns} unitCost={cost} currencySymbol={currency.symbol}
+                        onSet={(makes, scale) => setBatchSize(item.id, makes, scale)} />
 
                       <ItemPartsEditor item={item} menu={menu} costed={costed} materials={materials} currencySymbol={currency.symbol}
                         onChange={parts => setItemParts(item.id, parts)} />

@@ -31,6 +31,8 @@ export interface DemoMenuItem {
   parts?: { itemId: string; quantity: number }[];
   /** Made only to go into other items: the sponge base. */
   notForSale?: boolean;
+  /** How many one batch makes (utils/batches): the sponge base, 4.5 from one mix. */
+  batchMakes?: number;
 }
 export interface DemoOrder {
   id: string; menuItemId: string; quantity: number; date: string;
@@ -43,6 +45,8 @@ export interface DemoRun {
   date: string; expiryDate: string; purpose: string; costTotal: number; createdAt: number;
   /** For a run of an item made from others: the parts it took from stock, and what they were worth (inside costTotal). */
   partsUsed?: { itemId: string; quantity: number }[]; partsCost?: number;
+  /** Logged in batches: how many. */
+  batches?: number;
 }
 
 /** Fee % the demo business pays per payment method. */
@@ -117,7 +121,7 @@ export function buildDemoData(userId: string, today: string) {
     },
     // A base made ahead (a batch makes 4.5: four for 1 kg cakes, one for a half-kg), not sold on its own.
     {
-      id: 'menu_base', name: 'Vanilla Sponge Base', sellingPrice: 0, emoji: '🍰', notForSale: true,
+      id: 'menu_base', name: 'Vanilla Sponge Base', sellingPrice: 0, emoji: '🍰', notForSale: true, batchMakes: 4.5,
       recipe: [
         { materialId: 'm_gel', amount: 220, unit: 'g' },
         { materialId: 'm_oil', amount: 40, unit: 'ml' },
@@ -182,8 +186,8 @@ export function buildDemoData(userId: string, today: string) {
     };
   });
 
-  // ── Production runs: [id, recipe, produced, sellable (if some was lost), days ago, shelf life in days] ──
-  const runRows: [string, string, number, number | undefined, number, number][] = [
+  // ── Production runs: [id, recipe, produced, sellable (if it differed), days ago, shelf life in days, batches] ──
+  const runRows: [string, string, number, number | undefined, number, number, number?][] = [
     ['run_1', 'menu_croissant', 30, undefined, 6, 2],
     ['run_2', 'menu_muffin', 30, undefined, 6, 3],
     ['run_3', 'menu_bread', 15, undefined, 6, 2],
@@ -193,7 +197,7 @@ export function buildDemoData(userId: string, today: string) {
     ['run_7', 'menu_croissant', 25, undefined, 1, 2],
     ['run_8', 'menu_muffin', 25, undefined, 2, 3],
     ['run_9', 'menu_bread', 15, undefined, 2, 2],
-    ['run_10', 'menu_base', 9, undefined, 2, 4], // two batches of sponge base
+    ['run_10', 'menu_base', 9, 8, 2, 4, 2], // two batches of sponge base, one short of the 9 planned
     ['run_11', 'menu_pinecake', 3, undefined, 1, 2], // three cream cakes, on three of those bases
   ];
 
@@ -219,8 +223,9 @@ export function buildDemoData(userId: string, today: string) {
     }
   }
 
-  const productionRuns: DemoRun[] = runRows.map(([id, recipeId, produced, sellable, daysAgo, shelfLife]) => ({
+  const productionRuns: DemoRun[] = runRows.map(([id, recipeId, produced, sellable, daysAgo, shelfLife, batches]) => ({
     id, recipeId,
+    ...(batches && { batches }),
     ...(partsUsedBy(recipeId, produced).length > 0 && {
       partsUsed: partsUsedBy(recipeId, produced),
       partsCost: round2(partsUsedBy(recipeId, produced).reduce((s, p) => s + p.quantity * recipeUnitCost(p.itemId), 0)),

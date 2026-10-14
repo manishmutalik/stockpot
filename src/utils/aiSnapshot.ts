@@ -18,7 +18,7 @@
  * The registry (with raw values) stays on the client for rendering; only
  * `promptSnapshot` is sent.
  */
-import type { BakerySettings, MenuItem, Order, PriceLogEntry, RawMaterial, RecipeExperiment, WastageLog } from '../types';
+import type { BakerySettings, MenuItem, Order, PriceLogEntry, ProductionRun, RawMaterial, RecipeExperiment, WastageLog } from '../types';
 import { formatFigure, type AiRegistry, type Figure, type FormatContext } from './aiFigures';
 import { countByStatus, customersForTab, type CustomerProfile } from './customers';
 import { EXPIRING_SOON_DAYS, getStockStatus } from './inventoryStatus';
@@ -162,7 +162,7 @@ export function buildBusinessSnapshot(input: {
   /** Labels of customers the owner asked about by name (the chat). Their details are added to the snapshot. */
   mentionedCustomers?: string[];
   /** Production runs, to work out which materials will run out soon. Without them none are listed. */
-  productionRuns?: { recipeId: string; quantityProduced: number; date: string }[];
+  productionRuns?: (Pick<ProductionRun, 'recipeId' | 'quantityProduced' | 'date'> & Partial<Pick<ProductionRun, 'quantityYield' | 'costTotal'>>)[];
   /** Every ingredient purchase price recorded, for the price moves. Without it none are listed. */
   priceLog?: PriceLogEntry[];
 }): BuiltSnapshot {
@@ -180,7 +180,7 @@ export function buildBusinessSnapshot(input: {
   const nameId = (prefix: string, key: string, text: string) => { const id = `${prefix}_${key}`; names[id] = text; return id; };
 
   const financials = (range: { start: string; end: string }) =>
-    financialsForRange({ orders, menu, materials, experiments: input.experiments, wastageLogs: input.wastageLogs, settings, start: range.start, end: range.end, today: input.today });
+    financialsForRange({ orders, menu, materials, experiments: input.experiments, wastageLogs: input.wastageLogs, productionRuns: input.productionRuns, settings, start: range.start, end: range.end, today: input.today });
   const now = financials(period);
   const before = financials(comparison);
 

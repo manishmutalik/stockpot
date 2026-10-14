@@ -82,7 +82,8 @@ export function readRecipeImportBody(body: unknown): Read<RecipeImportBody> {
       if (typeof l.unit !== 'string' || !UNIT.test(l.unit)) return bad('Each ingredient needs a unit.');
       lines.push({ material, amount: l.amount, unit: l.unit });
     }
-    items.push({ target, lines });
+    if (it.batchMakes !== undefined && !positive(it.batchMakes, 10_000)) return bad('How many one batch makes must be above nothing.');
+    items.push({ target, lines, ...(it.batchMakes !== undefined && { batchMakes: it.batchMakes as number }) });
   }
 
   const remember: MaterialMemory[] = [];

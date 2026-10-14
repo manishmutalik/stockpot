@@ -31,6 +31,15 @@ describe('planProductionRun', () => {
     expect(plan.writes.find(w => w.collection === 'productionRuns')!.data).toMatchObject({ quantityYield: 21, remainingQuantity: 21 });
   });
 
+  it('adds what came out when a batch made more than planned, and keeps the batches logged', () => {
+    const plan = planProductionRun(row('croissant', 24, { quantityYield: 26, batches: 2 }), state(), ids());
+    if (plan.ok === false) throw new Error('expected ok');
+    expect(plan.writes.find(w => w.collection === 'menu')!.data).toEqual({ finishedGoodsStock: 26 });
+    expect(plan.writes.find(w => w.collection === 'productionRuns')!.data).toMatchObject({ quantityProduced: 24, quantityYield: 26, batches: 2, remainingQuantity: 26 });
+    const pieces = planProductionRun(row('croissant', 24), state(), ids());
+    expect(pieces.ok === true && 'batches' in pieces.writes.find(w => w.collection === 'productionRuns')!.data).toBe(false);
+  });
+
   it('gives the stock afterwards, for the next step to start from, without changing what it was given', () => {
     const start = state();
     const plan = planProductionRun(row('croissant', 2) as any, start, ids());

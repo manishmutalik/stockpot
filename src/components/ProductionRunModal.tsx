@@ -1,11 +1,12 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Calendar, Check, ChevronDown, ChevronUp, CirclePlus, Factory, Hourglass, Loader2, Package, Sparkles, Trash2 } from 'lucide-react';
+import { Calendar, Check, CirclePlus, Factory, Loader2, Package, Sparkles, Trash2 } from 'lucide-react';
 import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
 import { productionRunCost } from '../utils/plans/planProduction';
 import { effectiveRecipe, partsNeeded } from '../utils/itemParts';
+import { expectedUnits, MAX_YIELD_OVER, runYieldLoss } from '../utils/batches';
 import type { ProductionParser } from '../hooks/useProductionParser';
 import type { NotFoundItem } from '../utils/orderParse';
-import type { UnplacedWaste } from '../utils/productionParse';
+import type { ProductionFillRow, ProductionFormFill, UnplacedWaste } from '../utils/productionParse';
 
 // The run's types live in types/index.ts (so plain logic can use them without this component); kept importable from here.
 import type { ProductionRun } from '../types';
@@ -17,6 +18,8 @@ interface MenuItem {
   recipe: { materialId: string; amount: number; unit: string }[];
   sellingPrice: number;
   finishedGoodsStock?: number;
+  /** How many one batch makes, when the item is made in batches. */
+  batchMakes?: number;
 }
 
 interface RawMaterial {
@@ -51,10 +54,39 @@ interface ProductionRunModalProps {
 
 interface ProductionRow {
   recipeId: string;
+  /** Pieces, or batches when `inBatches`. */
   quantity: number;
+  /** Entered in batches (the item says how many one batch makes). */
+  inBatches?: boolean;
+  /** Pieces that actually came out, as typed. Undefined: the box is closed; '': open and empty. Either way, as planned. */
+  made?: string;
 }
 
-const EMPTY_ROW = (menu: MenuItem[]): ProductionRow => ({ recipeId: menu[0]?.id || '', quantity: 1 });
+const batchMakesOf = (menu: MenuItem[], id: string) => {
+  const n = menu.find(m => m.id === id)?.batchMakes;
+  return n && n > 0 ? n : undefined;
+};
+/** A fresh row for an item: in batches when the item is made in batches. */
+const rowFor = (menu: MenuItem[], recipeId: string): ProductionRow => ({ recipeId, quantity: 1, ...(batchMakesOf(menu, recipeId) && { inBatches: true, made: '' }) });
+const EMPTY_ROW = (menu: MenuItem[]): ProductionRow => rowFor(menu, menu[0]?.id || '');
+const round3 = (n: number) => Math.round(n * 1000) / 1000;
+
+/** Pieces the row's ingredients are for. */
+const plannedOf = (menu: MenuItem[], row: ProductionRow) => {
+  const makes = batchMakesOf(menu, row.recipeId);
+  return row.inBatches && makes ? expectedUnits(row.quantity, makes) : row.quantity;
+};
+/** Pieces that came out: what was entered, or as planned. */
+const actualOf = (menu: MenuItem[], row: ProductionRow) => (row.made === undefined || row.made === '' ? plannedOf(menu, row) : Number(row.made));
+
+/** A row read from a note: in batches when the note gave batches (and nothing in pieces was added to them). */
+const rowFromFill = (menu: MenuItem[], r: ProductionFillRow): ProductionRow => {
+  const makes = batchMakesOf(menu, r.recipeId);
+  if (r.batches && makes && Math.abs(expectedUnits(r.batches, makes) - r.quantity) < 1e-6) {
+    return { recipeId: r.recipeId, quantity: r.batches, inBatches: true, made: r.made === undefined ? '' : String(r.made) };
+  }
+  return { recipeId: r.recipeId, quantity: r.quantity, ...(r.made !== undefined && { made: String(r.made) }) };
+};
 
 /**
  * Modal form for logging a new production run — or several at once, when
@@ -74,8 +106,6 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   const today = new Date().toISOString().split('T')[0]; // default date = today (YYYY-MM-DD)
   const [rows,       setRows]       = useState<ProductionRow[]>([EMPTY_ROW(menu)]);
   const [date,       setDate]       = useState(today);
-  const [showYield,  setShowYield]  = useState(false);
-  const [yieldQty,   setYieldQty]   = useState<number | ''>('');
   const [notes,      setNotes]      = useState('');
   const [isSaving,   setIsSaving]   = useState(false);
   const [error,      setError]      = useState('');
@@ -89,6 +119,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   const [readNotes,  setReadNotes]  = useState<string[]>([]);
   const [notFound,   setNotFound]   = useState<NotFoundItem[]>([]);
   const [unplaced,   setUnplaced]   = useState<UnplacedWaste[]>([]);
+  const [unplacedBatches, setUnplacedBatches] = useState<ProductionFormFill['unplacedBatches']>([]);
 
   // Preserves the session grouping across a partial-failure retry (see
   // handleSave): once a multi-row submission starts, every row saved in
@@ -106,7 +137,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   useEffect(() => {
     if (!isOpen) return;
     setRows(prev => prev.map(row =>
-      menu.some(m => m.id === row.recipeId) ? row : { ...row, recipeId: menu[0]?.id || '' }
+      menu.some(m => m.id === row.recipeId) ? row : EMPTY_ROW(menu)
     ));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, menu]);
@@ -122,7 +153,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     if (!recipe) return 0;
     // Ingredients whose material record is missing are skipped; each amount is unit-converted to the material's stored unit.
     // An item made from others (a cream cake on a sponge base) counts its parts too.
-    return productionRunCost(effectiveRecipe(recipe, menu), materials, row.quantity);
+    return productionRunCost(effectiveRecipe(recipe, menu), materials, plannedOf(menu, row));
   }), [rows, menu, materials]);
   const costTotal = useMemo(() => rowCosts.reduce((sum, c) => sum + c, 0), [rowCosts]);
   // The other items each row takes from finished stock (bases for cream cakes), counting earlier rows' use and what
@@ -131,14 +162,14 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     const stock = new Map(menu.map(m => [m.id, m.finishedGoodsStock ?? 0]));
     return rows.map(row => {
       const item = menu.find(m => m.id === row.recipeId);
-      const qty = Number(row.quantity) || 0;
+      const qty = plannedOf(menu, row) || 0;
       const used = item && qty > 0 ? partsNeeded(item, qty) : [];
       const out = used.map(p => {
         const inStock = stock.get(p.itemId) ?? 0;
         stock.set(p.itemId, inStock - p.quantity);
         return { itemId: p.itemId, name: menu.find(m => m.id === p.itemId)?.name ?? 'item', quantity: p.quantity, inStock, short: p.quantity > inStock + 1e-9 };
       });
-      if (item && qty > 0) stock.set(item.id, (stock.get(item.id) ?? 0) + qty);
+      if (item && qty > 0) stock.set(item.id, (stock.get(item.id) ?? 0) + (actualOf(menu, row) || 0));
       return out;
     });
   }, [rows, menu]);
@@ -150,12 +181,19 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     setError('');
     setInvalidRowIndex(null);
   };
-  const addRow = () => {
-    setRows(prev => [...prev, EMPTY_ROW(menu)]);
-    // Per-item yield override doesn't make sense once there's more than one
-    // item — hide it rather than leave a stale value applying to every row.
-    setShowYield(false);
-    setYieldQty('');
+  const addRow = () => setRows(prev => [...prev, EMPTY_ROW(menu)]);
+  /** A different item: in batches if it is made in batches; the quantity stays when the way it is counted does. */
+  const chooseItem = (index: number, recipeId: string) => {
+    const fresh = rowFor(menu, recipeId);
+    const row = rows[index];
+    updateRow(index, { ...fresh, quantity: !!row.inBatches === !!fresh.inBatches ? row.quantity : 1 });
+  };
+  /** Batches to pieces or back, keeping what the ingredients are for. */
+  const setInBatches = (index: number, inBatches: boolean) => {
+    const row = rows[index];
+    const makes = batchMakesOf(menu, row.recipeId);
+    if (!makes || !!row.inBatches === inBatches) return;
+    updateRow(index, { inBatches, quantity: inBatches ? round3(row.quantity / makes) : expectedUnits(row.quantity, makes) });
   };
   const removeRow = (index: number) => {
     setRows(prev => prev.length > 1 ? prev.filter((_, i) => i !== index) : prev);
@@ -170,25 +208,25 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     setReadNotes([]);
     setNotFound([]);
     setUnplaced([]);
+    setUnplacedBatches([]);
     try {
       const outcome = await productionParser.parse(message);
       if (outcome.ok === false) { setReadError(outcome.message); return; }
       const f = outcome.form;
       const notes: string[] = [];
       if (f.rows.length > 0) {
-        setRows(f.rows);
+        setRows(f.rows.map(r => rowFromFill(menu, r)));
       } else {
         // Nothing matched: leave an empty row to choose from, not the first menu item standing in for what was made.
         setRows([{ recipeId: '', quantity: 1 }]);
-        if (f.notFound.length === 0) notes.push('No items were found in the note.');
+        if (f.notFound.length === 0 && f.unplacedBatches.length === 0) notes.push('No items were found in the note.');
       }
       if (f.date) setDate(f.date);
       if (f.dateNotUnderstood) notes.push(`Couldn't tell the date from "${f.dateNotUnderstood}". Please check the production date.`);
       if (f.notes !== undefined) setNotes(f.notes);
-      // Waste worked out as the sellable yield, for a single item; otherwise the yield section is left alone, hidden.
-      if (f.yieldQty !== undefined) { setShowYield(true); setYieldQty(f.yieldQty); } else { setShowYield(false); setYieldQty(''); }
       setNotFound(f.notFound);
       setUnplaced(f.unplacedWaste);
+      setUnplacedBatches(f.unplacedBatches);
       setReadNotes(notes);
       setFilled(true);
       setError('');
@@ -201,13 +239,12 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     if (!missing.suggestion) return;
     const id = missing.suggestion.id;
     setRows(prev => {
-      if (prev.some(r => r.recipeId === id)) return prev.map(r => (r.recipeId === id ? { ...r, quantity: r.quantity + missing.quantity } : r));
+      // Pieces add to a row counted in pieces; a row in batches is left as it is, beside a new one.
+      if (prev.some(r => r.recipeId === id && !r.inBatches)) return prev.map(r => (r.recipeId === id && !r.inBatches ? { ...r, quantity: r.quantity + missing.quantity } : r));
       // The empty row left when nothing matched is replaced rather than kept beside it.
       if (prev.length === 1 && prev[0].recipeId === '') return [{ recipeId: id, quantity: missing.quantity }];
       return [...prev, { recipeId: id, quantity: missing.quantity }];
     });
-    setShowYield(false);
-    setYieldQty('');
     setNotFound(prev => prev.filter(n => n !== missing));
   };
 
@@ -227,10 +264,9 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     setReadNotes([]);
     setNotFound([]);
     setUnplaced([]);
+    setUnplacedBatches([]);
     setRows([EMPTY_ROW(menu)]);
     setDate(today);
-    setShowYield(false);
-    setYieldQty('');
     setNotes('');
     setInvalidRowIndex(null);
     sessionIdRef.current = undefined;
@@ -254,23 +290,27 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
       setError(rows.length > 1 ? `Please select a recipe for item ${badRecipeIndex + 1}.` : 'Please select a recipe before logging.');
       return;
     }
-    const badQtyIndex = rows.findIndex(r => r.quantity < 1);
+    const badQtyIndex = rows.findIndex(r => !(r.quantity > 0));
     if (badQtyIndex !== -1) {
       setInvalidRowIndex(badQtyIndex);
-      setError(rows.length > 1 ? `Quantity must be at least 1 for item ${badQtyIndex + 1}.` : 'Quantity must be at least 1.');
+      setError(rows.length > 1 ? `Quantity must be more than 0 for item ${badQtyIndex + 1}.` : 'Quantity must be more than 0.');
+      return;
+    }
+    const badMadeIndex = rows.findIndex(r => { const a = actualOf(menu, r); return !(a >= 0) || a > plannedOf(menu, r) * MAX_YIELD_OVER; });
+    if (badMadeIndex !== -1) {
+      setInvalidRowIndex(badMadeIndex);
+      setError(`What was actually made${rows.length > 1 ? ` for item ${badMadeIndex + 1}` : ''} can be at most ${MAX_YIELD_OVER} times what was planned.`);
       return;
     }
 
     setIsSaving(true);
     try {
-      // Use the explicit yield quantity only when the yield section is visible,
-      // filled in, and there's exactly one item; otherwise fall back to
-      // quantityProduced (i.e. no waste recorded) for every row.
-      const effectiveYield = rows.length === 1 && showYield && yieldQty !== '' ? Number(yieldQty) : undefined;
+      // What the ingredients were for, and what came out (as planned unless entered).
       const payload = rows.map((row, i) => ({
         recipeId: row.recipeId,
-        quantityProduced: row.quantity,
-        quantityYield: effectiveYield ?? row.quantity,
+        quantityProduced: plannedOf(menu, row),
+        quantityYield: actualOf(menu, row),
+        ...(row.inBatches && batchMakesOf(menu, row.recipeId) && { batches: row.quantity }),
         date,
         notes: notes.trim() || undefined,
         costTotal: parseFloat(rowCosts[i].toFixed(2)), // snapshot rounded to 2 dp
@@ -307,12 +347,10 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
 
   if (!isOpen) return null;
 
-  const totalUnits = rows.reduce((sum, r) => sum + r.quantity, 0);
+  // Per piece that came out: a short batch makes each piece cost more.
+  const totalUnits = rows.reduce((sum, r) => sum + (actualOf(menu, r) || 0), 0);
   const perUnit = totalUnits > 0 ? costTotal / totalUnits : 0;
-  const expected = rows[0]?.quantity ?? 0;
-  const good = yieldQty === '' ? null : Number(yieldQty);
-  const waste = good === null ? 0 : Math.max(0, expected - good);
-  const yieldPct = good === null || expected <= 0 ? null : Math.min(100, (good / expected) * 100);
+  const money = (n: number) => `${currency.symbol}${n.toFixed(2)}`;
 
   return (
     <ModalShell
@@ -376,7 +414,12 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
               {readNotes.map(n => <p key={n} className="text-muted">{n}</p>)}
               {unplaced.map((w, i) => (
                 <p key={`${w.name}-${i}`} className="text-muted">
-                  {w.units} {w.name} {w.units === 1 ? 'was' : 'were'} wasted. Waste is entered here only for a single item, so record it with Discard in the Production Log once this is logged.
+                  {w.units} {w.name} {w.units === 1 ? 'was' : 'were'} wasted. Once the item is chosen and logged, record it with Discard in the Production Log.
+                </p>
+              ))}
+              {unplacedBatches.map((b, i) => (
+                <p key={`${b.name}-b${i}`} className="text-amber-800">
+                  Left out {fmtQty(b.batches)} {b.batches === 1 ? 'batch' : 'batches'} of {b.name}: set how many one batch makes on the Menu, or enter it in pieces below.
                 </p>
               ))}
               {notFound.map((n, i) => (
@@ -407,7 +450,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
               <div className="flex gap-2 items-stretch">
                 <select
                   value={row.recipeId}
-                  onChange={e => updateRow(i, { recipeId: e.target.value })}
+                  onChange={e => chooseItem(i, e.target.value)}
                   className={`${modalField(invalidRowIndex === i && !row.recipeId)} flex-1 min-w-0 font-semibold`}
                 >
                   <option value="" disabled>Select a recipe...</option>
@@ -418,7 +461,9 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
                 <QuantityStepper
                   value={row.quantity}
                   onChange={n => updateRow(i, { quantity: n })}
-                  invalid={invalidRowIndex === i && row.quantity < 1}
+                  invalid={invalidRowIndex === i && !(row.quantity > 0)}
+                  decimal
+                  label={row.inBatches ? 'Batches' : 'Pieces'}
                 />
                 {rows.length > 1 && (
                   <button
@@ -430,10 +475,18 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
                   </button>
                 )}
               </div>
-              {rows.length > 1 && row.recipeId && (
-                <div className="mt-1.5 px-1 font-mono text-[11px] text-muted">
-                  Material cost <span className="font-semibold text-ink">{currency.symbol}{rowCosts[i].toFixed(2)}</span>
-                </div>
+              {row.recipeId && (
+                <RowOutcome
+                  row={row}
+                  makes={batchMakesOf(menu, row.recipeId)}
+                  planned={plannedOf(menu, row)}
+                  cost={rowCosts[i]}
+                  showCost={rows.length > 1}
+                  money={money}
+                  invalid={invalidRowIndex === i}
+                  onBatches={b => setInBatches(i, b)}
+                  onMade={made => updateRow(i, { made })}
+                />
               )}
               {partUse[i].map(p => (
                 <div key={p.itemId} className={`mt-1 px-1 text-[11px] ${p.short ? 'text-amber-700 font-semibold' : 'text-muted'}`}>
@@ -464,78 +517,6 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
         />
       </div>
 
-      {/* Yield accountability (collapsible) — only meaningful for a single item; with
-          multiple items a single "sellable units" number can't represent
-          per-item waste. Use the Production Log's per-item Discard action
-          afterward for a multi-item session that had partial waste. */}
-      {rows.length === 1 && (
-        <div className="bg-stone-50 rounded-2xl">
-          <button
-            onClick={() => setShowYield(!showYield)}
-            aria-expanded={showYield}
-            className="w-full flex items-center justify-between gap-3 p-4 text-left"
-          >
-            <span className="flex items-center gap-3 min-w-0">
-              <span className="w-9 h-9 rounded-lg bg-white shadow-sm flex items-center justify-center text-primary shrink-0">
-                <Hourglass size={18} />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-ink">Yield &amp; waste accountability</span>
-                <span className="block text-xs text-muted">
-                  {showYield ? 'Account for trimming scrap or recipe variance' : '+ Add yield info (account for waste)'}
-                </span>
-              </span>
-            </span>
-            <span className="flex items-center gap-2 shrink-0">
-              {showYield && yieldPct !== null && (
-                <span
-                  className={`font-mono text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                    yieldPct >= 100 ? 'bg-margin/10 text-[#006143]' : 'bg-amber-100 text-amber-700'
-                  }`}
-                >
-                  {yieldPct >= 100 ? '100% target met' : `${yieldPct.toFixed(0)}% yield`}
-                </span>
-              )}
-              {showYield ? <ChevronUp size={16} className="text-muted" /> : <ChevronDown size={16} className="text-muted" />}
-            </span>
-          </button>
-          {showYield && (
-            <div className="px-4 pb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="bg-white rounded-xl px-3 py-2">
-                  <div className={`${MODAL_LABEL} !mb-0.5`}>Expected yield</div>
-                  <div className="font-mono text-lg font-semibold text-ink">{expected} <span className="text-xs font-normal text-muted">units</span></div>
-                </div>
-                <div className="bg-white rounded-xl px-3 py-2">
-                  <label htmlFor="sellable-units" className={`${MODAL_LABEL} !mb-0.5`}>Sellable units (after waste)</label>
-                  <input
-                    id="sellable-units"
-                    type="number"
-                    min={0}
-                    max={expected}
-                    value={yieldQty}
-                    onChange={e => setYieldQty(e.target.value === '' ? '' : parseInt(e.target.value))}
-                    placeholder={`Max: ${expected}`}
-                    className="w-full bg-transparent font-mono text-lg font-semibold text-ink outline-none placeholder:text-stone-300 placeholder:font-normal placeholder:text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                  />
-                </div>
-                <div className="bg-white rounded-xl px-3 py-2">
-                  <div className={`${MODAL_LABEL} !mb-0.5`}>Waste</div>
-                  <div className={`font-mono text-lg font-semibold ${waste > 0 ? 'text-amber-600' : 'text-ink'}`}>
-                    {waste} <span className="text-xs font-normal text-muted">units</span>
-                  </div>
-                </div>
-              </div>
-              {waste > 0 && (
-                <p className="text-xs text-amber-700 mt-2 font-semibold">
-                  ⚠ {waste} unit(s) will be logged as waste
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Notes */}
       <div>
         <label className={MODAL_LABEL}>Notes (optional)</label>
@@ -564,5 +545,72 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
         </div>
       </div>
     </ModalShell>
+  );
+}
+
+/**
+ * Under a row: batches or pieces (for an item made in batches), what that comes to, and what actually came out, with what
+ * a short batch cost (utils/batches). Closed until asked for, unless the row is in batches, where it is the usual thing to
+ * fill in.
+ */
+function RowOutcome({ row, makes, planned, cost, showCost, money, invalid, onBatches, onMade }: {
+  row: ProductionRow;
+  makes?: number;
+  planned: number;
+  cost: number;
+  showCost: boolean;
+  money: (n: number) => string;
+  invalid: boolean;
+  onBatches: (inBatches: boolean) => void;
+  onMade: (made: string | undefined) => void;
+}) {
+  const fmt = (n: number) => String(Math.round(n * 100) / 100);
+  const actual = row.made === undefined || row.made === '' || !Number.isFinite(Number(row.made)) ? null : Number(row.made);
+  const loss = actual === null ? 0 : runYieldLoss({ quantityProduced: planned, quantityYield: actual, costTotal: cost });
+  const diff = actual === null ? 0 : Math.round((actual - planned) * 100) / 100;
+  const toggle = (on: boolean, label: string) => (
+    <button
+      type="button" onClick={() => onBatches(on)} aria-pressed={!!row.inBatches === on}
+      className={`px-2.5 py-1 rounded-md font-semibold transition-colors ${!!row.inBatches === on ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+    >{label}</button>
+  );
+  return (
+    <div className="mt-1.5 px-1 space-y-1.5 text-[11px] text-muted">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {makes && (
+          <span className="inline-flex rounded-lg bg-stone-100 p-0.5" role="group" aria-label="Count in">
+            {toggle(true, 'Batches')}{toggle(false, 'Pieces')}
+          </span>
+        )}
+        {makes && row.inBatches && <span>Makes <span className="font-mono font-semibold text-ink">{fmt(planned)}</span> (one batch makes {fmt(makes)})</span>}
+        {showCost && <span className="font-mono">Material cost <span className="font-semibold text-ink">{money(cost)}</span></span>}
+        {row.made === undefined && (
+          <button type="button" onClick={() => onMade('')} className="font-semibold text-primary hover:text-primary-dark">+ Came out different?</button>
+        )}
+      </div>
+      {row.made !== undefined && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2">
+            <span>Actually made</span>
+            <input
+              type="text" inputMode="decimal" aria-label="Actually made"
+              value={row.made}
+              onChange={e => {
+                const t = e.target.value.replace(',', '.');
+                if (/^\d*\.?\d{0,2}$/.test(t)) onMade(t);
+              }}
+              placeholder={fmt(planned)}
+              className={`w-20 rounded-lg border bg-white px-2 py-1 text-right font-mono text-sm font-semibold text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 ${invalid && actual !== null ? 'border-coral' : 'border-stone-200'}`}
+            />
+            <span>pieces</span>
+          </label>
+          {diff < 0 && <span className="font-semibold text-amber-700">{fmt(-diff)} short · {money(loss)} lost in production</span>}
+          {diff > 0 && <span className="font-semibold text-[#006143]">{fmt(diff)} more than planned</span>}
+          {!row.inBatches && (
+            <button type="button" onClick={() => onMade(undefined)} className="text-muted hover:text-ink underline">As planned</button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

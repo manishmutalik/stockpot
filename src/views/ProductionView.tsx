@@ -9,6 +9,7 @@ import type { ProductionRun } from '../components/ProductionRunModal';
 import { MetricCard } from '../components/MetricCard';
 import { clusterProductionRunsBySession } from '../utils/productionRunClustering';
 import { effectiveRecipe } from '../utils/itemParts';
+import { actualCostPerUnit } from '../utils/batches';
 import { daysBetween, getWorstUrgencyForItem } from '../utils/stockAging';
 import { getOldestBatchDate, getRunStatus, getYieldInfo, sellableOf, summarizeProduction } from '../utils/productionStats';
 
@@ -56,6 +57,9 @@ const ProductionRunRow: React.FC<{
   const recipe = menu.find(m => m.id === run.recipeId);
   const sellable = sellableOf(run);
   const { percent, waste } = getYieldInfo(run);
+  const extra = Math.max(0, sellable - (run.quantityProduced || 0));
+  const perPiece = actualCostPerUnit(run);
+  const fmt = (n: number) => String(Math.round(n * 100) / 100);
   const status = getRunStatus(run, today);
   const remaining = run.remainingQuantity ?? 0;
   // A due/expired date only matters while there is still stock from the batch.
@@ -85,18 +89,24 @@ const ProductionRunRow: React.FC<{
           )}
         </td>
       )}
-      <td className="px-4 py-3 text-right font-mono text-sm font-semibold text-ink whitespace-nowrap">{run.quantityProduced}</td>
+      <td className="px-4 py-3 text-right font-mono text-sm font-semibold text-ink whitespace-nowrap">
+        {fmt(run.quantityProduced)}
+        {run.batches ? <div className="font-mono text-[11px] font-normal text-muted">{fmt(run.batches)} {run.batches === 1 ? 'batch' : 'batches'}</div> : null}
+      </td>
       <td className="px-4 py-3 text-right whitespace-nowrap">
         <span
           className={`inline-flex items-center px-2.5 py-1 rounded-full font-mono text-[10px] font-semibold tracking-wide ${
             waste > 0 ? 'bg-coral/10 text-coral' : 'bg-margin/10 text-[#006143]'
           }`}
-          title={waste > 0 ? `${sellable} of ${run.quantityProduced} sellable` : 'Everything produced was sellable'}
+          title={waste > 0 ? `${fmt(sellable)} of ${fmt(run.quantityProduced)} sellable` : extra > 0 ? `${fmt(sellable)} came out of ${fmt(run.quantityProduced)} planned` : 'Everything produced was sellable'}
         >
-          {waste > 0 ? `${Math.round(percent)}% · -${waste} waste` : '100% yield'}
+          {waste > 0 ? `${Math.round(percent)}% · -${fmt(waste)} waste` : extra > 0 ? `+${fmt(extra)} more` : '100% yield'}
         </span>
       </td>
-      <td className="px-4 py-3 text-right font-mono text-sm font-semibold text-ink whitespace-nowrap">{money(run.costTotal || 0)}</td>
+      <td className="px-4 py-3 text-right font-mono text-sm font-semibold text-ink whitespace-nowrap">
+        {money(run.costTotal || 0)}
+        {perPiece !== null && (waste > 0 || extra > 0 || run.batches) ? <div className="font-mono text-[11px] font-normal text-muted">{money(perPiece)} / piece</div> : null}
+      </td>
       <td className={`px-4 py-3 font-mono text-xs whitespace-nowrap ${expiryTone}`}>
         {run.expiryDate ? new Date(run.expiryDate + 'T00:00:00').toLocaleDateString() : '—'}
         {remaining > 0 && expiryDays !== null && expiryDays < 0 && <span className="ml-1">(Expired)</span>}

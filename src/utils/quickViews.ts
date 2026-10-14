@@ -85,6 +85,8 @@ export function buildToday(input: {
   wastageLogs: WastageLog[];
   /** Runs whose use-by date is near (and any that passed recently). */
   productionRuns: ProductionRun[];
+  /** Runs made today, for what came out short (utils/batches). Absent: none counted. */
+  runsToday?: ProductionRun[];
 }): TodayView {
   const { today, settings, currency, orders, menu, materials } = input;
   const money = (n: number) => formatAmount(n, currency);
@@ -119,7 +121,7 @@ export function buildToday(input: {
   ].sort((a, b) => a.daysLeft - b.daysLeft);
 
   const fin = financialsForRange({
-    orders, menu, materials, experiments: input.experiments, wastageLogs: input.wastageLogs,
+    orders, menu, materials, experiments: input.experiments, wastageLogs: input.wastageLogs, productionRuns: input.runsToday,
     settings: { ...settings, fixedCosts: settings.fixedCosts }, start: today, end: today, today,
   });
   const todayFigures = { revenue: round2(fin.income), trueProfit: round2(fin.trueProfit), orderCount: fin.orderCount };

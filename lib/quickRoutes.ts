@@ -20,6 +20,7 @@ import type { NextFunction, Response } from 'express';
 import type { AuthedRequest } from './auth';
 import { parseIdempotencyKey, withIdempotency, type QuickDb, type QuickDoc, type QuickTx, type StoredResult } from './quickDb';
 import { effectiveRecipe, MAX_PART_DEPTH, partsOf } from '../src/utils/itemParts';
+import { MAX_YIELD_OVER } from '../src/utils/batches';
 import { planOrderGroup, planRestock, planProductionSession, planHandOver, planMarkPaid, planDismissClaim, planMarkBillSent, hasPaymentClaim, collapseWrites, productionRunCost } from '../src/utils/plans';
 import type { OrderGroupCommon, OrderLineItem, PlanError, ProductionRunInput } from '../src/utils/plans';
 import { enterableUnits } from '../src/utils/conversions';
@@ -35,7 +36,7 @@ import type { PaymentSetupView } from '../src/utils/quickApiTypes';
 import { EXPO_PUSH_TOKEN, readNotificationSettings, withNotificationDefaults } from '../src/utils/quickNotifications';
 import { clusterOrdersByGroup } from '../src/utils/orderClustering';
 import { addDays, todayInZone } from '../src/utils/localDate';
-import type { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../src/types';
+import type { BakerySettings, MenuItem, Order, PaymentMethod, ProductionRun, RawMaterial } from '../src/types';
 
 export interface QuickRouteDeps {
   db: QuickDb;
@@ -151,7 +152,7 @@ export function readRestockBody(body: unknown): Read<{ lines: RestockLine[] }> {
   return { ok: true, value: { lines } };
 }
 
-interface ProductionRow { recipeId: string; quantityProduced: number; quantityYield?: number; notes?: string }
+interface ProductionRow { recipeId: string; quantityProduced: number; quantityYield?: number; batches?: number; notes?: string }
 
 export function readProductionBody(body: unknown): Read<{ date?: string; rows: ProductionRow[] }> {
   if (!isObject(body) || !Array.isArray(body.rows)) return bad('Send { rows }.');
@@ -161,12 +162,14 @@ export function readProductionBody(body: unknown): Read<{ date?: string; rows: P
   for (const r of body.rows) {
     if (!isObject(r) || typeof r.recipeId !== 'string' || !ID.test(r.recipeId)) return bad('Each item needs a recipeId.');
     if (!isPositive(r.quantityProduced, 1_000_000)) return bad('Each item needs a quantity above nothing.');
-    if (r.quantityYield !== undefined && !(typeof r.quantityYield === 'number' && Number.isFinite(r.quantityYield) && r.quantityYield >= 0 && r.quantityYield <= r.quantityProduced)) {
-      return bad('The yield must be between nothing and the quantity made.');
+    // What came out may be less than planned (burnt, broken) or a little more (a batch that went further): not wildly more.
+    if (r.quantityYield !== undefined && !(typeof r.quantityYield === 'number' && Number.isFinite(r.quantityYield) && r.quantityYield >= 0 && r.quantityYield <= r.quantityProduced * MAX_YIELD_OVER)) {
+      return bad(`What came out must be between nothing and ${MAX_YIELD_OVER} times what the ingredients were for.`);
     }
+    if (r.batches !== undefined && !isPositive(r.batches, 10_000)) return bad('The number of batches must be above nothing.');
     const notes = text(r.notes, 500);
     if (notes === null) return bad('The notes are too long.');
-    rows.push({ recipeId: r.recipeId, quantityProduced: r.quantityProduced, ...(r.quantityYield !== undefined && { quantityYield: r.quantityYield }), ...(notes && { notes }) });
+    rows.push({ recipeId: r.recipeId, quantityProduced: r.quantityProduced, ...(r.quantityYield !== undefined && { quantityYield: r.quantityYield }), ...(r.batches !== undefined && { batches: r.batches }), ...(notes && { notes }) });
   }
   return { ok: true, value: { ...(body.date && { date: body.date }), rows } };
 }
@@ -313,6 +316,7 @@ export function createQuickProductionHandler(deps: QuickRouteDeps) {
         recipeId: r.recipeId,
         quantityProduced: r.quantityProduced,
         quantityYield: r.quantityYield ?? r.quantityProduced,
+        ...(r.batches && { batches: r.batches }),
         date: day,
         notes: r.notes,
         // The material cost now, kept on the run, rounded to two decimals, as the web form does.
@@ -639,7 +643,7 @@ const merge = (...lists: QuickDoc[][]) => [...new Map(lists.flat().map(d => [d.i
 
 /** What the Today screen shows, read inside the caller's transaction. Also what the notification job summarises, so they cannot disagree. */
 export async function loadTodayView(tx: QuickTx, { today, settings }: { today: string; settings: Partial<BakerySettings> & { currency?: { code: string; symbol: string } } }) {
-  const [dated, cancelled, unpaid, preorders, menu, materials, experiments, wastageLogs, productionRuns] = await Promise.all([
+  const [dated, cancelled, unpaid, preorders, menu, materials, experiments, wastageLogs, productionRuns, runsToday] = await Promise.all([
     tx.where('orders', 'date', today),
     tx.where('orders', 'cancelledOn', today),
     tx.where('orders', 'paymentStatus', 'unpaid'),
@@ -650,12 +654,15 @@ export async function loadTodayView(tx: QuickTx, { today, settings }: { today: s
     tx.where('wastageLogs', 'date', today),
     // Batches whose use-by date is near or recently passed.
     tx.range('productionRuns', 'expiryDate', addDays(today, -30), addDays(today, USE_BY_SOON_DAYS)),
+    // Today's runs, for what came out short in today's profit.
+    tx.where('productionRuns', 'date', today),
   ]);
   return buildToday({
     today, settings, currency: currencyOf(settings),
     orders: merge(dated, cancelled, unpaid, preorders) as unknown as Order[],
     menu: menu as unknown as MenuItem[], materials: materials as unknown as RawMaterial[],
     experiments: experiments as any, wastageLogs: wastageLogs as any, productionRuns: productionRuns as any,
+    runsToday: runsToday as unknown as ProductionRun[],
   });
 }
 

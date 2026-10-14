@@ -24,7 +24,7 @@ The three rules (stated in the file's header):
 
 ### What `financialsForRange` returns
 
-`financialsForRange({orders, menu, materials, experiments, wastageLogs, settings, start, end, today})` returns a
+`financialsForRange({orders, menu, materials, experiments, wastageLogs, productionRuns, settings, start, end, today})` returns a
 `Financials` object. The important fields:
 
 | Field | Meaning |
@@ -33,11 +33,12 @@ The three rules (stated in the file's header):
 | `orderExpenses`, `packagingExpenses` | Ingredient and packaging cost of what was sold (from the stamp) |
 | `deliveryExpenses` | Courier fees |
 | `wastageExpenses`, `experimentExpenses` | Discarded stock; R&D Lab spend |
+| `productionLoss` | What runs in the range came out short of, at their planned cost per piece (negative for a gain); `utils/batches` |
 | `gstCollected`, `gstPaid` | Output GST on sales; input GST contained in costs |
 | `paymentFees` | Fees on payments received (including on advances that were kept) |
 | `fixedCosts` | Monthly fixed costs, prorated by day to the range, **up to today** (like sales; see below) |
 | `forfeitedAdvances` | Advances kept from cancelled pre-orders: income on the cancellation date |
-| `profit` | Income (plus kept advances) less ingredients, packaging, courier and wastage. Shown as **Profit before overheads** |
+| `profit` | Income (plus kept advances) less ingredients, packaging, courier, wastage and production loss. Shown as **Profit before overheads** |
 | `trueProfit` | `profit` less payment fees and fixed costs: **what the business really made**, the Dashboard's headline |
 | `unpaidIncome` | The part of income still waiting to be paid |
 | `estimated` | True if any order in range predates stamping |
@@ -186,7 +187,21 @@ An item's `parts` lists other items that go into one of it (a sponge base in a c
 `wouldLoop` keeps an item from containing itself (the editor and `setItemParts` both check); flattening also stops after
 `MAX_PART_DEPTH`. The phone's server loads an item's parts with `itemsWithParts` before costing or making it.
 
-## 4.9 Rules of thumb when changing money code
+## 4.9 Batches and actual yield: `src/utils/batches.ts`
+
+An item's `batchMakes` says how many one batch makes; its recipe stays per one, so a batch is `batchMakes` of it. A run
+records what its ingredients were for (`quantityProduced`, from `expectedUnits(batches, batchMakes)` when logged in
+batches) and what came out (`quantityYield`, which goes on the shelf). Sold items carry the planned cost per piece (the
+order stamp), so margins stay steady; the difference is its own cost, `runYieldLoss` (planned less actual, times
+`costTotal / quantityProduced`; negative for a gain), summed by `productionLossForRange` in `financialsForRange` and shown as
+**Lost in production**. Together they add up to what was spent.
+
+`batchYield` averages an item's last `BATCH_HISTORY` runs in batches; `rescaleForBatchSize` makes the average the new size
+while one batch keeps the same ingredients (the per-piece recipe and parts scale by old ÷ new), which is what the Menu's
+**Use X** does (`useMenuActions.setBatchSize`, `keep-batch`). `from-whole-batch` divides a recipe typed for the whole batch.
+Validators allow a yield up to `MAX_YIELD_OVER` (3) times what was planned.
+
+## 4.10 Rules of thumb when changing money code
 
 - Add the figure to `profit.ts`/`pricing.ts`/`billing.ts` with a test; do not compute it in a component or route.
 - If it changes what is *written*, change the plan (both web and phone follow), not the hook.

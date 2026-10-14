@@ -267,8 +267,8 @@ const RecipeCard: React.FC<{
             <div className="grid sm:grid-cols-3 gap-3">
               <div>
                 <label className={MODAL_LABEL} htmlFor={`${recipe.key}-makes`}>One batch makes</label>
-                <input id={`${recipe.key}-makes`} inputMode="numeric" value={recipe.makes ?? ''} placeholder="How many?"
-                  onChange={e => set(r => { const n = num(e.target.value); r.makes = n && Number.isInteger(n) ? n : null; })} className={modalField(!recipe.makes)} />
+                <input id={`${recipe.key}-makes`} inputMode="decimal" value={recipe.makes ?? ''} placeholder="How many?"
+                  onChange={e => set(r => { const n = num(e.target.value); r.makes = n && n > 0 ? n : null; })} className={modalField(!recipe.makes)} />
                 {recipe.makesAsWritten && <p className="text-[11px] text-muted mt-1">Written: “{recipe.makesAsWritten}”</p>}
               </div>
               {existing ? (

@@ -8,8 +8,9 @@ const menu = [
   { id: 'croissant', name: 'Butter Croissant' },
   { id: 'muffin', name: 'Chocolate Muffin' },
   { id: 'loaf', name: 'Whole Wheat Atta Loaf' },
+  { id: 'base', name: 'Sponge Base', batchMakes: 4.5 },
 ];
-const line = (over: Record<string, unknown> = {}) => ({ nameAsWritten: 'croissants', menuItemId: 'croissant', quantity: 40, wasteUnits: null, ...over });
+const line = (over: Record<string, unknown> = {}) => ({ nameAsWritten: 'croissants', menuItemId: 'croissant', quantity: 40, unit: 'pieces', wasteUnits: null, madeUnits: null, ...over });
 const reading = (over: Record<string, unknown> = {}) => ({ lineItems: [line()], when: null, notes: null, ...over });
 const check = (raw: unknown, text: string) => validateParsedProduction(raw, { text, menuIds });
 const problemsOf = (raw: unknown, text: string) => { const r = check(raw, text); return r.ok === false ? r.problems : []; };
@@ -18,7 +19,7 @@ describe('PRODUCTION_SCHEMA', () => {
   it('has every field present, null meaning "not in the message", and no extras', () => {
     expect(PRODUCTION_SCHEMA.required).toEqual(['lineItems', 'when', 'notes']);
     expect(PRODUCTION_SCHEMA.additionalProperties).toBe(false);
-    expect(PRODUCTION_SCHEMA.properties.lineItems.items.required).toEqual(['nameAsWritten', 'menuItemId', 'quantity', 'wasteUnits']);
+    expect(PRODUCTION_SCHEMA.properties.lineItems.items.required).toEqual(['nameAsWritten', 'menuItemId', 'quantity', 'unit', 'wasteUnits', 'madeUnits']);
   });
 });
 
@@ -42,6 +43,17 @@ describe('validateParsedProduction', () => {
       ok: true,
       parsed: { lineItems: [{ nameAsWritten: 'croissants', menuItemId: 'croissant', quantity: 40, wasteUnits: 3 }, { nameAsWritten: 'muffins', menuItemId: 'muffin', quantity: 24 }], when: 'this morning' },
     });
+  });
+
+  it('reads batches and what came out, when the note says them', () => {
+    const r = check(reading({ lineItems: [line({ nameAsWritten: 'sponge', menuItemId: 'croissant', quantity: 2, unit: 'batches', madeUnits: 9 })] }), 'made 2 batches of sponge, got 9');
+    expect(r).toEqual({ ok: true, parsed: { lineItems: [{ nameAsWritten: 'sponge', menuItemId: 'croissant', quantity: 2, inBatches: true, madeUnits: 9 }] } });
+  });
+
+  it('refuses batches the note does not say, and a count that came out that is not written', () => {
+    expect(problemsOf(reading({ lineItems: [line({ unit: 'batches' })] }), text)).toEqual([expect.stringMatching(/does not say batches/)]);
+    expect(problemsOf(reading({ lineItems: [line({ madeUnits: 38 })] }), text)).toEqual([expect.stringMatching(/38 that came out is not written/)]);
+    expect(problemsOf(reading({ lineItems: [line({ unit: 'dozens' })] }), text)).toEqual([expect.stringMatching(/unit must be/)]);
   });
 
   it('accepts an item that is not on the menu, with a null id', () => {
@@ -155,18 +167,12 @@ describe('buildProductionForm', () => {
     expect(f.rows).toEqual([{ recipeId: 'croissant', quantity: 40 }]);
   });
 
-  it('works the sellable yield out from the waste for a single item (the model does no sums)', () => {
-    const f = build(parsed({ lineItems: [{ nameAsWritten: 'croissants', menuItemId: 'croissant', quantity: 40, wasteUnits: 3 }] }));
-    expect(f.yieldQty).toBe(37);
-    expect(f.unplacedWaste).toEqual([]);
-  });
-
-  it('cannot place waste for more than one item, so it says so by name', () => {
+  it('works what came out from the waste, for each item (the model does no sums)', () => {
     const f = build(parsed({
-      lineItems: [{ nameAsWritten: 'croissants', menuItemId: 'croissant', quantity: 40, wasteUnits: 3 }, { nameAsWritten: 'muffins', menuItemId: 'muffin', quantity: 24 }],
+      lineItems: [{ nameAsWritten: 'croissants', menuItemId: 'croissant', quantity: 40, wasteUnits: 3 }, { nameAsWritten: 'muffins', menuItemId: 'muffin', quantity: 24, wasteUnits: 2 }],
     }));
-    expect(f.yieldQty).toBeUndefined();
-    expect(f.unplacedWaste).toEqual([{ name: 'Butter Croissant', units: 3 }]);
+    expect(f.rows).toEqual([{ recipeId: 'croissant', quantity: 40, made: 37 }, { recipeId: 'muffin', quantity: 24, made: 22 }]);
+    expect(f.unplacedWaste).toEqual([]);
   });
 
   it('lists an item not on the menu with the closest menu item as a suggestion, and its waste as unplaced', () => {
@@ -174,15 +180,24 @@ describe('buildProductionForm', () => {
     expect(f.rows).toEqual([]);
     expect(f.notFound).toEqual([{ nameAsWritten: 'croisant', quantity: 12, suggestion: { id: 'croissant', name: 'Butter Croissant' } }]);
     expect(f.unplacedWaste).toEqual([{ name: 'croisant', units: 2 }]);
-    expect(f.yieldQty).toBeUndefined();
   });
 
-  it('does not set a yield for a single matched item when another item was not found', () => {
-    const f = build(parsed({
-      lineItems: [{ nameAsWritten: 'croissants', menuItemId: 'croissant', quantity: 40, wasteUnits: 3 }, { nameAsWritten: 'zzz', menuItemId: null, quantity: 5 }],
-    }));
-    expect(f.yieldQty).toBeUndefined();
-    expect(f.unplacedWaste).toEqual([{ name: 'Butter Croissant', units: 3 }]);
+  it('turns batches into pieces from what one batch makes, and keeps what came out', () => {
+    const f = build(parsed({ lineItems: [{ nameAsWritten: 'sponge', menuItemId: 'base', quantity: 2, inBatches: true, madeUnits: 8 }] }));
+    expect(f.rows).toEqual([{ recipeId: 'base', quantity: 9, batches: 2, made: 8 }]);
+  });
+
+  it('takes what came out over the waste, and leaves it out when it is as planned', () => {
+    expect(build(parsed({ lineItems: [{ nameAsWritten: 'c', menuItemId: 'croissant', quantity: 40, wasteUnits: 3, madeUnits: 36 }] })).rows[0].made).toBe(36);
+    expect(build(parsed({ lineItems: [{ nameAsWritten: 'c', menuItemId: 'croissant', quantity: 40, madeUnits: 40 }] })).rows[0]).toEqual({ recipeId: 'croissant', quantity: 40 });
+    expect(build(parsed({ lineItems: [{ nameAsWritten: 'c', menuItemId: 'croissant', quantity: 40, madeUnits: 42 }] })).rows[0].made).toBe(42);
+  });
+
+  it('cannot turn batches into pieces without a batch size, so it says so by name', () => {
+    const f = build(parsed({ lineItems: [{ nameAsWritten: 'muffins', menuItemId: 'muffin', quantity: 2, inBatches: true }, { nameAsWritten: 'cake', menuItemId: null, quantity: 1, inBatches: true }] }));
+    expect(f.rows).toEqual([]);
+    expect(f.notFound).toEqual([]);
+    expect(f.unplacedBatches).toEqual([{ name: 'Chocolate Muffin', batches: 2 }, { name: 'cake', batches: 1 }]);
   });
 
   it('says so when the date cannot be understood, and leaves it unset', () => {
@@ -192,6 +207,6 @@ describe('buildProductionForm', () => {
   });
 
   it('never gives a yield below zero', () => {
-    expect(build(parsed({ lineItems: [{ nameAsWritten: 'c', menuItemId: 'croissant', quantity: 3, wasteUnits: 3 }] })).yieldQty).toBe(0);
+    expect(build(parsed({ lineItems: [{ nameAsWritten: 'c', menuItemId: 'croissant', quantity: 3, wasteUnits: 3 }] })).rows[0].made).toBe(0);
   });
 });

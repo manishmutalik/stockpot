@@ -70,6 +70,16 @@ describe('GET /mobile/today', () => {
     expect(r.body.useBySoon).toEqual([{ kind: 'material', id: 'cream', name: 'Fresh Cream', date: '2026-10-07', daysLeft: 1 }]);
   });
 
+  it('takes off today\'s profit what today\'s batches came out short of', async () => {
+    const { mem, deps } = world();
+    mem.seed(UID, 'orders', 'sale1', order('sale1', { date: '2026-10-06', customerName: 'Walk-in' })); // ₹900, costs ₹70
+    mem.seed(UID, 'productionRuns', 'r1', { recipeId: 'muffin', date: '2026-10-06', quantityProduced: 10, quantityYield: 8, costTotal: 100, remainingQuantity: 8, createdAt: NOW });
+    mem.seed(UID, 'productionRuns', 'r0', { recipeId: 'muffin', date: '2026-10-05', quantityProduced: 10, quantityYield: 0, costTotal: 100, remainingQuantity: 0, createdAt: NOW });
+    const r = await get(createQuickTodayHandler(deps));
+    // Two muffins short at ₹10 each; yesterday's run is not today's.
+    expect(r.body.today).toEqual({ revenue: 900, trueProfit: 810, orderCount: 1 });
+  });
+
   it('pending payments leave out a pre-order that is not due yet, and a cancelled order is not a sale', async () => {
     const { mem, deps } = world();
     mem.seed(UID, 'orders', 'later', order('later', { preorder: true, date: '2026-10-20', paymentStatus: 'unpaid' }));

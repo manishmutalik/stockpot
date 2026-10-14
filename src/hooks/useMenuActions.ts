@@ -10,12 +10,13 @@
  * shared Firestore listener in App.tsx and passed in as read-only parameters
  * (same pattern as useSettings/useInventoryActions).
  */
-import { auth, db, doc, setDoc, deleteDoc } from '../firebase';
+import { auth, db, doc, setDoc, deleteDoc, deleteField } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { MenuItem, RawMaterial, Order, IngredientRequirement, ItemPart, QuickIngredient, getDefaultRecipeUnit } from '../types';
 import { needsBaselineStamp, pricingStamp } from '../utils/pricing';
 import { DEFAULT_TIME_ZONE, todayInZone } from '../utils/localDate';
 import { costView, itemsUsing, partsOf, wouldLoop } from '../utils/itemParts';
+import { rescaleForBatchSize } from '../utils/batches';
 
 export function useMenuActions(
   menu: MenuItem[],
@@ -300,9 +301,33 @@ export function useMenuActions(
     }
   };
 
+  /**
+   * How many one batch of the item makes (utils/batches); nothing clears it. The recipe stays per one item, unless:
+   *  - `keep-batch`: one batch still uses the same ingredients (it turned out to make 4.2, not 4.5), so the recipe and parts
+   *    are scaled to the new size;
+   *  - `from-whole-batch`: the recipe was written for the whole batch, so it is divided by the batch size.
+   */
+  const setBatchSize = async (itemId: string, makes: number | null, scale?: 'keep-batch' | 'from-whole-batch') => {
+    if (!auth.currentUser) return;
+    const userId = auth.currentUser.uid;
+    const item = menu.find(m => m.id === itemId);
+    if (!item) return;
+    const n = makes !== null && Number.isFinite(makes) && makes > 0 ? Math.round(makes * 1000) / 1000 : null;
+    const data = n === null ? { batchMakes: deleteField() }
+      : scale === 'keep-batch' ? rescaleForBatchSize(item, n)
+      : scale === 'from-whole-batch' ? rescaleForBatchSize({ ...item, batchMakes: 1 }, n)
+      : { batchMakes: n };
+    try {
+      await setDoc(doc(db, 'users', userId, 'menu', itemId), data, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/menu/${itemId}`);
+    }
+  };
+
   return {
     addMenuItem,
     setItemParts,
+    setBatchSize,
     updateMenuItem,
     updateMenuItemField,
     stampPricingBaselines,

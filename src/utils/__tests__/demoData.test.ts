@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { buildDemoData } from '../demoData';
 import { convertAmount } from '../conversions';
 import { financialsForRange, fixedCostsForRange } from '../profit';
+import { productionLossForRange, runYieldLoss } from '../batches';
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const TODAY = '2026-03-10';
 const demo = buildDemoData('uid1', TODAY);
@@ -229,8 +232,11 @@ describe('demo data adds up', () => {
   it('builds a cream cake on a sponge base made ahead, as the app would record it', () => {
     const base = byId(demo.menu, 'menu_base');
     expect(base.notForSale).toBe(true);
-    // 9 bases made, 3 went into cream cakes
-    expect(base.finishedGoodsStock).toBe(6);
+    // two batches of 4.5 planned 9 bases, 8 came out, 3 went into cream cakes
+    expect(base.batchMakes).toBe(4.5);
+    const baseRun = byId(demo.productionRuns, 'run_10');
+    expect(baseRun).toMatchObject({ batches: 2, quantityProduced: 9, quantityYield: 8 });
+    expect(base.finishedGoodsStock).toBe(5);
     const cakeRun = byId(demo.productionRuns, 'run_11');
     expect(cakeRun.partsUsed).toEqual([{ itemId: 'menu_base', quantity: 3 }]);
     // a base: 220g gel x 0.3 + 40ml oil x 0.15 = ₹72; the cake adds 150g cream x 0.4 + 100g pineapple x 0.12 = ₹72
@@ -238,5 +244,13 @@ describe('demo data adds up', () => {
     expect(cakeRun.costTotal).toBe(432);
     // the bases' gel came out when they were baked, not again with the cakes
     expect(byId(demo.materials, 'm_gel').initialStock).toBe(5000 - 9 * 220);
+  });
+
+  it('counts the base that did not come out as lost in production, in true profit', () => {
+    // The base batch (₹648 for 9) came out one short, and a muffin was lost at the bench.
+    const muffin = byId(demo.productionRuns, 'run_5');
+    const lost = runYieldLoss(byId(demo.productionRuns, 'run_10')) + runYieldLoss(muffin);
+    expect(runYieldLoss(byId(demo.productionRuns, 'run_10'))).toBe(72);
+    expect(productionLossForRange(demo.productionRuns, '2000-01-01', '2999-12-31')).toBe(round2(lost));
   });
 });

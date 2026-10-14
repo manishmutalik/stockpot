@@ -1,13 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ProductionRunModal } from '../ProductionRunModal';
+import type { ProductionParser } from '../../hooks/useProductionParser';
 
 const menu = [
   { id: 'cake', name: 'Cake', recipe: [], sellingPrice: 20 },
   { id: 'cookie', name: 'Cookie', recipe: [], sellingPrice: 5 },
 ];
 const currency = { symbol: '$' };
-const form = (over: Record<string, unknown> = {}) => ({ rows: [], notFound: [], unplacedWaste: [], ...over });
+const form = (over: Record<string, unknown> = {}) => ({ rows: [], notFound: [], unplacedWaste: [], unplacedBatches: [], ...over });
 
 function renderModal(parserForm: any | null, onSave = vi.fn().mockResolvedValue({ succeededCount: 1, failedIndex: null })) {
   const parse = vi.fn().mockResolvedValue({ ok: true, form: parserForm });
@@ -55,22 +56,36 @@ describe('filling the production form from a note', () => {
     expect(onSave.mock.calls[0][0]).toMatchObject([{ recipeId: 'cookie', quantityProduced: 12, quantityYield: 12, date: '2026-09-30' }]);
   });
 
-  it('fills the sellable yield from the waste for a single item, and saves it', async () => {
-    const { onSave } = renderModal(form({ rows: [{ recipeId: 'cookie', quantity: 12 }], yieldQty: 10 }));
+  it('fills what came out for each item, and saves it', async () => {
+    const { onSave } = renderModal(form({ rows: [{ recipeId: 'cookie', quantity: 12, made: 10 }] }));
     paste('Made 12 cookies, 2 burnt');
     await fill();
-    expect((screen.getByLabelText(/Sellable units/) as HTMLInputElement).value).toBe('10');
+    expect((screen.getByLabelText('Actually made') as HTMLInputElement).value).toBe('10');
     fireEvent.click(screen.getByRole('button', { name: 'Log Run' }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(onSave.mock.calls[0][0][0]).toMatchObject({ quantityProduced: 12, quantityYield: 10 });
   });
 
-  it('says where to record waste it cannot place, for several items', async () => {
-    renderModal(form({ rows: [{ recipeId: 'cookie', quantity: 12 }, { recipeId: 'cake', quantity: 2 }], unplacedWaste: [{ name: 'Cookie', units: 2 }] }));
-    paste('Made 12 cookies and 2 cakes, 2 cookies burnt');
+  it('says where to record waste it cannot place, and batches it cannot turn into pieces', async () => {
+    renderModal(form({ rows: [{ recipeId: 'cake', quantity: 2 }], unplacedWaste: [{ name: 'cookiez', units: 2 }], unplacedBatches: [{ name: 'Cookie', batches: 3 }] }));
+    paste('Made 3 batches of cookies and 2 cakes, 2 cookiez burnt');
     await fill();
-    expect(screen.getByText(/2 Cookie were wasted\. Waste is entered here only for a single item/)).toBeTruthy();
-    expect(screen.queryByLabelText(/Sellable units/)).toBeNull();
+    expect(screen.getByText(/2 cookiez were wasted\. Once the item is chosen and logged, record it with Discard/)).toBeTruthy();
+    expect(screen.getByText(/Left out 3 batches of Cookie: set how many one batch makes on the Menu/)).toBeTruthy();
+  });
+
+  it('fills a row in batches when the note gave batches', async () => {
+    const batchMenu = [{ id: 'base', name: 'Sponge Base', recipe: [], sellingPrice: 0, batchMakes: 4.5 }];
+    const onSave = vi.fn().mockResolvedValue({ succeededCount: 1, failedIndex: null });
+    const parse = vi.fn().mockResolvedValue({ ok: true, form: form({ rows: [{ recipeId: 'base', quantity: 9, batches: 2, made: 8 }] }) });
+    render(<ProductionRunModal isOpen onClose={vi.fn()} menu={batchMenu as unknown as typeof menu} materials={[]} onSave={onSave} currency={currency} productionParser={{ parse } as unknown as ProductionParser} />);
+    paste('2 batches of sponge, got 8');
+    await fill();
+    expect(quantities()).toEqual(['2']);
+    expect(screen.getByRole('button', { name: 'Batches', pressed: true })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Log Run' }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0][0]).toMatchObject({ quantityProduced: 9, quantityYield: 8, batches: 2 });
   });
 
   it('says so when the date could not be understood, and keeps today\'s', async () => {

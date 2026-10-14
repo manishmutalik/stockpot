@@ -12,7 +12,10 @@
  *  - Every quantity must be written in the message. Unlike an order, a bare
  *    "croissants" is not one croissant: a production quantity is never assumed.
  *  - Waste is the number the message states ("3 burnt"); the sellable yield
- *    (made minus waste) is worked out here, never by the model.
+ *    (made minus waste) is worked out here, never by the model. So is what came
+ *    out ("got 9"), when the message says it.
+ *  - "2 batches" is read as batches, and turned into pieces here from what the
+ *    item says one batch makes (utils/batches), never by the model.
  *  - Every name, phrase and note must be text that is in the message, and an item
  *    is only matched to a menu item that exists, otherwise it is shown as not
  *    found with the closest menu item as a suggestion.
@@ -24,6 +27,7 @@ import { redactPhones } from './aiPrivacy';
 import { addDays } from './localDate';
 import { quantityWritten, resolveWhen, squash, suggestMenuItem, type NotFoundItem } from './orderParse';
 import { resolveMenuItem } from './menuVariants';
+import { expectedUnits } from './batches';
 
 export const PRODUCTION_TEXT_MAX_CHARS = 1500;
 export const PRODUCTION_MAX_ITEMS = 15;
@@ -44,9 +48,11 @@ export const PRODUCTION_SCHEMA = {
           nameAsWritten: { type: 'string' },
           menuItemId: nullable({ type: 'string' }),
           quantity: { type: 'integer' },
+          unit: { type: 'string', enum: ['pieces', 'batches'] },
           wasteUnits: nullable({ type: 'integer' }),
+          madeUnits: nullable({ type: 'integer' }),
         },
-        required: ['nameAsWritten', 'menuItemId', 'quantity', 'wasteUnits'],
+        required: ['nameAsWritten', 'menuItemId', 'quantity', 'unit', 'wasteUnits', 'madeUnits'],
         additionalProperties: false,
       },
     },
@@ -61,10 +67,14 @@ export interface ParsedProductionLine {
   nameAsWritten: string;
   /** A menu item id from the list that was sent, or null when the item was not found on the menu. */
   menuItemId: string | null;
-  /** How many were made, as written in the message. */
+  /** How many were made, as written in the message: pieces, or batches when `inBatches`. */
   quantity: number;
+  /** The quantity is batches ("2 batches of sponge"), not pieces. */
+  inBatches?: true;
   /** How many of them were wasted (burnt, dropped, discarded), as written. Absent when the message does not say. */
   wasteUnits?: number;
+  /** How many pieces actually came out ("got 9", "came out 9"), as written. Absent when the message does not say. */
+  madeUnits?: number;
 }
 
 /** What was read from the message, checked. Absent when the message does not say. */
@@ -125,16 +135,31 @@ export function validateParsedProduction(raw: unknown, input: { text: string; me
       else if (!quantitySupported(q, input.text, li.nameAsWritten)) problems.push(`item ${n}: the quantity ${q} is not written in the message (do not assume a quantity)`);
       else quantityOk = true;
 
+      const unit = orNull(li.unit) ?? 'pieces';
+      if (unit !== 'pieces' && unit !== 'batches') problems.push(`item ${n}: unit must be "pieces" or "batches"`);
+      else if (unit === 'batches' && !/\bbatch(es)?\b/i.test(input.text)) problems.push(`item ${n}: the note does not say batches`);
+      const inBatches = unit === 'batches';
+
       const waste = orNull(li.wasteUnits) as number | null;
       let wasteUnits: number | undefined;
       if (waste !== null) {
         if (!Number.isInteger(waste) || waste < 1) problems.push(`item ${n}: wasteUnits must be a whole number of at least 1, or null`);
-        else if (quantityOk && waste > q) problems.push(`item ${n}: wasteUnits ${waste} is more than the quantity made`);
+        else if (quantityOk && !inBatches && waste > q) problems.push(`item ${n}: wasteUnits ${waste} is more than the quantity made`);
         else if (!quantityWritten(waste, input.text)) problems.push(`item ${n}: the waste ${waste} is not written in the message`);
         else wasteUnits = waste;
       }
-      if (typeof li.nameAsWritten === 'string' && (id === null || (typeof id === 'string' && menuIds.has(id))) && quantityOk) {
-        parsed.lineItems.push({ nameAsWritten: li.nameAsWritten.trim(), menuItemId: id as string | null, quantity: q, ...(wasteUnits !== undefined && { wasteUnits }) });
+      const made = orNull(li.madeUnits) as number | null;
+      let madeUnits: number | undefined;
+      if (made !== null) {
+        if (!Number.isInteger(made) || made < 0 || made > PRODUCTION_MAX_QUANTITY) problems.push(`item ${n}: madeUnits must be a whole number, or null`);
+        else if (!quantityWritten(made, input.text)) problems.push(`item ${n}: the ${made} that came out is not written in the message`);
+        else madeUnits = made;
+      }
+      if (typeof li.nameAsWritten === 'string' && (id === null || (typeof id === 'string' && menuIds.has(id))) && quantityOk && (unit === 'pieces' || unit === 'batches')) {
+        parsed.lineItems.push({
+          nameAsWritten: li.nameAsWritten.trim(), menuItemId: id as string | null, quantity: q,
+          ...(inBatches && { inBatches: true as const }), ...(wasteUnits !== undefined && { wasteUnits }), ...(madeUnits !== undefined && { madeUnits }),
+        });
       }
     });
   }
@@ -185,39 +210,57 @@ export function resolveProductionDate(phrase: string, today: string): string | n
 
 // ── From the reading to the form ─────────────────────────────────────────────
 
-/** Waste the form has no place for (more than one item, or an item not on the menu): shown to the owner to record another way. */
+/** Waste the form has no place for (an item not on the menu): shown to the owner to record another way. */
 export interface UnplacedWaste { name: string; units: number }
+
+/** A row of the form: pieces planned (`quantity`), the batches they came from, and what came out when it differed. */
+export interface ProductionFillRow {
+  recipeId: string;
+  /** Pieces the ingredients were for: as written, or batches × what one batch makes. */
+  quantity: number;
+  /** Batches, when the note gave them. */
+  batches?: number;
+  /** Pieces that came out, when the note says ("got 9") or gives waste (made less the waste). Worked out here. */
+  made?: number;
+}
 
 /** Everything the Log Production Run form is pre-filled with, and what to tell the owner to check. */
 export interface ProductionFormFill {
-  rows: { recipeId: string; quantity: number }[];
+  rows: ProductionFillRow[];
   notFound: NotFoundItem[];
   date?: string;
   /** The phrase the date was read from, when it could not be worked out. */
   dateNotUnderstood?: string;
   notes?: string;
-  /** Sellable units after waste: made minus the waste written, for a single item. Worked out here. */
-  yieldQty?: number;
   unplacedWaste: UnplacedWaste[];
+  /** Batches the form cannot turn into pieces: the item does not say what one batch makes, or is not on the menu. */
+  unplacedBatches: { name: string; batches: number }[];
 }
 
 /**
  * Turns the checked reading into form values. The same item written twice is one row with the quantities added.
- * For a single item with waste written, the sellable yield is that quantity minus the waste. With several items the
- * form cannot hold per-item waste, so it is listed for the owner to record with Discard in the Production Log.
+ * Batches become pieces from the item's batch size. What came out is the number written ("got 9"), or the quantity less
+ * the waste written.
  */
-export function buildProductionForm(input: { parsed: ParsedProduction; menu: { id: string; name: string }[]; today: string; askAboutVariants?: boolean }): ProductionFormFill {
+export function buildProductionForm(input: { parsed: ParsedProduction; menu: { id: string; name: string; batchMakes?: number }[]; today: string; askAboutVariants?: boolean }): ProductionFormFill {
   const { parsed, menu, today } = input;
-  const fill: ProductionFormFill = { rows: [], notFound: [], unplacedWaste: [] };
+  const fill: ProductionFormFill = { rows: [], notFound: [], unplacedWaste: [], unplacedBatches: [] };
 
-  const rows = new Map<string, { quantity: number; waste: number }>();
+  const rows = new Map<string, { quantity: number; batches: number; waste: number; made?: number }>();
   for (const li of parsed.lineItems) {
     const resolved = input.askAboutVariants ? resolveMenuItem(li.nameAsWritten, menu) : { kind: 'keep' as const };
     const matched = resolved.kind === 'item' ? resolved.id : resolved.kind === 'keep' && li.menuItemId && menu.some(m => m.id === li.menuItemId) ? li.menuItemId : null;
+    const batchMakes = matched ? menu.find(m => m.id === matched)?.batchMakes : undefined;
+    if (li.inBatches && !(matched && batchMakes && batchMakes > 0)) {
+      fill.unplacedBatches.push({ name: matched ? menu.find(m => m.id === matched)!.name : li.nameAsWritten, batches: li.quantity });
+      continue;
+    }
     if (matched) {
-      const row = rows.get(matched) ?? { quantity: 0, waste: 0 };
-      row.quantity += li.quantity;
+      const row = rows.get(matched) ?? { quantity: 0, batches: 0, waste: 0 };
+      row.quantity += li.inBatches ? expectedUnits(li.quantity, batchMakes!) : li.quantity;
+      if (li.inBatches) row.batches += li.quantity;
       row.waste += li.wasteUnits ?? 0;
+      if (li.madeUnits !== undefined) row.made = (row.made ?? 0) + li.madeUnits;
       rows.set(matched, row);
     } else {
       fill.notFound.push({
@@ -228,14 +271,10 @@ export function buildProductionForm(input: { parsed: ParsedProduction; menu: { i
       if (li.wasteUnits) fill.unplacedWaste.push({ name: li.nameAsWritten, units: li.wasteUnits });
     }
   }
-  fill.rows = [...rows].map(([recipeId, r]) => ({ recipeId, quantity: r.quantity }));
-
-  const single = fill.rows.length === 1 && fill.notFound.length === 0;
-  for (const [id, r] of rows) {
-    if (r.waste <= 0) continue;
-    if (single) fill.yieldQty = Math.max(r.quantity - r.waste, 0);
-    else fill.unplacedWaste.push({ name: menu.find(m => m.id === id)?.name ?? 'an item', units: r.waste });
-  }
+  fill.rows = [...rows].map(([recipeId, r]) => {
+    const made = r.made ?? (r.waste > 0 ? Math.max(r.quantity - r.waste, 0) : undefined);
+    return { recipeId, quantity: r.quantity, ...(r.batches > 0 && { batches: r.batches }), ...(made !== undefined && made !== r.quantity && { made }) };
+  });
 
   if (parsed.when) {
     const date = resolveProductionDate(parsed.when, today);

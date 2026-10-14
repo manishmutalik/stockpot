@@ -271,6 +271,7 @@ export function draftToImport(draft: RecipeDraft, materials: DraftMaterial[], me
         ? { kind: 'new', name: r.name.trim(), ...(r.sellingPrice && r.sellingPrice > 0 && { sellingPrice: r.sellingPrice }) }
         : { kind: 'existing', menuItemId: r.target.menuItemId, mode: r.target.mode },
       lines: linesOf(r),
+      ...(r.makes && r.makes > 0 && { batchMakes: r.makes }),
     };
     items.push(item);
     byRecipe.set(`recipe:${r.key}`, item);

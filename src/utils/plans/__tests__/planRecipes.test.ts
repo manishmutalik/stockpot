@@ -38,6 +38,18 @@ describe('planImportRecipes', () => {
       .toEqual([{ materialId: 's', amount: 12.5, unit: 'g' }, { materialId: 'f', amount: 5, unit: 'g' }]);
   });
 
+  it('keeps what one batch makes on a new item, or one whose recipe it replaces, but not when it only adds', () => {
+    const line = { material: { existingId: 'm_flour' }, amount: 15, unit: 'g' };
+    const made = planImportRecipes({ ...base, ctx: ctx(), items: [{ target: { kind: 'new', name: 'Sponge base' }, lines: [line], batchMakes: 4.5 }] });
+    expect(made.ok === true && made.writes[0].data).toMatchObject({ name: 'Sponge base', batchMakes: 4.5 });
+    const one = planImportRecipes({ ...base, ctx: ctx(), items: [{ target: { kind: 'new', name: 'Big cake' }, lines: [line], batchMakes: 1 }] });
+    expect(one.ok === true && 'batchMakes' in one.writes[0].data).toBe(false);
+    const replaced = planImportRecipes({ ...base, ctx: ctx(), items: [{ target: { kind: 'existing', menuItemId: 'menu_muffin', mode: 'replace' }, lines: [line], batchMakes: 12 }] });
+    expect(replaced.ok === true && replaced.writes[0].data).toMatchObject({ batchMakes: 12 });
+    const added = planImportRecipes({ ...base, ctx: ctx(), items: [{ target: { kind: 'existing', menuItemId: 'menu_muffin', mode: 'add' }, lines: [line], batchMakes: 12 }] });
+    expect(added.ok === true && 'batchMakes' in added.writes[0].data).toBe(false);
+  });
+
   it('replaces or adds to an existing item\'s recipe, touching only its recipe', () => {
     const line = { material: { existingId: 'm_flour' }, amount: 15, unit: 'g' };
     const replaced = planImportRecipes({ ...base, ctx: ctx(), items: [{ target: { kind: 'existing', menuItemId: 'menu_muffin', mode: 'replace' }, lines: [line] }] });

@@ -94,7 +94,7 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
           {recipe.use.kind === 'sell' && (
             <View style={{ gap: 12 }}>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-                <NumberField key={`${recipe.key}-makes`} label="One batch makes" value={recipe.makes} placeholder="How many?" integer flagged={!recipe.makes}
+                <NumberField key={`${recipe.key}-makes`} label="One batch makes" value={recipe.makes} placeholder="How many?" flagged={!recipe.makes}
                   onChange={n => set(r => { r.makes = n; })} />
                 {recipe.target.kind === 'new' && (
                   <NumberField key={`${recipe.key}-price`} label="Selling price (optional)" value={recipe.sellingPrice} suffix={symbol}

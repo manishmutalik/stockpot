@@ -9,6 +9,7 @@ vi.mock('../../firebase', () => ({
   doc: vi.fn((...args: unknown[]) => ({ path: args.slice(1).join('/') })),
   setDoc: (...args: unknown[]) => setDoc(...args),
   deleteDoc: (...args: unknown[]) => deleteDoc(...args),
+  deleteField: () => 'DELETE',
 }));
 
 import { useMenuActions } from '../useMenuActions';
@@ -56,5 +57,23 @@ describe('parts in the menu actions', () => {
     setDoc.mockClear();
     await h.updateMenuItemField('cake', 'sellingPrice', 950);
     expect(setDoc.mock.calls[0][1]).toMatchObject({ costAtPricing: 60, materialCostsAtPricing: { gel: 300 } });
+  });
+
+  it('sets what one batch makes, keeping the recipe per one, or clears it', async () => {
+    const { h } = setup([{ ...base, batchMakes: 4.5 }, cake]);
+    await h.setBatchSize('base', 5);
+    expect(setDoc).toHaveBeenLastCalledWith({ path: 'users/user1/menu/base' }, { batchMakes: 5 }, { merge: true });
+    await h.setBatchSize('base', null);
+    expect(setDoc).toHaveBeenLastCalledWith({ path: 'users/user1/menu/base' }, { batchMakes: 'DELETE' }, { merge: true });
+  });
+
+  it('uses what batches really make, keeping one batch\'s ingredients, or divides a recipe written for the whole batch', async () => {
+    const { h } = setup([{ ...base, batchMakes: 4.5 }, cake]);
+    await h.setBatchSize('base', 4, 'keep-batch');
+    // 200 g a base for 4.5 is 900 g a batch: 225 g a base for 4.
+    expect(setDoc).toHaveBeenLastCalledWith({ path: 'users/user1/menu/base' }, { batchMakes: 4, recipe: [{ materialId: 'gel', amount: 225, unit: 'g' }] }, { merge: true });
+    const whole = setup([{ ...base, recipe: [{ materialId: 'gel', amount: 900, unit: 'g' }] }]).h;
+    await whole.setBatchSize('base', 4.5, 'from-whole-batch');
+    expect(setDoc).toHaveBeenLastCalledWith({ path: 'users/user1/menu/base' }, { batchMakes: 4.5, recipe: [{ materialId: 'gel', amount: 200, unit: 'g' }] }, { merge: true });
   });
 });
