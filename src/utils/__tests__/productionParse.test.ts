@@ -193,6 +193,12 @@ describe('buildProductionForm', () => {
     expect(build(parsed({ lineItems: [{ nameAsWritten: 'c', menuItemId: 'croissant', quantity: 40, madeUnits: 42 }] })).rows[0].made).toBe(42);
   });
 
+  it('leaves out an item made when ordered, by name: it is never logged as production', () => {
+    const f = buildProductionForm({ parsed: parsed({ lineItems: [{ nameAsWritten: 'cakes', menuItemId: 'muffin', quantity: 2 }, { nameAsWritten: 'croissants', menuItemId: 'croissant', quantity: 4 }] }), menu: menu.map(m => (m.id === 'muffin' ? { ...m, madeToOrder: true } : m)), today: TODAY });
+    expect(f.rows).toEqual([{ recipeId: 'croissant', quantity: 4 }]);
+    expect(f.madeToOrder).toEqual(['Chocolate Muffin']);
+  });
+
   it('cannot turn batches into pieces without a batch size, so it says so by name', () => {
     const f = build(parsed({ lineItems: [{ nameAsWritten: 'muffins', menuItemId: 'muffin', quantity: 2, inBatches: true }, { nameAsWritten: 'cake', menuItemId: null, quantity: 1, inBatches: true }] }));
     expect(f.rows).toEqual([]);

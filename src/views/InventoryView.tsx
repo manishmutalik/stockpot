@@ -37,7 +37,7 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
     currency, inventorySortBy, setInventorySortBy, inventorySortOrder, setInventorySortOrder,
     sortedRemainingInventory, remainingInventory, lowStockItems, refreshData, updateMaterial,
     deleteMaterial, setRestockMaterial, setDiscardTarget, openNutritionEditor, priceLog,
-    menu, productionRuns, wastageLogs
+    menu, productionRuns, wastageLogs, orders
   } = props;
 
   // The material whose price history is open (kept by id, so it follows the material if it is renamed).
@@ -113,8 +113,8 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
 
   // Which materials will run out soon, from recent production and discards (a calculation, no AI).
   const reorder = useMemo(() => reorderSuggestions({
-    materials: remainingInventory, menu: menu ?? [], productionRuns: productionRuns ?? [], wastageLogs: wastageLogs ?? [], today: todayInZone(settings.timezone),
-  }), [remainingInventory, menu, productionRuns, wastageLogs, settings.timezone]);
+    materials: remainingInventory, menu: menu ?? [], productionRuns: productionRuns ?? [], orders: orders ?? [], wastageLogs: wastageLogs ?? [], today: todayInZone(settings.timezone),
+  }), [remainingInventory, menu, productionRuns, orders, wastageLogs, settings.timezone]);
 
   const openRestock = (mat: (typeof remainingInventory)[number]) => {
     setRestockMaterial(mat);

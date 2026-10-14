@@ -1,5 +1,31 @@
 # Changelog
 
+## Things made when they are ordered
+
+A cream cake assembled on a base when it is ordered, a thali, a gift hamper: an item can now be **Made when ordered**. Its
+recipe is recorded once; every sale takes exactly what it is made from, with no production run to log first.
+
+- **Recipes & Menus:** a **Made when ordered** switch for items sold on the menu (with a **Made to order** badge). Turning it
+  on while some are on the shelf asks before clearing them (cancel to sell those first). Its batch size is hidden.
+- **Add Order:** no "Not Enough Stock" for it. Each row shows what it will take, with what is there ("1 Sponge base (5
+  there) · 150 ml Whipping cream"); short amounts are warned and it still saves, going below nothing, as production does.
+  An order from stock takes the ingredients and parts when it is saved; a pre-order takes them when handed over (costs
+  re-stamped then, as before). The order keeps what it took (`taken`), so **deleting**, **resetting a day** or **changing
+  the item or quantity** gives exactly that back, whatever the recipe says by then. Mixed orders work line by line.
+- **Production:** made-to-order items are left out of Log Production Run and of **Fill from a note** (named in a note); the
+  production plan refuses them, on the web and the phone.
+- **Money and forecasts:** profit is unchanged (orders are stamped as before). The Dashboard shows what made-to-order sales
+  used in their own ingredients beside production spend. Reorder suggestions and the AI's "running out soon" count what
+  these sales took.
+- **Phone and server:** orders and hand-overs take the ingredients and parts the same way; the order preview shows no shelf
+  for these items and a note when something would go short; Upcoming never calls them short of finished stock. Shopify and
+  Odoo imports take ingredients for them. No new APK needed.
+- **Demo kitchen:** the Pineapple Cream Cake is made when ordered; Ananya Rao's 2 cakes took their cream, pineapple and two
+  bases. **Help:** a new topic, "Things you make when they are ordered".
+
+Data: one optional field on a menu item (`madeToOrder`) and one on an order (`taken`: materials in their own units, parts,
+and what the materials cost). Existing orders and items are unchanged. The logic is in `src/utils/madeToOrder.ts`.
+
 ## Batches, and what actually came out
 
 For things made in batches (sponge bases from one mix of cake gel, cookies by the tray, paneer from a pot of milk), an item

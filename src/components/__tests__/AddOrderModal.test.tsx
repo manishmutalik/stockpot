@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AddOrderModal } from '../AddOrderModal';
+import type { Stock } from '../../utils/madeToOrder';
 
 const menu = [
   { id: 'cake', name: 'Cake', sellingPrice: 20, finishedGoodsStock: 10 },
@@ -241,5 +242,30 @@ describe('AddOrderModal — redesigned form', () => {
       expect(onSave.mock.calls[0][0]).toMatchObject({ paymentStatus: 'unpaid' });
       expect(onSave.mock.calls[0][0].paymentMethod).toBeUndefined();
     });
+  });
+});
+
+describe('AddOrderModal — items made when ordered', () => {
+  const cream = { id: 'cream', name: 'Cream', unit: 'ml', initialStock: 200, costPerUnit: 0.4, category: 'Raw Materials', dateAdded: '2026-01-01' };
+  const base = { id: 'base', name: 'Sponge base', sellingPrice: 0, notForSale: true, finishedGoodsStock: 1, recipe: [] };
+  const cake = { id: 'pcake', name: 'Pineapple cake', sellingPrice: 900, madeToOrder: true, recipe: [{ materialId: 'cream', amount: 150, unit: 'ml' }], parts: [{ itemId: 'base', quantity: 1 }] };
+  const renderMade = () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(<AddOrderModal isOpen onClose={vi.fn()} menu={[cake]} onSave={onSave} currency={currency} stock={{ materials: [cream], menu: [base, cake] } as unknown as Stock} />);
+    return { onSave };
+  };
+
+  it('has no shelf to run out of: it says what it takes, warns when short, and still saves', async () => {
+    const { onSave } = renderMade();
+    expect(screen.getByRole('option', { name: /Pineapple cake \(made to order\)/ })).toBeTruthy();
+    expect(screen.getByText('Made to order')).toBeTruthy();
+    expect(screen.getByText(/1 Sponge base \(1 there\)/)).toBeTruthy();
+    fireEvent.change(screen.getByPlaceholderText('Qty'), { target: { value: '2' } });
+    expect(screen.getByText(/2 Sponge base \(1 there\)/)).toBeTruthy();
+    expect(screen.getByText(/300 ml Cream \(200 there\)/)).toBeTruthy();
+    expect(screen.getByText(/it still saves, and stock goes below nothing/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Order' }));
+    await vi.waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][1]).toEqual([{ menuItemId: 'pcake', quantity: 2 }]);
   });
 });

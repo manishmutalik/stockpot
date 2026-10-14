@@ -246,7 +246,8 @@ export const HELP_TOPICS: HelpTopic[] = [
         'On the website, in **Recipes & Menus**, add the base as an item, with its recipe for **one** base. A batch that makes 4.5 bases? Set **One batch makes** to 4.5; if you typed the recipe for the whole batch, Stockpot offers to divide it (the recipe reader does both for you).',
         'Open its recipe and turn off **Sold on the menu**. It moves to **Made for other items**, and stays out of orders, the shared menu and margin figures.',
         'In each cream cake, click **Add a made item** and choose the base: 1 for a 1 kg cake, 0.5 for a half-kg cake.',
-        'When you bake bases, log a **Production Run** for them in batches (2 batches is 9 bases), with what actually came out. When you make cream cakes, log a run for the cakes: the bases come out of base stock, and the cream and fruit out of your materials.',
+        'When you bake bases, log a **Production Run** for them in batches (2 batches is 9 bases), with what actually came out.',
+        'Make the cream cakes when they are ordered? Turn on **Made when ordered** for them: each sale takes the base, cream and fruit by itself (see **Things you make when they are ordered**). Make them ahead instead? Log a run for the cakes: the bases come out of base stock, and the cream and fruit out of your materials.',
       ),
       points(
         'If there are not enough bases, Stockpot warns you but lets you go ahead. Log the bases you made, and the count comes right.',
@@ -254,6 +255,28 @@ export const HELP_TOPICS: HelpTopic[] = [
         'Production spend counts each ingredient once: the cream cake run does not count the base again.',
         'A base that is used in other items cannot be deleted until you take it out of them.',
         'On the phone, say "Made 9 vanilla bases" or "Made 3 pineapple cakes" as for anything else.',
+      ),
+    ],
+  },
+  {
+    id: 'made-to-order', section: 'recipes', apps: ['web', 'phone'],
+    title: 'Things you make when they are ordered',
+    summary: 'A cream cake on a base, a thali, a hamper: record it once, and each sale takes its ingredients.',
+    keywords: ['made to order', 'made when ordered', 'custom', 'cake', 'thali', 'hamper', 'on order', 'assemble', 'no production', 'automatic', 'deduct', 'order banane par'],
+    body: [
+      text('Some things are only made once someone orders them: a pineapple cream cake on a base you baked earlier, a thali, a gift hamper. Record the recipe once and turn on **Made when ordered**. Every sale then takes exactly what it is made from, with no production run to log.'),
+      steps(
+        'On the website, in **Recipes & Menus**, add the item with its recipe for **one** (a 1 kg pineapple cake: 1 sponge base, 150 g cream, 100 g pineapple). A ½ kg cake is its own item.',
+        'Open its recipe and turn on **Made when ordered**. If some are on the shelf, Stockpot asks before clearing them; cancel to sell those first.',
+        'Add orders as usual. **Add Order** shows what each one takes ("1 Sponge base (5 there) · 150 ml cream"), and the order takes it when you save.',
+        'For a pre-order, nothing is taken when it is booked: it is taken when you hand it over, when the cake is made.',
+      ),
+      points(
+        'Short of a base or some cream? Stockpot warns you and still saves, as the cake is made: stock goes below nothing until you restock or log the bases.',
+        'Deleting or changing an order gives back exactly what it took, even if the recipe has changed since.',
+        'It is left out of **Log Production Run**, so its ingredients are never counted twice. To make some ahead for the shelf, turn the switch off for a while.',
+        'Its cost, margin and repricing alerts work as for any item. The Dashboard shows what made-to-order sales used, beside production spend, and ingredients running out take these sales into account.',
+        'On the phone, an order for it is taken the same way; it never stops for lack of finished stock.',
       ),
     ],
   },
@@ -411,7 +434,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       steps(
         'Open **Orders** and click **Add Order**.',
-        'Choose **From stock** (selling what you have made) or **Pre-order** (for a later day).',
+        'Choose **From stock** (selling what you have made, or making it now if it is **Made when ordered**) or **Pre-order** (for a later day).',
         'Pick the item and quantity. **Add another item** for more.',
         'Add the customer\'s name and phone (Stockpot remembers customers and suggests them next time).',
         'Under **Payment**, choose **Paid now** or **Pay later**, and how they paid. Add a discount or delivery if there is one.',

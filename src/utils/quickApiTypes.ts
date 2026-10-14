@@ -178,6 +178,8 @@ export interface PaymentDraft { customerKey?: string; amount?: number; method?: 
 /** Money labels are already formatted in the business's currency. */
 export interface OrderPreview {
   lines: { menuItemId: string; name: string; quantity: number; unitPrice: number; lineTotal: number; stockAfter: number | null }[];
+  /** What made-to-order items would leave below nothing (they save anyway, as the item is made). */
+  shortages?: { materialId: string; name: string; unit: string; short: number }[];
   /** What the customer pays, with GST and discount. */
   total: number;
   advance: number | null;
@@ -268,6 +270,8 @@ export interface OrderSaved {
   advance: number;
   /** What the customer still owes: nothing for an order paid in full. */
   balanceDue: number;
+  /** What made-to-order items left below nothing, when anything (the order saved anyway). */
+  shortages?: { materialId: string; name: string; unit: string; short: number }[];
 }
 
 /** POST /api/mobile/restocks (201) */
@@ -348,6 +352,8 @@ export interface HandOverSaved {
   handedOver: boolean;
   reason?: 'already_handed_over';
   orderIds: string[];
+  /** What made-to-order items left below nothing, when anything (it was handed over anyway). */
+  shortages?: { materialId: string; name: string; unit: string; short: number }[];
   /** What the customer still owed when it was handed over (nothing for an order paid in full). */
   balanceDue?: number;
   /** The balance recorded as received in the same save, and how. */

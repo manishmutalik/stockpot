@@ -212,6 +212,12 @@ export interface MenuItem {
    * per one item: a batch is `batchMakes` of it (utils/batches). Absent: logged in pieces only.
    */
   batchMakes?: number;
+  /**
+   * Made when it is ordered (a cream cake on a base, a thali, a hamper), not kept on the shelf: selling one takes its own
+   * ingredients from materials and its parts from their finished stock (utils/madeToOrder). It has no finished stock and
+   * no production runs. Absent: sold from finished stock.
+   */
+  madeToOrder?: boolean;
 }
 
 /** One other item used in a recipe: how many of it go into one of this item. */
@@ -224,6 +230,14 @@ export interface ItemPart {
  * A sales order for a single menu item on a specific date.
  * Exported so that sibling components (e.g. ProductionRunModal) can import it.
  */
+/** What a made-to-order sale took from stock (see Order.taken). */
+export interface OrderTaken {
+  materials: { materialId: string; amount: number }[];
+  parts: ItemPart[];
+  /** What the materials cost when they were taken: what the sale spent on its own ingredients. */
+  cost: number;
+}
+
 export interface Order {
   id: string;
   menuItemId: string;
@@ -331,6 +345,12 @@ export interface Order {
    * non-pre-order has always taken its stock when it was created. A pre-order starts false and becomes true
    * at handover (see utils/preorders.holdsStock). */
   stockClaimed?: boolean;
+  /**
+   * What a made-to-order item took when it was made (utils/madeToOrder): material amounts in each material's own unit, and
+   * parts from their finished stock. Present means this order took these instead of finished stock; deleting or changing
+   * the order gives exactly these back. Set when an order from stock is created, or when a pre-order is handed over.
+   */
+  taken?: OrderTaken | null;
   /** Money received before handover. It belongs to the whole order, so it is stored on the first item only,
    * like `discount`. `feeRate` is the payment fee rate in force when it was received. */
   advance?: { amount: number; method: PaymentMethod; feeRate: number; date: string };
@@ -572,6 +592,8 @@ export interface AppViewProps {
   deleteMenuItem: (id: string) => void;
   /** Sets the other items an item is made from (utils/itemParts). */
   setItemParts: (itemId: string, parts: ItemPart[]) => void;
+  /** Made when it is ordered, or kept on the shelf (utils/madeToOrder). */
+  setMadeToOrder: (itemId: string, on: boolean) => void;
   /** Sets how many one batch makes, optionally rescaling the recipe (utils/batches). */
   setBatchSize: (itemId: string, makes: number | null, scale?: 'keep-batch' | 'from-whole-batch') => void;
   clearFinishedGoodsStock: (id: string) => void;

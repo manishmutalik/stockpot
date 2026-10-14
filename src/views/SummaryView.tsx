@@ -19,6 +19,7 @@ import { getRunStatus } from '../utils/productionStats';
 import { getBatchesNeedingAttention } from '../utils/stockAging';
 import type { ProductionRun } from '../components/ProductionRunModal';
 import { runSpend } from '../utils/itemParts';
+import { madeToOrderSpend } from '../utils/madeToOrder';
 
 export const SummaryView: React.FC<AppViewProps> = (props) => {
   const {
@@ -47,6 +48,8 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     () => filteredProductionRuns.reduce((sum, r) => sum + runSpend(r), 0),
     [filteredProductionRuns]
   );
+  // What made-to-order sales took in their own ingredients, as they were made (utils/madeToOrder).
+  const madeToOrderCost = useMemo(() => madeToOrderSpend(filteredOrders), [filteredOrders]);
   const filteredWastageLogs = useMemo(
     () => wastageLogs.filter(w => w.date >= summaryDateStart && w.date <= summaryDateEnd),
     [wastageLogs, summaryDateStart, summaryDateEnd]
@@ -379,10 +382,11 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
               <div className="min-w-0">
                 <h3 className="text-xl font-semibold tracking-tight text-ink">Recent Production Runs</h3>
                 <p className="text-sm text-muted">Batch yield, cost and freshness in the selected period.</p>
-                {filteredProductionRuns.length > 0 && (
+                {(filteredProductionRuns.length > 0 || madeToOrderCost > 0) && (
                   <p className="mt-2 text-sm text-ink">
                     <span className="font-mono font-semibold">{fmt(totalProductionCost)}</span> spent making stock
-                    <span className="text-muted"> · {filteredProductionRuns.length} run{filteredProductionRuns.length !== 1 ? 's' : ''} · {fmt(avgRunCost)} a run</span>
+                    {filteredProductionRuns.length > 0 && <span className="text-muted"> · {filteredProductionRuns.length} run{filteredProductionRuns.length !== 1 ? 's' : ''} · {fmt(avgRunCost)} a run</span>}
+                    {madeToOrderCost > 0 && <span className="block"><span className="font-mono font-semibold">{fmt(madeToOrderCost)}</span> used in made-to-order sales</span>}
                     <span className="block text-xs text-muted">Counted as a cost when it is sold (in ingredients and packaging above), so it is not taken off profit twice.</span>
                   </p>
                 )}

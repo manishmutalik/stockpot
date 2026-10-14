@@ -60,6 +60,15 @@ export function planProductionRun(runData: ProductionRunInput, state: Working, c
     } };
   }
 
+  // An item made when it is ordered is never made ahead: each sale takes its ingredients (utils/madeToOrder).
+  if (recipeItem.madeToOrder) {
+    return { ok: false, error: {
+      code: 'made_to_order', title: 'Made when ordered',
+      message: `${recipeItem.name} is made when it is ordered: each sale takes its ingredients, so it is not logged as production. Turn off "Made when ordered" for it in Recipes & Menus to make some ahead.`,
+      thrown: `logProductionRun: "${recipeItem.id}" is made to order`,
+    } };
+  }
+
   const id = ctx.newId();
 
   // Firestore does not accept `undefined` — build object only with defined fields

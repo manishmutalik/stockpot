@@ -20,7 +20,13 @@ const recipeCost = (menuId: string): number => {
   }, 0) + (item.parts ?? []).reduce((total, p) => total + p.quantity * recipeCost(p.itemId), 0);
 };
 // Units of an item later runs used as a part (bases in cream cakes).
-const usedAsPart = (menuId: string) => sum(demo.productionRuns.flatMap(r => (r.partsUsed ?? []).filter(p => p.itemId === menuId).map(p => p.quantity)));
+// Parts taken by runs, and by made-to-order sales (the cream cakes' bases).
+const usedAsPart = (menuId: string) => sum([
+  ...demo.productionRuns.flatMap(r => (r.partsUsed ?? []).filter(p => p.itemId === menuId).map(p => p.quantity)),
+  ...demo.orders.flatMap(o => (o.taken?.parts ?? []).filter(p => p.itemId === menuId).map(p => p.quantity)),
+]);
+/** Orders that take finished stock (an item made to order takes its ingredients instead). */
+const shelfOrders = demo.orders.filter(o => !o.taken);
 
 describe('demo data adds up', () => {
   it('has consistent references and unique ids', () => {
@@ -51,7 +57,7 @@ describe('demo data adds up', () => {
 
   it('shelf stock is units made (after waste) minus units ordered, and matches the batches', () => {
     const produced = (id: string) => sum(demo.productionRuns.filter(r => r.recipeId === id).map(r => r.quantityYield ?? r.quantityProduced));
-    const ordered = (id: string) => sum(demo.orders.filter(o => o.menuItemId === id).map(o => o.quantity));
+    const ordered = (id: string) => sum(shelfOrders.filter(o => o.menuItemId === id).map(o => o.quantity));
     expect(ordered('menu_croissant')).toBe(56);
     expect(byId(demo.menu, 'menu_croissant').finishedGoodsStock).toBe(75 - 56);
     expect(byId(demo.menu, 'menu_muffin').finishedGoodsStock).toBe(74 - 59); // 30 + 19 (one lost) + 25 made
@@ -79,7 +85,8 @@ describe('demo data adds up', () => {
       let stock = 0;
       for (const day of days) {
         stock += sum(demo.productionRuns.filter(r => r.recipeId === item.id && r.date === day).map(r => r.quantityYield ?? r.quantityProduced));
-        stock -= sum(demo.orders.filter(o => o.menuItemId === item.id && o.date === day).map(o => o.quantity));
+        stock -= sum(shelfOrders.filter(o => o.menuItemId === item.id && o.date === day).map(o => o.quantity));
+        stock -= sum(demo.orders.filter(o => o.date === day).flatMap(o => (o.taken?.parts ?? []).filter(p => p.itemId === item.id).map(p => p.quantity)));
         expect(stock).toBeGreaterThanOrEqual(0);
       }
     }
@@ -232,18 +239,25 @@ describe('demo data adds up', () => {
   it('builds a cream cake on a sponge base made ahead, as the app would record it', () => {
     const base = byId(demo.menu, 'menu_base');
     expect(base.notForSale).toBe(true);
-    // two batches of 4.5 planned 9 bases, 8 came out, 3 went into cream cakes
+    // two batches of 4.5 planned 9 bases, 8 came out, 2 went into cream cakes
     expect(base.batchMakes).toBe(4.5);
     const baseRun = byId(demo.productionRuns, 'run_10');
     expect(baseRun).toMatchObject({ batches: 2, quantityProduced: 9, quantityYield: 8 });
-    expect(base.finishedGoodsStock).toBe(5);
-    const cakeRun = byId(demo.productionRuns, 'run_11');
-    expect(cakeRun.partsUsed).toEqual([{ itemId: 'menu_base', quantity: 3 }]);
-    // a base: 220g gel x 0.3 + 40ml oil x 0.15 = ₹72; the cake adds 150g cream x 0.4 + 100g pineapple x 0.12 = ₹72
-    expect(cakeRun.partsCost).toBe(216);
-    expect(cakeRun.costTotal).toBe(432);
+    expect(base.finishedGoodsStock).toBe(6);
     // the bases' gel came out when they were baked, not again with the cakes
     expect(byId(demo.materials, 'm_gel').initialStock).toBe(5000 - 9 * 220);
+  });
+
+  it('sells the cream cake made when ordered: no cake runs or shelf, and the sale took its cream, pineapple and bases', () => {
+    const cake = byId(demo.menu, 'menu_pinecake');
+    expect(cake.madeToOrder).toBe(true);
+    expect(cake.finishedGoodsStock).toBe(0);
+    expect(demo.productionRuns.some(r => r.recipeId === 'menu_pinecake')).toBe(false);
+    const sale = demo.orders.find(o => o.menuItemId === 'menu_pinecake')!;
+    // 2 cakes: 300g cream x 0.4 + 200g pineapple x 0.12 = ₹144 of their own ingredients
+    expect(sale.taken).toEqual({ materials: [{ materialId: 'm_cream', amount: 300 }, { materialId: 'm_pineapple', amount: 200 }], parts: [{ itemId: 'menu_base', quantity: 2 }], cost: 144 });
+    // a base (₹72) and its cream and pineapple (₹72), as any order is stamped
+    expect(sale.unitIngredientCostAtSale).toBe(144);
   });
 
   it('counts the base that did not come out as lost in production, in true profit', () => {

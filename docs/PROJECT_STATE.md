@@ -268,14 +268,17 @@ Nothing is queued. The AI list in the handoff is complete.
 
 ## Open items for the user (none blocking)
 
-- **Items made from other items: steps 1 and 2 built.** An item's recipe can use other items (`parts`: a sponge base in a
+- **Items made from other items: steps 1, 2 and 3 built.** An item's recipe can use other items (`parts`: a sponge base in a
   cream cake, cookies in a hamper), and an item can be kept off the menu (`notForSale`). Costs flatten through parts
   everywhere; production takes parts from their finished stock; production spend counts each ingredient once
   (`src/utils/itemParts.ts`, guide 4.8). Step 2: an item can say how many one batch makes (`batchMakes`), production is
   logged in batches with what actually came out, and the shortfall is **Lost in production** in True profit; the Menu
-  suggests the real batch size from recent runs (`src/utils/batches.ts`, guide 4.9). Next, agreed: (3) made-to-order items
-  (selling uses the ingredients directly, no production run), (4) the recipe reader's "Made ahead and kept" choice; later,
-  selling by weight (paneer by the kg) as its own small change.
+  suggests the real batch size from recent runs (`src/utils/batches.ts`, guide 4.9). Step 3: an item can be **Made when
+  ordered** (`madeToOrder`): each sale takes its ingredients and parts, recorded on the order (`taken`) and given back on
+  delete or edit; no production runs for it (`src/utils/madeToOrder.ts`, guide 4.10). Decided: short stock warns and saves;
+  an item is shelf or made-to-order, not both; made-to-order items are left out of production. Next, agreed: (4) the recipe
+  reader's "Made ahead and kept" choice; later, selling by weight (paneer by the kg) as its own small change. The phone app
+  does not yet show the made-to-order shortage warning after saving (the server sends it; a note shows it before).
 - **Recipe reader: web and phone built, real-recipe test to do.** Read a recipe (Recipes & Menus on the web; "Read a recipe
   from a photo" on the phone's Today, camera or gallery) reads text or up to three photos with Claude Opus 5.5 (only this
   feature; everything else stays on Haiku 4.5), 15 recipes a day and 75 a month (docs/developer-guide/06-ai.md, "The recipe

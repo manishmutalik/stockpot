@@ -9,7 +9,9 @@
  * questions matter everywhere:
  *  - holdsStock: has this order taken units out of `finishedGoodsStock`? Deleting
  *    or editing an order may give stock back only when it did, otherwise a
- *    deleted pre-order would add units that never left the shelf.
+ *    deleted pre-order would add units that never left the shelf. An order of
+ *    an item made to order took its ingredients instead (`taken`), never
+ *    finished stock (utils/madeToOrder).
  *  - countsAsSale: is it a sale at all? A cancelled order is not.
  *
  * Revenue lands on the due date. And, the owner's decision, an "actual" figure
@@ -21,8 +23,12 @@ import type { MenuItem, Order } from '../types';
 import { clusterOrdersByGroup } from './orderClustering';
 
 /** Does this order currently hold units of finishedGoodsStock? */
-export const holdsStock = (o: Pick<Order, 'cancelledOn' | 'preorder' | 'stockClaimed'>): boolean =>
-  !o.cancelledOn && (o.preorder ? o.stockClaimed === true : true);
+export const holdsStock = (o: Pick<Order, 'cancelledOn' | 'preorder' | 'stockClaimed'> & { taken?: Order['taken'] | null }): boolean =>
+  !o.cancelledOn && !o.taken && (o.preorder ? o.stockClaimed === true : true);
+
+/** Has this order taken its stock yet, from the shelf or (made to order) its ingredients? Changing it then moves stock. */
+export const hasTakenStock = (o: Pick<Order, 'cancelledOn' | 'preorder' | 'stockClaimed'> & { taken?: Order['taken'] | null }): boolean =>
+  !o.cancelledOn && (!!o.taken || holdsStock(o));
 
 /** Counts toward revenue, profit, customers, payments and AI figures at all (a cancelled order never does). */
 export const countsAsSale = (o: Pick<Order, 'cancelledOn'>): boolean => !o.cancelledOn;

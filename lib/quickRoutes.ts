@@ -264,6 +264,7 @@ export function createQuickOrderHandler(deps: QuickRouteDeps) {
       preorder: plan.preorder,
       // Nothing is owed on an order that was paid in full (the plan marks only an order with a balance unpaid).
       total, advance, balanceDue: plan.orders.some(o => o.paymentStatus === 'unpaid') ? Math.round(Math.max(total - advance, 0) * 100) / 100 : 0,
+      ...(plan.shortages.length > 0 && { shortages: plan.shortages }),
     } };
   });
 }
@@ -389,7 +390,7 @@ export function createQuickHandOverHandler(deps: QuickRouteDeps) {
     const billMessage = settled ? `${buildBillMessage({ ...bill, advance: undefined }, undefined)} Paid in full, thank you!` : buildBillMessage(bill, undefined);
 
     return { status: 200, body: {
-      handedOver: true, orderIds: orders.map(o => o.id), balanceDue, balanceReceived: received ? balanceDue : 0, ...(received && { method: paidBy }),
+      handedOver: true, orderIds: orders.map(o => o.id), ...(plan.shortages?.length && { shortages: plan.shortages }), balanceDue, balanceReceived: received ? balanceDue : 0, ...(received && { method: paidBy }),
       billMessage, customerPhone: orders.find(o => o.customerPhone)?.customerPhone ?? null,
     } };
   }, async (body, req) => {

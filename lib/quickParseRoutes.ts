@@ -151,7 +151,12 @@ function orderReader(deps: QuickParseDeps, w: World, raw: string): Reader<any> {
       let preview: unknown = null;
       if (built.draft.lineItems.length > 0) {
         const previewed = previewOrder({ draft: built.draft, menu: w.menu, materials: w.materials, settings: w.settings, currency: currencyOf(w.settings), today: w.today });
-        if (previewed.ok === true) preview = previewed.preview;
+        if (previewed.ok === true) {
+          preview = previewed.preview;
+          // A made-to-order item short of an ingredient or base still saves; say so where the app shows notes.
+          const short = previewed.preview.shortages ?? [];
+          if (short.length > 0) built.notes.push(`Not enough on hand, so stock will go below nothing: ${short.map(s => `${Math.round(s.short * 100) / 100} ${s.unit} ${s.name}`).join(', ')}.`);
+        }
         else if (previewed.question) questions.push(previewed.question);
         else return { ...bad('unverified', previewed.message), notes: built.notes };
       }

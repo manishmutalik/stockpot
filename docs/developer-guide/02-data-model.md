@@ -86,6 +86,8 @@ A thing the owner sells.
   `src/utils/itemParts.ts` and [Money, plans and bills](04-money-plans-bills.md).
 - `batchMakes`: how many one batch makes (4.5 sponge bases). The recipe stays per one item; production can be logged in
   batches. See `src/utils/batches.ts`.
+- `madeToOrder`: made when it is ordered (a cream cake on a base). No finished stock and no production runs: each sale takes
+  its ingredients and parts. See `src/utils/madeToOrder.ts`.
 
 ### `Order` (`users/{uid}/orders`)
 
@@ -105,6 +107,7 @@ Important fields and what they mean:
 | `unitPriceAtSale`, `unitIngredientCostAtSale`, `unitPackagingCostAtSale`, `unitInputGstAtSale`, `itemNameAtSale` | The **stamp**, written when the order is created. Old orders without it fall back to today's values and are flagged `estimated`. They are deliberately not back-filled. |
 | `preorder`, `bookedOn`, `dueSlot`, `notes` | Pre-order basics. |
 | `stockClaimed` | Whether this line has taken its units out of `finishedGoodsStock`. Absent means the old rule (took them at creation). A pre-order starts `false` and becomes `true` at hand-over. |
+| `taken` | For an item made to order: what the sale took (`materials` in each material's unit, `parts`, and `cost`, what the materials cost then). Present means it took these instead of finished stock; delete and edit give exactly these back (`planOrderGiveBack`, `planOrderChange`). `null` once changed to a shelf item. |
 | `advance` | `{amount, method, feeRate, date}` money received before hand-over; on the first line of the group. |
 | `cancelledOn`, `advanceOutcome` | A cancelled order is never a sale; a kept advance counts as income on the cancellation date, a refunded one does not. |
 | `fulfilled` | Handed over / completed. No inventory maths hangs off it any more. |
