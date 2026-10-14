@@ -15,11 +15,12 @@ import { planImportRecipes, type MaterialMemory, type NewMaterialInput, type Rec
 import type { RecipeMaterialView, RecipeSetupView, RecipesSaved } from '../src/utils/quickApiTypes';
 import { todayInZone } from '../src/utils/localDate';
 import type { MenuItem, RawMaterial } from '../src/types';
-import { asMenu, currencyOf, failure, loadSettings, writeHandler, type QuickRouteDeps, type Read } from './quickRoutes';
+import { asMenu, currencyOf, failure, itemsWithParts, loadSettings, writeHandler, type QuickRouteDeps, type Read } from './quickRoutes';
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const ID = /^[A-Za-z0-9_.-]{1,80}$/;
 const NEW_KEY = /^n\d{1,3}$/;
+const ITEM_KEY = /^recipe:r\d{1,3}$/;
 const UNIT = /^[A-Za-z]{1,8}$/;
 const bad = (error: string): { ok: false; error: string } => ({ ok: false, error });
 const positive = (v: unknown, max: number): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= max;
@@ -57,6 +58,14 @@ export function readRecipeImportBody(body: unknown): Read<RecipeImportBody> {
     });
   }
 
+  // The keys items are referred to by (a base made ahead, used in a cake saved with it).
+  const itemKeys = new Set<string>();
+  for (const it of body.items as unknown[]) {
+    if (!isObject(it) || it.key === undefined) continue;
+    if (typeof it.key !== 'string' || !ITEM_KEY.test(it.key) || itemKeys.has(it.key)) return bad('Each recipe needs its own key.');
+    itemKeys.add(it.key);
+  }
+
   const items: RecipeImportItem[] = [];
   for (const it of body.items as unknown[]) {
     if (!isObject(it) || !isObject(it.target) || !Array.isArray(it.lines)) return bad('Each recipe needs a target and lines.');
@@ -83,7 +92,25 @@ export function readRecipeImportBody(body: unknown): Read<RecipeImportBody> {
       lines.push({ material, amount: l.amount, unit: l.unit });
     }
     if (it.batchMakes !== undefined && !positive(it.batchMakes, 10_000)) return bad('How many one batch makes must be above nothing.');
-    items.push({ target, lines, ...(it.batchMakes !== undefined && { batchMakes: it.batchMakes as number }) });
+    if ((it.notForSale !== undefined && it.notForSale !== true) || (it.madeToOrder !== undefined && it.madeToOrder !== true)) return bad('A recipe is marked in a way that is not understood.');
+    const parts: NonNullable<RecipeImportItem['parts']> = [];
+    if (it.parts !== undefined) {
+      if (!Array.isArray(it.parts) || it.parts.length > 20) return bad('A recipe has too many items in it.');
+      for (const p of it.parts as unknown[]) {
+        if (!isObject(p) || !isObject(p.item) || !positive(p.quantity, 1000)) return bad('Each item in a recipe needs how many go into one.');
+        if (typeof p.item.existingId === 'string' && ID.test(p.item.existingId)) parts.push({ item: { existingId: p.item.existingId }, quantity: p.quantity });
+        else if (typeof p.item.newKey === 'string' && itemKeys.has(p.item.newKey)) parts.push({ item: { newKey: p.item.newKey }, quantity: p.quantity });
+        else return bad('An item in a recipe points at one that is not there.');
+      }
+    }
+    items.push({
+      ...(typeof it.key === 'string' && { key: it.key }),
+      target, lines,
+      ...(it.batchMakes !== undefined && { batchMakes: it.batchMakes as number }),
+      ...(it.notForSale === true && { notForSale: true }),
+      ...(it.madeToOrder === true && { madeToOrder: true }),
+      ...(parts.length > 0 && { parts }),
+    });
   }
 
   const remember: MaterialMemory[] = [];
@@ -138,8 +165,15 @@ export function createQuickRecipeSaveHandler(deps: QuickRouteDeps) {
       ...input.items.flatMap(i => i.lines.flatMap(l => ('existingId' in l.material ? [l.material.existingId] : []))),
       ...input.remember.map(r => r.materialId),
     ];
-    const menuIds = input.items.flatMap(i => (i.target.kind === 'existing' ? [i.target.menuItemId] : []));
-    const [materials, menu] = await Promise.all([tx.getMany('materials', existingIds), tx.getMany('menu', menuIds)]);
+    // The items changed, the items used as parts, and what those are made from: to cost a new item with its parts, and to
+    // refuse an item inside itself.
+    const menuIds = input.items.flatMap(i => [
+      ...(i.target.kind === 'existing' ? [i.target.menuItemId] : []),
+      ...(i.parts ?? []).flatMap(p => ('existingId' in p.item ? [p.item.existingId] : [])),
+    ]);
+    const menuItems = await itemsWithParts(tx, menuIds);
+    const menu = new Map(menuItems.map(m => [m.id, m]));
+    const materials = await tx.getMany('materials', [...existingIds, ...menuItems.flatMap(m => (m.recipe ?? []).map(r => r.materialId))]);
     const plan = planImportRecipes({
       ...input,
       materials: [...materials.values()] as unknown as RawMaterial[],
@@ -150,6 +184,9 @@ export function createQuickRecipeSaveHandler(deps: QuickRouteDeps) {
     if (plan.ok === false) {
       if (plan.reason === 'unknown_material' || plan.reason === 'unknown_menu_item') {
         return failure(409, 'A material or menu item in these recipes was changed or deleted while you were checking them. Read the recipe again.', { code: plan.reason });
+      }
+      if (plan.reason === 'part_loop') {
+        return failure(422, 'An item cannot go inside itself. Check what each item made ahead is used in.', { code: plan.reason });
       }
       return failure(422, 'Something in these recipes could not be saved. Check the names and amounts.', { code: plan.reason });
     }

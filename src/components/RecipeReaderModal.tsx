@@ -7,7 +7,7 @@ import { perItem } from '../utils/kitchenMeasures';
 import { squash } from '../utils/orderParse';
 import { RECIPE_MAX_PHOTOS } from '../utils/recipeParse';
 import {
-  BUY_UNIT, batchShare, buildDraft, chooseLineMaterial, draftIssues, draftToImport, lineCostPerItem, lineMaterial, questionPrompt, resolveDraftLine, usedNewMaterials,
+  BUY_UNIT, batchShare, buildDraft, chooseLineMaterial, draftIssues, draftToImport, keptPartsOf, lineCostPerItem, lineMaterial, questionPrompt, resolveDraftLine, usedNewMaterials,
   type DraftImport, type DraftLine, type DraftRecipe, type RecipeDraft,
 } from '../utils/recipeDraft';
 
@@ -218,7 +218,10 @@ const RecipeCard: React.FC<{
     const r = resolveDraftLine(draft, recipe, l, materials);
     return costs[i] === null && r?.status === 'ok' && !r.skipped;
   });
-  const total = costs.reduce((a: number, c) => a + (c ?? 0), 0);
+  // Bases made ahead and kept that go into this item, each at what one piece costs.
+  const keptParts = recipe.use.kind === 'sell' ? keptPartsOf(draft, recipe, materials) : [];
+  const total = costs.reduce((a: number, c) => a + (c ?? 0), 0) + keptParts.reduce((a, k) => a + (k.cost ?? 0) * k.perItem, 0);
+  const keptIncomplete = keptParts.some(k => k.cost === null);
   const partOptions = [
     ...draft.recipes.filter(x => x.key !== recipe.key && x.include && x.use.kind === 'sell').map(x => ({ value: `recipe:${x.key}`, label: x.name || 'Unnamed recipe' })),
     ...menu.map(m => ({ value: `menu:${m.id}`, label: m.name })),
@@ -240,11 +243,19 @@ const RecipeCard: React.FC<{
           {(recipe.looksLikeComponent || recipe.use.kind !== 'sell') && (
             <fieldset className={`rounded-xl p-3 space-y-2 ${recipe.use.kind === 'undecided' ? 'bg-amber-50' : 'bg-stone-50'}`}>
               <legend className="sr-only">What it is for</legend>
-              <p className="text-sm font-semibold text-ink">Do you sell {label} on its own, or is it part of another item?</p>
-              <div className="flex flex-wrap gap-4 text-sm">
+              <p className="text-sm font-semibold text-ink">What is {label}?</p>
+              <div className="flex flex-wrap gap-x-4 gap-y-2 text-sm">
                 <label className="flex items-center gap-2"><input type="radio" checked={recipe.use.kind === 'sell'} onChange={() => set(r => { r.use = { kind: 'sell' }; })} /> I sell it</label>
-                <label className="flex items-center gap-2"><input type="radio" checked={recipe.use.kind === 'part'} onChange={() => set(r => { r.use = { kind: 'part', of: null, covers: null }; })} /> It is part of another item</label>
+                <label className="flex items-center gap-2"><input type="radio" checked={recipe.use.kind === 'part'} onChange={() => set(r => { r.use = { kind: 'part', of: null, covers: null }; })} /> Mixed into another item each time</label>
+                <label className="flex items-center gap-2"><input type="radio" checked={recipe.use.kind === 'kept'} onChange={() => set(r => { r.use = { kind: 'kept', of: null, perItem: 1 }; })} /> Made ahead and kept</label>
               </div>
+              <p className="text-xs text-muted">
+                {recipe.use.kind === 'kept'
+                  ? 'Saved as its own item, not sold on the menu (a sponge base, a dough). The items it goes into take it from its stock.'
+                  : recipe.use.kind === 'part'
+                    ? 'Its ingredients are added to the other item\'s recipe (frosting, whipped cream made fresh).'
+                    : 'A base or filling you keep: choose "Made ahead and kept". One you make fresh each time: "Mixed into".'}
+              </p>
               {recipe.use.kind === 'part' && (
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div>
@@ -259,6 +270,43 @@ const RecipeCard: React.FC<{
                     <input id={`${recipe.key}-covers`} inputMode="decimal" value={recipe.use.covers ?? ''} placeholder="e.g. 2"
                       onChange={e => set(r => { if (r.use.kind === 'part') r.use.covers = num(e.target.value); })} className={modalField(!recipe.use.covers)} />
                   </div>
+                </div>
+              )}
+              {recipe.use.kind === 'kept' && (
+                <div className="grid sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className={MODAL_LABEL} htmlFor={`${recipe.key}-makes`}>One batch makes</label>
+                    <input id={`${recipe.key}-makes`} inputMode="decimal" value={recipe.makes ?? ''} placeholder="e.g. 4.5"
+                      onChange={e => set(r => { const n = num(e.target.value); r.makes = n && n > 0 ? n : null; })} className={modalField(!recipe.makes)} />
+                    {recipe.makesAsWritten && <p className="text-[11px] text-muted mt-1">Written: “{recipe.makesAsWritten}”</p>}
+                  </div>
+                  <div>
+                    <label className={MODAL_LABEL} htmlFor={`${recipe.key}-in`}>Used in (optional)</label>
+                    <select id={`${recipe.key}-in`} value={recipe.use.of ?? ''} className={modalField()}
+                      onChange={e => set(r => { if (r.use.kind === 'kept') r.use.of = e.target.value || null; })}>
+                      <option value="">Not yet: just save it</option>
+                      {partOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                  {recipe.use.of && (
+                    <div>
+                      <label className={MODAL_LABEL} htmlFor={`${recipe.key}-per`}>How many go into one</label>
+                      <input id={`${recipe.key}-per`} inputMode="decimal" value={recipe.use.perItem ?? ''} placeholder="e.g. 1"
+                        onChange={e => set(r => { if (r.use.kind === 'kept') r.use.perItem = num(e.target.value); })} className={modalField(!recipe.use.perItem)} />
+                      <p className="text-[11px] text-muted mt-1">0.5 for a half-kg cake on half a base.</p>
+                    </div>
+                  )}
+                  {existing && (
+                    <div className="sm:col-span-3">
+                      <label className={MODAL_LABEL} htmlFor={`${recipe.key}-target`}>On your menu</label>
+                      <select id={`${recipe.key}-target`} value={targetValue} className={modalField()}
+                        onChange={e => set(r => { r.target = e.target.value === 'new' ? { kind: 'new' } : { kind: 'existing', menuItemId: existing.id, mode: e.target.value as 'replace' | 'add' }; })}>
+                        <option value="replace">Use {existing.name}, and replace its recipe</option>
+                        <option value="add">Use {existing.name}, and add to its recipe</option>
+                        <option value="new">Save as a new item</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
             </fieldset>
@@ -288,6 +336,10 @@ const RecipeCard: React.FC<{
                   <input id={`${recipe.key}-price`} inputMode="decimal" value={recipe.sellingPrice ?? ''} onChange={e => set(r => { r.sellingPrice = num(e.target.value); })} className={modalField()} />
                 </div>
               )}
+              <label className="sm:col-span-3 flex items-start gap-2 text-sm text-ink">
+                <input type="checkbox" checked={!!recipe.madeToOrder} onChange={e => set(r => { r.madeToOrder = e.target.checked; })} className="mt-0.5 w-4 h-4 accent-[var(--color-primary)]" />
+                <span><span className="font-semibold">Made when ordered</span> <span className="text-muted">— each sale takes its ingredients (and any base) from stock, with no production run.</span></span>
+              </label>
             </div>
           )}
 
@@ -297,10 +349,16 @@ const RecipeCard: React.FC<{
                 flagged={issueLines.has(line.key)} update={update} />
             ))}
           </ul>
+          {keptParts.map(k => (
+            <div key={k.key} className="flex justify-between items-baseline text-sm">
+              <span className="text-ink">+ {fmt(k.perItem)} {k.name} <span className="text-muted">(made ahead)</span></span>
+              <span className="font-mono text-ink">{k.cost === null ? '—' : `${currency}${fmt(k.cost * k.perItem)}`}</span>
+            </div>
+          ))}
           <div className="flex justify-between items-baseline text-sm pt-1">
-            <span className="text-muted">{recipe.use.kind === 'part' ? 'Adds to each item' : 'Ingredients for one item'}</span>
+            <span className="text-muted">{recipe.use.kind === 'part' ? 'Adds to each item' : recipe.use.kind === 'kept' ? 'One piece costs' : 'One item costs'}</span>
             <span className="font-mono font-semibold text-ink">
-              {currency}{fmt(total)}{incomplete && <span className="ml-2 text-[11px] font-sans font-semibold text-amber-700">cost incomplete</span>}
+              {currency}{fmt(total)}{(incomplete || keptIncomplete) && <span className="ml-2 text-[11px] font-sans font-semibold text-amber-700">cost incomplete</span>}
             </span>
           </div>
         </>

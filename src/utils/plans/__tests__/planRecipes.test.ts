@@ -72,3 +72,37 @@ describe('planImportRecipes', () => {
     expect(planImportRecipes({ ...base, ctx: ctx(), items: [{ target: { kind: 'new', name: '  ' }, lines: [line] }] })).toEqual({ ok: false, reason: 'invalid_name' });
   });
 });
+
+describe('items made from others, saved from the reader', () => {
+  const base: MenuItem = { id: 'menu_base', name: 'Sponge base', sellingPrice: 0, notForSale: true, recipe: [{ materialId: 'm_flour', amount: 200, unit: 'g' }] };
+  const cake: MenuItem = { id: 'menu_cake', name: 'Cream cake', sellingPrice: 900, recipe: [], parts: [{ itemId: 'menu_other', quantity: 2 }, { itemId: 'menu_base', quantity: 1 }] };
+  const line = { material: { existingId: 'm_sugar' }, amount: 10, unit: 'g' };
+  const run = (items: Parameters<typeof planImportRecipes>[0]['items'], menuNow: MenuItem[] = [muffin, base, cake]) =>
+    planImportRecipes({ ...base_, menu: menuNow, ctx: ctx(), items });
+  const base_ = { materials: [flour, sugar], today: '2026-10-14', remember: [], newMaterials: [] };
+
+  it('adds a part to an item that has others, replacing the same part\'s quantity', () => {
+    const plan = run([{ target: { kind: 'existing', menuItemId: 'menu_cake', mode: 'add' }, lines: [], parts: [{ item: { existingId: 'menu_base' }, quantity: 0.5 }] }]);
+    expect(plan.ok === true && plan.writes[0].data.parts).toEqual([{ itemId: 'menu_other', quantity: 2 }, { itemId: 'menu_base', quantity: 0.5 }]);
+  });
+
+  it('refuses an item inside itself, directly or through another', () => {
+    const self = run([{ key: 'k', target: { kind: 'existing', menuItemId: 'menu_base', mode: 'add' }, lines: [], parts: [{ item: { existingId: 'menu_base' }, quantity: 1 }] }]);
+    expect(self).toEqual({ ok: false, reason: 'part_loop' });
+    // The base would contain the cake, which already contains the base.
+    const round = run([{ target: { kind: 'existing', menuItemId: 'menu_base', mode: 'add' }, lines: [line], parts: [{ item: { existingId: 'menu_cake' }, quantity: 1 }] }]);
+    expect(round).toEqual({ ok: false, reason: 'part_loop' });
+  });
+
+  it('refuses a part that is not on the menu or not in the import, and a quantity of nothing', () => {
+    expect(run([{ target: { kind: 'new', name: 'X' }, lines: [line], parts: [{ item: { existingId: 'menu_gone' }, quantity: 1 }] }])).toEqual({ ok: false, reason: 'unknown_menu_item' });
+    expect(run([{ target: { kind: 'new', name: 'X' }, lines: [line], parts: [{ item: { newKey: 'recipe:nope' }, quantity: 1 }] }])).toEqual({ ok: false, reason: 'unknown_menu_item' });
+    expect(run([{ target: { kind: 'new', name: 'X' }, lines: [line], parts: [{ item: { existingId: 'menu_base' }, quantity: 0 }] }])).toEqual({ ok: false, reason: 'invalid_amount' });
+  });
+
+  it('prices a new item at its cost with its parts', () => {
+    const plan = run([{ target: { kind: 'new', name: 'Cake', sellingPrice: 500 }, lines: [line], parts: [{ item: { existingId: 'menu_base' }, quantity: 1 }] }]);
+    // 10 g sugar (₹0.48) and a base's 200 g maida (₹9).
+    expect(plan.ok === true && plan.writes[0].data.costAtPricing).toBe(9.48);
+  });
+});

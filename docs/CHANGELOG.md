@@ -1,5 +1,22 @@
 # Changelog
 
+## Recipe reader: bases made ahead and kept
+
+When the recipe reader finds a component (a sponge base, a ganache, whipped cream), there are now three choices, on the
+web and on the phone: **I sell it**, **Mixed into another item each time** (what "part of another item" did: its
+ingredients are written into that item's recipe), and **Made ahead and kept**:
+
+- It is saved as its own item, not sold on the menu, with **One batch makes** (decimals, prefilled from the recipe) and its
+  recipe per piece. If an item of the same name is on the menu, it can replace or add to that item's recipe instead.
+- **Used in** (optional): a sold recipe on the same page, or an item already on the menu, with **How many go into one** (0.5
+  for a half-kg cake). The cake gets it as a part (an item already on the menu keeps its other parts; the same part's
+  quantity is replaced), and its card shows "+ 1 Sponge base (made ahead)" in its cost.
+- A sold recipe can be ticked **Made when ordered**.
+- Everything is saved together. An item can never end up inside itself (refused, with a message). A new item is priced at
+  its cost with its parts.
+
+Data: a recipe import item can carry `key`, `notForSale`, `madeToOrder` and `parts`. The phone needs a new APK.
+
 ## Things made when they are ordered
 
 A cream cake assembled on a base when it is ordered, a thali, a gift hamper: an item can now be **Made when ordered**. Its

@@ -5,7 +5,7 @@ import type { RecipeSetupView } from '../../../../src/utils/quickApiTypes';
 import { perItem } from '../../../../src/utils/kitchenMeasures';
 import { squash } from '../../../../src/utils/orderParse';
 import {
-  BUY_UNIT, batchShare, chooseLineMaterial, lineCostPerItem, lineMaterial, questionPrompt, resolveDraftLine, usedNewMaterials,
+  BUY_UNIT, batchShare, chooseLineMaterial, keptPartsOf, lineCostPerItem, lineMaterial, questionPrompt, resolveDraftLine, usedNewMaterials,
   type DraftLine, type DraftRecipe, type LineChoice, type RecipeDraft,
 } from '../../../../src/utils/recipeDraft';
 import { fmtAmount, perUnit } from '../../lib/recipeReader';
@@ -16,7 +16,8 @@ import { ChoiceSheet, Choices, money, NumberField, PickerButton, type SheetOptio
 
 /**
  * One recipe on the phone's check screen, as on the web (src/components/RecipeReaderModal): its name, what one batch makes
- * (or, for whipped cream or a ganache, which item it is part of and how many it covers), whether it replaces a menu item's
+ * (or, for a component: mixed into which item, covering how many; or made ahead and kept, with its batch size and what it
+ * goes into), whether a sold item is made when ordered, whether it replaces a menu item's
  * recipe, and every ingredient matched to a material and worked out for one item. A line that needs an answer is marked
  * and asks its question in place; nothing is saved until every question is settled.
  */
@@ -38,13 +39,27 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
     const r = resolveDraftLine(draft, recipe, l, materials);
     return costs[i] === null && r?.status === 'ok' && !r.skipped;
   });
-  const total = costs.reduce((a: number, c) => a + (c ?? 0), 0);
+  // Bases made ahead and kept that go into this item, each at what one piece costs.
+  const keptParts = recipe.use.kind === 'sell' ? keptPartsOf(draft, recipe, materials) : [];
+  const total = costs.reduce((a: number, c) => a + (c ?? 0), 0) + keptParts.reduce((a, k) => a + (k.cost ?? 0) * k.perItem, 0);
   const label = recipe.name.trim() || 'This recipe';
   const partOptions: SheetOption[] = [
     ...draft.recipes.filter(x => x.key !== recipe.key && x.include && x.use.kind === 'sell').map(x => ({ value: `recipe:${x.key}`, label: x.name || 'Unnamed recipe', hint: 'Read from this page' })),
     ...menu.map(m => ({ value: `menu:${m.id}`, label: m.name, hint: 'On your menu' })),
   ];
-  const partOf = recipe.use.kind === 'part' ? partOptions.find(o => o.value === (recipe.use as { of: string | null }).of) : undefined;
+  const usedIn = recipe.use.kind === 'part' || recipe.use.kind === 'kept' ? partOptions.find(o => o.value === (recipe.use as { of: string | null }).of) : undefined;
+  const partOf = recipe.use.kind === 'part' ? usedIn : undefined;
+  const targetChoices = existing && (
+    <View style={{ gap: 6 }}>
+      <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.grey }}>{existing.name} is on your menu</Text>
+      <Choices
+        label="On your menu"
+        value={recipe.target.kind === 'existing' ? recipe.target.mode : 'new'}
+        options={[{ value: 'replace', label: 'Replace its recipe' }, { value: 'add', label: 'Add to its recipe' }, { value: 'new', label: 'Save as new item' }]}
+        onChange={v => set(r => { r.target = v === 'new' ? { kind: 'new' } : { kind: 'existing', menuItemId: existing.id, mode: v }; })}
+      />
+    </View>
+  );
 
   return (
     <Card style={{ gap: 14, opacity: recipe.include ? 1 : 0.6 }}>
@@ -67,12 +82,19 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
         <>
           {(recipe.looksLikeComponent || recipe.use.kind !== 'sell') && (
             <View style={{ gap: 10, padding: 12, borderRadius: radius.md, backgroundColor: recipe.use.kind === 'undecided' ? `${colors.amber}1A` : colors.inputFill }}>
-              <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.ink }}>Do you sell {label} on its own, or is it part of another item?</Text>
+              <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.ink }}>What is {label}?</Text>
               <Choices
                 label="What it is for" value={recipe.use.kind === 'undecided' ? null : recipe.use.kind}
-                options={[{ value: 'sell', label: 'I sell it' }, { value: 'part', label: 'Part of another item' }]}
-                onChange={v => set(r => { r.use = v === 'sell' ? { kind: 'sell' } : { kind: 'part', of: null, covers: null }; })}
+                options={[{ value: 'sell', label: 'I sell it' }, { value: 'part', label: 'Mixed into another item' }, { value: 'kept', label: 'Made ahead and kept' }]}
+                onChange={v => set(r => { r.use = v === 'sell' ? { kind: 'sell' } : v === 'part' ? { kind: 'part', of: null, covers: null } : { kind: 'kept', of: null, perItem: 1 }; })}
               />
+              <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.grey }}>
+                {recipe.use.kind === 'kept'
+                  ? 'Saved as its own item, not sold (a sponge base, a dough). The items it goes into take it from its stock.'
+                  : recipe.use.kind === 'part'
+                    ? 'Its ingredients are added to the other item\'s recipe (frosting, whipped cream made fresh).'
+                    : 'A base or filling you keep: "Made ahead and kept". One you make fresh each time: "Mixed into".'}
+              </Text>
               {recipe.use.kind === 'part' && (
                 <View style={{ gap: 10 }}>
                   <View style={{ gap: 4 }}>
@@ -83,10 +105,28 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
                     onChange={n => set(r => { if (r.use.kind === 'part') r.use.covers = n; })} />
                 </View>
               )}
+              {recipe.use.kind === 'kept' && (
+                <View style={{ gap: 10 }}>
+                  <NumberField key={`${recipe.key}-kept-makes`} label="One batch makes" value={recipe.makes} placeholder="e.g. 4.5" flagged={!recipe.makes}
+                    onChange={n => set(r => { r.makes = n; })} />
+                  {recipe.makesAsWritten ? <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.grey }}>Written: “{recipe.makesAsWritten}”</Text> : null}
+                  <View style={{ gap: 4 }}>
+                    <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.grey }}>Used in (optional)</Text>
+                    <PickerButton label="Used in" text={usedIn?.label ?? 'Not yet: just save it'} muted={!usedIn} onPress={() => setPartSheet(true)} />
+                  </View>
+                  {usedIn && (
+                    <NumberField key={`${recipe.key}-per`} label="How many go into one?" value={recipe.use.perItem} placeholder="e.g. 1" flagged={!recipe.use.perItem}
+                      onChange={n => set(r => { if (r.use.kind === 'kept') r.use.perItem = n; })} />
+                  )}
+                  {targetChoices}
+                </View>
+              )}
               <ChoiceSheet
-                visible={partSheet} title={`${label} is part of`} options={partOptions} selected={partOf?.value}
+                visible={partSheet} title={recipe.use.kind === 'kept' ? `${label} is used in` : `${label} is part of`}
+                options={recipe.use.kind === 'kept' ? [{ value: '', label: 'Not yet: just save it' }, ...partOptions] : partOptions}
+                selected={usedIn?.value}
                 onClose={() => setPartSheet(false)}
-                onChoose={v => { set(r => { if (r.use.kind === 'part') r.use.of = v; }); setPartSheet(false); }}
+                onChoose={v => { set(r => { if (r.use.kind === 'part' || r.use.kind === 'kept') r.use.of = v || null; }); setPartSheet(false); }}
               />
             </View>
           )}
@@ -102,30 +142,33 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
                 )}
               </View>
               {recipe.makesAsWritten ? <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.grey }}>Written: “{recipe.makesAsWritten}”</Text> : null}
-              {existing && (
-                <View style={{ gap: 6 }}>
-                  <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.grey }}>{existing.name} is on your menu</Text>
-                  <Choices
-                    label="On your menu"
-                    value={recipe.target.kind === 'existing' ? recipe.target.mode : 'new'}
-                    options={[{ value: 'replace', label: 'Replace its recipe' }, { value: 'add', label: 'Add to its recipe' }, { value: 'new', label: 'Save as new item' }]}
-                    onChange={v => set(r => { r.target = v === 'new' ? { kind: 'new' } : { kind: 'existing', menuItemId: existing.id, mode: v }; })}
-                  />
+              {targetChoices}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 15, color: colors.ink }}>Made when ordered</Text>
+                  <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.grey }}>Each sale takes its ingredients (and any base) from stock, with no production run.</Text>
                 </View>
-              )}
+                <Switch value={!!recipe.madeToOrder} onValueChange={v => set(r => { r.madeToOrder = v; })} accessibilityLabel="Made when ordered" trackColor={{ true: colors.primary, false: colors.outline }} thumbColor={colors.white} />
+              </View>
             </View>
           )}
 
           <View style={{ gap: 2 }}>
             <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.grey }}>
-              {share ? (recipe.use.kind === 'part' ? 'Ingredients, for each item it is part of' : 'Ingredients, for one item') : 'Ingredients'}
+              {share ? (recipe.use.kind === 'part' ? 'Ingredients, for each item it is part of' : recipe.use.kind === 'kept' ? 'Ingredients, for one piece' : 'Ingredients, for one item') : 'Ingredients'}
             </Text>
             {recipe.lines.map((line, i) => (
               <IngredientRow key={line.key} draft={draft} recipe={recipe} line={line} setup={setup} cost={costs[i]} share={share} flagged={issueLines.has(line.key)} update={update} />
             ))}
           </View>
+          {keptParts.map(k => (
+            <View key={k.key} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+              <Text style={{ fontFamily: fonts.regular, fontSize: 14, color: colors.ink, flex: 1 }}>+ {fmtAmount(k.perItem)} {k.name} (made ahead)</Text>
+              <Text style={{ fontFamily: fonts.mono, fontSize: 14, color: k.cost === null ? colors.amber : colors.ink }}>{k.cost === null ? 'no price yet' : money(symbol, k.cost * k.perItem)}</Text>
+            </View>
+          ))}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', borderTopWidth: 1, borderColor: `${colors.outline}66`, paddingTop: 10 }}>
-            <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.grey }}>{recipe.use.kind === 'part' ? 'Adds to each item' : 'Cost of one item'}</Text>
+            <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.grey }}>{recipe.use.kind === 'part' ? 'Adds to each item' : recipe.use.kind === 'kept' ? 'Cost of one piece' : 'Cost of one item'}</Text>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={{ fontFamily: fonts.mono, fontSize: 16, color: colors.ink }}>{share ? money(symbol, total) : '—'}</Text>
               {incomplete && <Text style={{ fontFamily: fonts.semibold, fontSize: 11, color: colors.amber }}>cost incomplete</Text>}

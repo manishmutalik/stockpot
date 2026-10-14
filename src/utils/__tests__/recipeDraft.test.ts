@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDraft, chooseLineMaterial, draftIssues, draftToImport, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
+import { buildDraft, chooseLineMaterial, draftIssues, draftToImport, keptPartsOf, keptPieceCost, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
 import type { ParsedIngredient, ParsedRecipe, ParsedRecipes } from '../recipeParse';
 import type { MenuItem, RawMaterial } from '../../types';
 import { planImportRecipes } from '../plans/planRecipes';
@@ -50,7 +50,7 @@ describe('draftIssues', () => {
   it('lists what is still to settle', () => {
     const d = draftOf();
     const messages = draftIssues(d, materials, menu).map(i => i.message);
-    expect(messages).toContain('Whipped cream: do you sell it, or is it part of another item?');
+    expect(messages).toContain('Whipped cream: do you sell it, mix it into another item, or make it ahead and keep it?');
     // A cup of sugar at ₹48/kg is cheap enough to weigh with the typical weight; nothing asked about it.
     expect(messages.some(m => m.includes('chini'))).toBe(false);
   });
@@ -172,5 +172,67 @@ describe('questionPrompt', () => {
     const pinch = questionPrompt({ kind: 'pinch' }, line, 'Saffron', 'g');
     expect(pinch).toMatchObject({ canLeaveOut: true, unit: 'g' });
     expect(pinch.answer(0.5)).toEqual({ batchAmount: 0.5 });
+  });
+});
+
+describe('a base made ahead and kept', () => {
+  // A cream cake read with its sponge base: one batch of base makes 4.5.
+  const cake: ParsedRecipe = { name: 'Pineapple Cake', makesAsWritten: 'one cake', makes: 1, looksLikeComponent: false, looksCutOff: false, ingredients: [ing('sugar', '100', 'g', { materialId: 'm_sugar' })] };
+  const base: ParsedRecipe = { name: 'Sponge base', makesAsWritten: 'makes 4 to 5', looksLikeComponent: true, looksCutOff: false, ingredients: [ing('maida', '900', 'g', { materialId: 'm_flour' }), ing('eggs', '9', 'none', { materialId: 'm_eggs' })] };
+  const kept = (over: Partial<{ of: string | null; perItem: number | null }> = {}) => {
+    const d = buildDraft({ recipes: [cake, base], moreNotRead: false }, { materials, menu, fromPhotos: true });
+    d.recipes[1].use = { kind: 'kept', of: 'recipe:r1', perItem: 1, ...over };
+    d.recipes[1].makes = 4.5;
+    return d;
+  };
+
+  it('asks its batch size, and how many go into one of the item it is used in', () => {
+    const d = kept({ perItem: null });
+    d.recipes[1].makes = null;
+    d.recipes[1].name = ' ';
+    const messages = draftIssues(d, materials, menu).map(i => i.message);
+    expect(messages).toEqual(expect.arrayContaining(['Give the item made ahead a name.', 'A recipe: how many does one batch make?', 'A recipe: how many go into one Pineapple Cake?']));
+    // Not used in anything yet is fine: it is saved on its own.
+    expect(draftIssues(kept({ of: null, perItem: null }), materials, menu)).toEqual([]);
+  });
+
+  it('costs one piece, and adds it to the item it goes into', () => {
+    const d = kept();
+    // 900 g maida (₹40.50) and 9 eggs (₹63) for 4.5: ₹23 a base.
+    expect(keptPieceCost(d, d.recipes[1], materials)).toBe(23);
+    expect(keptPartsOf(d, d.recipes[0], materials)).toEqual([{ key: 'r2', name: 'Sponge base', perItem: 1, cost: 23 }]);
+  });
+
+  it('is saved as its own item, not sold, with its batch size, and linked into the cake (made when ordered)', () => {
+    const d = kept();
+    d.recipes[0].madeToOrder = true;
+    const out = draftToImport(d, materials, menu)!;
+    expect(out.items.map(i => i.target)).toEqual([{ kind: 'new', name: 'Sponge base' }, { kind: 'new', name: 'Pineapple Cake' }]);
+    expect(out.items[0]).toMatchObject({ key: 'recipe:r2', notForSale: true, batchMakes: 4.5 });
+    expect(out.items[0].lines.map(l => [l.amount, l.unit])).toEqual([[200, 'g'], [2, 'pcs']]);
+    expect(out.items[1]).toMatchObject({ madeToOrder: true, parts: [{ item: { newKey: 'recipe:r2' }, quantity: 1 }] });
+
+    let n = 0;
+    const plan = planImportRecipes({ ...out, materials, menu, today: '2026-10-14', ctx: { newId: () => `id${++n}`, now: () => 0 } });
+    expect(plan.ok).toBe(true);
+    if (plan.ok !== true) return;
+    const [baseDoc, cakeDoc] = plan.writes.map(w => w.data);
+    expect(baseDoc).toMatchObject({ id: 'id1', name: 'Sponge base', notForSale: true, batchMakes: 4.5 });
+    expect(cakeDoc).toMatchObject({ id: 'id2', name: 'Pineapple Cake', madeToOrder: true, parts: [{ itemId: 'id1', quantity: 1 }] });
+  });
+
+  it('can be used in an item already on the menu, which keeps its recipe and gains the part', () => {
+    const d = kept({ of: 'menu:menu_cake', perItem: 0.5 });
+    d.recipes[0].include = false;
+    const out = draftToImport(d, materials, menu)!;
+    expect(out.items[1]).toEqual({ target: { kind: 'existing', menuItemId: 'menu_cake', mode: 'add' }, lines: [], parts: [{ item: { newKey: 'recipe:r2' }, quantity: 0.5 }] });
+  });
+
+  it('links an item already on the menu by its own id when the base replaces its recipe', () => {
+    const d = kept();
+    d.recipes[1].target = { kind: 'existing', menuItemId: 'menu_cake', mode: 'replace' };
+    const out = draftToImport(d, materials, menu)!;
+    expect(out.items[0]).not.toHaveProperty('notForSale');
+    expect(out.items[1].parts).toEqual([{ item: { existingId: 'menu_cake' }, quantity: 1 }]);
   });
 });
