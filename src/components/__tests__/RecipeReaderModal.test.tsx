@@ -62,7 +62,7 @@ describe('RecipeReaderModal', () => {
     fireEvent.click(within(cookies).getByRole('button', { name: /Use 168 g/ }));
     // The ganache: part of the cookies, one batch covers 20
     const ganache = screen.getByRole('region', { name: 'Chocolate ganache' });
-    fireEvent.click(within(ganache).getByLabelText('It is part of another item'));
+    fireEvent.click(within(ganache).getByLabelText('Mixed into another item each time'));
     fireEvent.change(within(ganache).getByLabelText('Part of'), { target: { value: 'recipe:r1' } });
     fireEvent.change(within(ganache).getByLabelText('One batch covers'), { target: { value: '20' } });
 
@@ -74,6 +74,30 @@ describe('RecipeReaderModal', () => {
     expect(data.items[0].target).toEqual({ kind: 'new', name: 'Choco Chip Cookies' });
     expect(data.items[0].lines.map((l: { amount: number }) => l.amount)).toEqual([12.48, 8.4, 0.05, 5]);
     expect(data.remember).toEqual([{ materialId: 'm_chips', gramsPerTsp: 3.5 }]);
+  });
+
+  it('saves a component made ahead and kept as its own item, used in the cookies, which are made when ordered', async () => {
+    const { onSave } = open();
+    await readText();
+    const cookies = screen.getByRole('region', { name: 'Choco Chip Cookies' });
+    fireEvent.click(within(cookies).getByRole('button', { name: /Use 168 g/ }));
+    fireEvent.click(within(cookies).getByLabelText(/Made when ordered/));
+    const ganache = screen.getByRole('region', { name: 'Chocolate ganache' });
+    fireEvent.click(within(ganache).getByLabelText('Made ahead and kept'));
+    fireEvent.change(within(ganache).getByLabelText('One batch makes'), { target: { value: '4' } });
+    fireEvent.change(within(ganache).getByLabelText('Used in (optional)'), { target: { value: 'recipe:r1' } });
+    fireEvent.change(within(ganache).getByLabelText('How many go into one'), { target: { value: '0.5' } });
+    // The cookies' card shows the ganache going into each one.
+    expect(within(cookies).getByText(/\+ 0\.5 Chocolate ganache/)).toBeTruthy();
+
+    const save = screen.getByRole('button', { name: 'Save 2 recipes' }) as HTMLButtonElement;
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.click(save);
+    await screen.findByText('Recipe saved');
+    const data = onSave.mock.calls[0][0];
+    expect(data.items.map((i: { target: unknown }) => i.target)).toEqual([{ kind: 'new', name: 'Chocolate ganache' }, { kind: 'new', name: 'Choco Chip Cookies' }]);
+    expect(data.items[0]).toMatchObject({ key: 'recipe:r2', notForSale: true, batchMakes: 4 });
+    expect(data.items[1]).toMatchObject({ madeToOrder: true, parts: [{ item: { newKey: 'recipe:r2' }, quantity: 0.5 }] });
   });
 
   it('shows the reader\'s message when nothing could be read, and lets the owner try again', async () => {

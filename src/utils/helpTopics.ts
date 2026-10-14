@@ -241,7 +241,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     summary: 'A sponge base made ahead for cream cakes, a ganache, cookies in a hamper.',
     keywords: ['base', 'sponge', 'sub recipe', 'sub-recipe', 'filling', 'ganache', 'custard', 'premix', 'cake gel', 'hamper', 'combo', 'made ahead', 'intermediate', 'not for sale'],
     body: [
-      text('If you make something ahead and use it in other items (a sponge base for cream cakes, a ganache, a masala base, cookies that go into hampers), add it as its own item and use it in the others. Its cost then flows into every item built on it.'),
+      text('If you make something ahead and use it in other items (a sponge base for cream cakes, a ganache, a masala base, cookies that go into hampers), add it as its own item and use it in the others. Its cost then flows into every item built on it. Reading the recipes with **Read a recipe**? Choose **Made ahead and kept** for the base, and Stockpot does the steps below for you.'),
       steps(
         'On the website, in **Recipes & Menus**, add the base as an item, with its recipe for **one** base. A batch that makes 4.5 bases? Set **One batch makes** to 4.5; if you typed the recipe for the whole batch, Stockpot offers to divide it (the recipe reader does both for you).',
         'Open its recipe and turn off **Sold on the menu**. It moves to **Made for other items**, and stays out of orders, the shared menu and margin figures.',
@@ -290,11 +290,13 @@ export const HELP_TOPICS: HelpTopic[] = [
         'In **Recipes & Menus**, click **Read a recipe**.',
         'Add photos of the page (up to three, for a recipe that runs over) or paste the recipe.',
         'Check each recipe it found: every ingredient is matched to one of your materials and worked out for one item. Change a match if it is wrong.',
-        'Answer anything marked: how much a cup of something weighs, how much a pinch of saffron is, whether whipped cream is sold or part of a cake.',
+        'Answer anything marked: how much a cup of something weighs, how much a pinch of saffron is, and what a component (whipped cream, a sponge base) is: sold, **Mixed into another item each time**, or **Made ahead and kept**.',
         'Click **Save**. New materials are added to your stock with no quantity.',
       ),
       points(
         'Written "makes 12"? Every amount is divided by 12, because recipes in Stockpot are for one item.',
+        '**Made ahead and kept** (a sponge base, a dough): it is saved as its own item, not sold on the menu, with **One batch makes** set. Choose what it is **Used in** and how many go into one, and the cake gets it as a part, with its cost shown on the cake.',
+        'Tick **Made when ordered** for a cake you assemble when someone orders it: each sale then takes its ingredients and base by itself.',
         'You can read 15 recipes a day and 75 a month. A page with three recipes counts as three.',
         'Photos are read and then dropped, never kept.',
       ),
@@ -311,6 +313,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         'Tap **Take photo** (the phone asks for the camera the first time) or **Gallery**. Add up to three pages. Or choose **Type it**.',
         'Hold the phone straight over the page in good light, then tap **Read recipe**. It can take up to a minute.',
         'Check each card: tap an ingredient\'s material to change it. Answer anything marked in orange, or tap **Use … (typical)**.',
+        'A component, such as a sponge base: choose **Made ahead and kept** to save it as its own item used in a cake, or **Mixed into another item** for frosting made fresh. A cake assembled when ordered: turn on **Made when ordered**.',
         'Tap **Save**. The recipes are on your menu, on the website too.',
       ),
       text('You can read 15 recipes a day and 75 a month; the screen says how many are left. Photos are not kept.'),

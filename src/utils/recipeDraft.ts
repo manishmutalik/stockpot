@@ -8,8 +8,11 @@
  *
  *  - Each ingredient is matched to an existing material (the model's match, else utils/kitchenMeasures'
  *    `matchMaterialByName`), or to a new material: the same name in several recipes is one new material.
- *  - A recipe the reader marked as a component (whipped cream, ganache) must be settled by the owner: sold on its own,
- *    or part of another item, with how many of that item one batch covers.
+ *  - A recipe the reader marked as a component (whipped cream, ganache, a sponge base) must be settled by the owner: sold
+ *    on its own; mixed into another item each time, with how many of that item one batch covers (its ingredients are
+ *    written into that item's recipe); or made ahead and kept, saved as its own item not sold on the menu, with its batch
+ *    size, and used as a part of another item (utils/itemParts), so many to one of it.
+ *  - A sold recipe can be made when ordered (utils/madeToOrder).
  *  - A recipe whose name is an existing menu item replaces that item's recipe unless the owner chooses otherwise.
  *  - Nothing can be saved while a question is open: `draftIssues` lists them.
  */
@@ -33,8 +36,16 @@ export interface DraftLine {
   answers: LineAnswers;
 }
 
-/** What a recipe is for. A component starts `undecided` until the owner says. `of` is `recipe:<key>` or `menu:<id>`. */
-export type DraftUse = { kind: 'sell' } | { kind: 'part'; of: string | null; covers: number | null } | { kind: 'undecided' };
+/**
+ * What a recipe is for. A component starts `undecided` until the owner says. `of` is `recipe:<key>` or `menu:<id>`.
+ * `part`: mixed into that item each time. `kept`: made ahead and kept as its own item, used in `of` (when set), `perItem`
+ * of it in one of that item.
+ */
+export type DraftUse =
+  | { kind: 'sell' }
+  | { kind: 'part'; of: string | null; covers: number | null }
+  | { kind: 'kept'; of: string | null; perItem: number | null }
+  | { kind: 'undecided' };
 export type DraftTarget = { kind: 'new' } | { kind: 'existing'; menuItemId: string; mode: 'replace' | 'add' };
 
 export interface DraftRecipe {
@@ -49,6 +60,8 @@ export interface DraftRecipe {
   use: DraftUse;
   target: DraftTarget;
   sellingPrice: number | null;
+  /** A sold item made when it is ordered (utils/madeToOrder). */
+  madeToOrder?: boolean;
   lines: DraftLine[];
 }
 
@@ -183,9 +196,32 @@ export function resolveDraftLine(draft: RecipeDraft, recipe: DraftRecipe, line: 
   });
 }
 
-/** How many of the item one batch is shared over: what it makes, or for a component how many of its item it covers. */
+/**
+ * How many of the item one batch is shared over: what it makes (a sold recipe, or one made ahead and kept), or for a
+ * component mixed in, how many of its item it covers.
+ */
 export const batchShare = (recipe: DraftRecipe): number | null =>
-  recipe.use.kind === 'part' ? recipe.use.covers : recipe.use.kind === 'sell' ? recipe.makes : null;
+  recipe.use.kind === 'part' ? recipe.use.covers : recipe.use.kind === 'sell' || recipe.use.kind === 'kept' ? recipe.makes : null;
+
+/** The recipe or menu item a component is used in, when it is one that can be (a sold recipe here, or a menu item). */
+function componentTarget(draft: RecipeDraft, menu: DraftMenuItem[], of: string | null): { name: string } | undefined {
+  return of?.startsWith('recipe:') ? draft.recipes.find(x => `recipe:${x.key}` === of && x.include && x.use.kind === 'sell')
+    : of?.startsWith('menu:') ? menu.find(m => `menu:${m.id}` === of) : undefined;
+}
+
+/** What one piece of a recipe made ahead and kept costs, when every line has a price (null otherwise, or with no batch size). */
+export function keptPieceCost(draft: RecipeDraft, kept: DraftRecipe, materials: DraftMaterial[]): number | null {
+  if (!(kept.makes! > 0)) return null;
+  const costs = kept.lines.filter(l => l.choice.kind !== 'skip').map(l => lineCostPerItem(draft, kept, l, materials));
+  return costs.some(c => c === null) ? null : costs.reduce((a: number, c) => a + c!, 0);
+}
+
+/** The recipes made ahead and kept that go into `recipe` (a sold recipe on this page), with how many and what each costs. */
+export function keptPartsOf(draft: RecipeDraft, recipe: DraftRecipe, materials: DraftMaterial[]): { key: string; name: string; perItem: number; cost: number | null }[] {
+  return draft.recipes
+    .filter(k => k.include && k.use.kind === 'kept' && k.use.of === `recipe:${recipe.key}` && (k.use.perItem ?? 0) > 0)
+    .map(k => ({ key: k.key, name: k.name.trim() || 'A base', perItem: (k.use as { perItem: number }).perItem, cost: keptPieceCost(draft, k, materials) }));
+}
 
 /** The cost of a line for one item, when the line is worked out and its material has a price. */
 export function lineCostPerItem(draft: RecipeDraft, recipe: DraftRecipe, line: DraftLine, materials: DraftMaterial[]): number | null {
@@ -205,17 +241,24 @@ export function draftIssues(draft: RecipeDraft, materials: DraftMaterial[], menu
   if (included.length === 0) issues.push({ message: 'Tick at least one recipe to save.' });
   for (const r of included) {
     const label = r.name.trim() || 'A recipe';
-    if (r.use.kind === 'undecided') issues.push({ recipeKey: r.key, message: `${label}: do you sell it, or is it part of another item?` });
+    if (r.use.kind === 'undecided') issues.push({ recipeKey: r.key, message: `${label}: do you sell it, mix it into another item, or make it ahead and keep it?` });
     if (r.use.kind === 'sell') {
       if (r.target.kind === 'new' && !r.name.trim()) issues.push({ recipeKey: r.key, message: 'Give the recipe a name.' });
       if (!(r.makes! > 0)) issues.push({ recipeKey: r.key, message: `${label}: how many does one batch make?` });
     }
     if (r.use.kind === 'part') {
-      const of = r.use.of;
-      const target = of?.startsWith('recipe:') ? draft.recipes.find(x => `recipe:${x.key}` === of && x.include && x.use.kind === 'sell')
-        : of?.startsWith('menu:') ? menu.find(m => `menu:${m.id}` === of) : undefined;
+      const target = componentTarget(draft, menu, r.use.of);
       if (!target) issues.push({ recipeKey: r.key, message: `${label}: which item is it part of?` });
       if (!(r.use.covers! > 0)) issues.push({ recipeKey: r.key, message: `${label}: how many does one batch cover?` });
+    }
+    if (r.use.kind === 'kept') {
+      if (r.target.kind === 'new' && !r.name.trim()) issues.push({ recipeKey: r.key, message: 'Give the item made ahead a name.' });
+      if (!(r.makes! > 0)) issues.push({ recipeKey: r.key, message: `${label}: how many does one batch make?` });
+      if (r.use.of) {
+        const target = componentTarget(draft, menu, r.use.of);
+        if (!target) issues.push({ recipeKey: r.key, message: `${label}: which item is it used in?` });
+        else if (!(r.use.perItem! > 0)) issues.push({ recipeKey: r.key, message: `${label}: how many go into one ${target.name.trim() || 'item'}?` });
+      }
     }
     const kept = r.lines.filter(l => l.choice.kind !== 'skip');
     if (kept.length === 0) issues.push({ recipeKey: r.key, message: `${label}: every ingredient is left out.` });
@@ -239,7 +282,10 @@ export function usedNewMaterials(draft: RecipeDraft): DraftNewMaterial[] {
 
 export type DraftImport = { items: RecipeImportItem[]; newMaterials: NewMaterialInput[]; remember: MaterialMemory[] };
 
-/** What to save, once `draftIssues` is empty. Components are folded into the item they are part of. */
+/**
+ * What to save, once `draftIssues` is empty. A component mixed in is folded into the item it is part of; one made ahead and
+ * kept is its own item (not sold on the menu, with its batch size), linked as a part of the item it is used in.
+ */
 export function draftToImport(draft: RecipeDraft, materials: DraftMaterial[], menu: DraftMenuItem[]): DraftImport | null {
   if (draftIssues(draft, materials, menu).length > 0) return null;
   const remember = new Map<string, MaterialMemory>();
@@ -265,6 +311,18 @@ export function draftToImport(draft: RecipeDraft, materials: DraftMaterial[], me
   const included = draft.recipes.filter(r => r.include);
   const items: RecipeImportItem[] = [];
   const byRecipe = new Map<string, RecipeImportItem>();
+  // Made ahead and kept first, so the items that use them can point at them.
+  for (const r of included.filter(x => x.use.kind === 'kept')) {
+    const item: RecipeImportItem = {
+      key: `recipe:${r.key}`,
+      target: r.target.kind === 'new' ? { kind: 'new', name: r.name.trim() } : { kind: 'existing', menuItemId: r.target.menuItemId, mode: r.target.mode },
+      lines: linesOf(r),
+      batchMakes: r.makes!,
+      ...(r.target.kind === 'new' && { notForSale: true }),
+    };
+    items.push(item);
+    byRecipe.set(`recipe:${r.key}`, item);
+  }
   for (const r of included.filter(x => x.use.kind === 'sell')) {
     const item: RecipeImportItem = {
       target: r.target.kind === 'new'
@@ -272,18 +330,30 @@ export function draftToImport(draft: RecipeDraft, materials: DraftMaterial[], me
         : { kind: 'existing', menuItemId: r.target.menuItemId, mode: r.target.mode },
       lines: linesOf(r),
       ...(r.makes && r.makes > 0 && { batchMakes: r.makes }),
+      ...(r.madeToOrder && { madeToOrder: true }),
     };
     items.push(item);
     byRecipe.set(`recipe:${r.key}`, item);
   }
+  /** The item a component goes into: one saved here, or a menu item (added to, never replaced). */
+  const intoItem = (of: string): RecipeImportItem => {
+    const found = byRecipe.get(of) ?? items.find(i => i.target.kind === 'existing' && `menu:${i.target.menuItemId}` === of);
+    if (found) return found;
+    const item: RecipeImportItem = { target: { kind: 'existing', menuItemId: of.slice('menu:'.length), mode: 'add' }, lines: [] };
+    items.push(item);
+    return item;
+  };
+  for (const r of included.filter(x => x.use.kind === 'kept')) {
+    const use = r.use as Extract<DraftUse, { kind: 'kept' }>;
+    if (!use.of || !(use.perItem! > 0)) continue;
+    const kept = byRecipe.get(`recipe:${r.key}`)!;
+    const ref = kept.target.kind === 'existing' ? { existingId: kept.target.menuItemId } : { newKey: kept.key! };
+    const into = intoItem(use.of);
+    into.parts = [...(into.parts ?? []), { item: ref, quantity: use.perItem! }];
+  }
   for (const r of included.filter(x => x.use.kind === 'part')) {
     const of = (r.use as Extract<DraftUse, { kind: 'part' }>).of!;
-    const lines = linesOf(r);
-    const into = byRecipe.get(of)
-      ?? items.find(i => i.target.kind === 'existing' && `menu:${i.target.menuItemId}` === of);
-    if (into) { into.lines.push(...lines); continue; }
-    const item: RecipeImportItem = { target: { kind: 'existing', menuItemId: of.slice('menu:'.length), mode: 'add' }, lines };
-    items.push(item);
+    intoItem(of).lines.push(...linesOf(r));
   }
 
   const newMaterials: NewMaterialInput[] = usedNewMaterials(draft).map(nm => ({

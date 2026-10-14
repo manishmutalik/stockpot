@@ -130,12 +130,56 @@ describe('POST /mobile/recipes', () => {
   });
 });
 
+describe('POST /mobile/recipes, a base made ahead and kept', () => {
+  const sugarLine = { material: { existingId: 'm_sugar' }, amount: 10, unit: 'g' };
+  const flourLine = { material: { existingId: 'm_flour' }, amount: 200, unit: 'g' };
+
+  it('saves the base as its own item, not sold, and the cake with it as a part, made when ordered', async () => {
+    const { mem, deps } = world();
+    const r = await save(deps, { newMaterials: [], remember: [], items: [
+      { key: 'recipe:r2', target: { kind: 'new', name: 'Sponge base' }, lines: [flourLine], batchMakes: 4.5, notForSale: true },
+      { target: { kind: 'new', name: 'Pineapple cake', sellingPrice: 900 }, lines: [sugarLine], madeToOrder: true, parts: [{ item: { newKey: 'recipe:r2' }, quantity: 1 }] },
+    ] });
+    expect(r.code).toBe(201);
+    expect(mem.read(UID, 'menu', 'id1')).toMatchObject({ name: 'Sponge base', notForSale: true, batchMakes: 4.5 });
+    // Priced with its base: 10 g sugar (₹0.48) and 200 g maida (₹9).
+    expect(mem.read(UID, 'menu', 'id2')).toMatchObject({ name: 'Pineapple cake', madeToOrder: true, parts: [{ itemId: 'id1', quantity: 1 }], costAtPricing: 9.48 });
+  });
+
+  it('adds a base to a cake already on the menu, and refuses a cake inside its own base', async () => {
+    const { mem, deps } = world();
+    mem.seed(UID, 'menu', 'menu_base', { name: 'Sponge base', sellingPrice: 0, notForSale: true, recipe: [], parts: [] });
+    const added = await save(deps, { newMaterials: [], remember: [], items: [
+      { target: { kind: 'existing', menuItemId: 'menu_cake', mode: 'add' }, lines: [], parts: [{ item: { existingId: 'menu_base' }, quantity: 1 }] },
+    ] });
+    expect(added.code).toBe(201);
+    expect(mem.read(UID, 'menu', 'menu_cake')!.parts).toEqual([{ itemId: 'menu_base', quantity: 1 }]);
+    const loop = await save(deps, { newMaterials: [], remember: [], items: [
+      { target: { kind: 'existing', menuItemId: 'menu_base', mode: 'add' }, lines: [], parts: [{ item: { existingId: 'menu_cake' }, quantity: 1 }] },
+    ] });
+    expect(loop.code).toBe(422);
+    expect((loop.body as { code: string }).code).toBe('part_loop');
+  });
+});
+
 describe('readRecipeImportBody', () => {
   const line = { material: { existingId: 'm_flour' }, amount: 10, unit: 'g' };
   const ok = { items: [{ target: { kind: 'new', name: 'Brownie', sellingPrice: 50 }, lines: [line] }], newMaterials: [], remember: [] };
   it('takes a well-formed import', () => {
     expect(readRecipeImportBody(ok)).toEqual({ ok: true, value: ok });
   });
+  it('takes keys, parts, and items not sold or made when ordered, and refuses what does not fit', () => {
+    const kept = { key: 'recipe:r2', target: { kind: 'new', name: 'Base' }, lines: [line], batchMakes: 4.5, notForSale: true };
+    const cake = { target: { kind: 'new', name: 'Cake' }, lines: [line], madeToOrder: true, parts: [{ item: { newKey: 'recipe:r2' }, quantity: 1 }, { item: { existingId: 'menu_x' }, quantity: 0.5 }] };
+    const body = { items: [kept, cake], newMaterials: [], remember: [] };
+    expect(readRecipeImportBody(body)).toEqual({ ok: true, value: body });
+    expect(readRecipeImportBody({ ...body, items: [kept, { ...cake, parts: [{ item: { newKey: 'recipe:r9' }, quantity: 1 }] }] }).ok).toBe(false);
+    expect(readRecipeImportBody({ ...body, items: [kept, { ...cake, parts: [{ item: { existingId: 'menu_x' }, quantity: 0 }] }] }).ok).toBe(false);
+    expect(readRecipeImportBody({ ...body, items: [kept, { ...kept }] }).ok).toBe(false);
+    expect(readRecipeImportBody({ ...body, items: [{ ...kept, key: 'base' }] }).ok).toBe(false);
+    expect(readRecipeImportBody({ ...body, items: [{ ...kept, notForSale: 'yes' }] }).ok).toBe(false);
+  });
+
   it('keeps what one batch makes, when it is above nothing', () => {
     const batch = { ...ok, items: [{ ...ok.items[0], batchMakes: 4.5 }] };
     expect(readRecipeImportBody(batch)).toEqual({ ok: true, value: batch });
