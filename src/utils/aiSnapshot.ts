@@ -255,7 +255,7 @@ export function buildBusinessSnapshot(input: {
     .slice(0, SNAPSHOT_LIMITS.stockItems).map(m => nameId('mat', m.id, m.name));
   // Materials that will run out before the low-stock alert would warn, from recent production and discards.
   const reorderSoon = reorderSuggestions({
-    materials, menu, productionRuns: input.productionRuns ?? [], wastageLogs: input.wastageLogs, today: input.today,
+    materials, menu, productionRuns: input.productionRuns ?? [], orders, wastageLogs: input.wastageLogs, today: input.today,
   }).suggestions.slice(0, SNAPSHOT_LIMITS.reorderSoon).map(r => ({
     name: nameId('mat', r.materialId, r.name),
     daysOfCover: days(`r_${r.materialId}_cover`, `Days of ${r.name} left at the current rate of use`, Math.floor(r.daysOfCover)),

@@ -19,6 +19,7 @@ import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { MenuItem, Order, RawMaterial } from '../types';
 import { stampFor } from '../utils/orderPricing';
 import { costView } from '../utils/itemParts';
+import { takeForSale, type Stock } from '../utils/madeToOrder';
 
 export interface ShopifyStatus {
   connected: boolean;
@@ -251,15 +252,31 @@ export function useIntegrations(
    * stock" to reject when the sale already happened externally, so each
    * item's stock is clamped at 0 instead. Quantities are combined per
    * menu item first, since more than one imported line item can reference
-   * the same one.
+   * the same one. An item made when ordered takes its ingredients and parts
+   * instead (utils/madeToOrder), recorded on its order so a delete gives them back.
    */
   const claimFinishedGoodsStock = async (userId: string, importedOrders: Order[]) => {
     const claimedByItem = new Map<string, number>();
+    let stock: Stock = { materials, menu };
     for (const order of importedOrders) {
+      const item = menu.find(m => m.id === order.menuItemId);
+      if (item?.madeToOrder) {
+        const t = takeForSale(item, order.quantity, stock);
+        stock = t.stock;
+        await setDoc(doc(db, 'users', userId, 'orders', order.id), { taken: t.taken }, { merge: true });
+        continue;
+      }
       claimedByItem.set(order.menuItemId, (claimedByItem.get(order.menuItemId) ?? 0) + order.quantity);
     }
+    // What made-to-order lines took, one write per material or part.
+    for (const m of stock.materials) {
+      if (m !== materials.find(x => x.id === m.id)) await setDoc(doc(db, 'users', userId, 'materials', m.id), { initialStock: m.initialStock }, { merge: true });
+    }
+    for (const m of stock.menu) {
+      if (m !== menu.find(x => x.id === m.id)) await setDoc(doc(db, 'users', userId, 'menu', m.id), { finishedGoodsStock: m.finishedGoodsStock ?? 0 }, { merge: true });
+    }
     for (const [menuItemId, claimed] of claimedByItem) {
-      const item = menu.find(m => m.id === menuItemId);
+      const item = stock.menu.find(m => m.id === menuItemId);
       if (!item) continue;
       const current = item.finishedGoodsStock ?? 0;
       await setDoc(doc(db, 'users', userId, 'menu', menuItemId), { finishedGoodsStock: Math.max(0, current - claimed) }, { merge: true });

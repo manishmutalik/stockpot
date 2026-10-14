@@ -194,8 +194,10 @@ export function buildUpcoming(input: {
       confirmationMessage,
       whatsappUrl: buildWhatsAppUrl(phone ?? undefined, confirmationMessage),
       billSentAt: billSentAtFor(members.filter(o => o.paymentStatus === 'unpaid')) ?? null,
+      // An item made when ordered is never short of finished stock: handing it over takes its ingredients (utils/madeToOrder).
       stockShort: [...wanted].flatMap(([id, qty]) => {
         const item = menu.find(m => m.id === id);
+        if (item?.madeToOrder) return [];
         const short = qty - (item?.finishedGoodsStock ?? 0);
         return short > 0 ? [{ name: item?.name ?? 'Item', short }] : [];
       }),

@@ -20,6 +20,8 @@ interface MenuItem {
   finishedGoodsStock?: number;
   /** How many one batch makes, when the item is made in batches. */
   batchMakes?: number;
+  /** Made when it is ordered: never logged as production (utils/madeToOrder). */
+  madeToOrder?: boolean;
 }
 
 interface RawMaterial {
@@ -68,7 +70,7 @@ const batchMakesOf = (menu: MenuItem[], id: string) => {
 };
 /** A fresh row for an item: in batches when the item is made in batches. */
 const rowFor = (menu: MenuItem[], recipeId: string): ProductionRow => ({ recipeId, quantity: 1, ...(batchMakesOf(menu, recipeId) && { inBatches: true, made: '' }) });
-const EMPTY_ROW = (menu: MenuItem[]): ProductionRow => rowFor(menu, menu[0]?.id || '');
+const EMPTY_ROW = (menu: MenuItem[]): ProductionRow => rowFor(menu, menu.find(m => !m.madeToOrder)?.id || '');
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
 /** Pieces the row's ingredients are for. */
@@ -120,6 +122,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   const [notFound,   setNotFound]   = useState<NotFoundItem[]>([]);
   const [unplaced,   setUnplaced]   = useState<UnplacedWaste[]>([]);
   const [unplacedBatches, setUnplacedBatches] = useState<ProductionFormFill['unplacedBatches']>([]);
+  const [leftOutMade, setLeftOutMade] = useState<string[]>([]);
 
   // Preserves the session grouping across a partial-failure retry (see
   // handleSave): once a multi-row submission starts, every row saved in
@@ -137,7 +140,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   useEffect(() => {
     if (!isOpen) return;
     setRows(prev => prev.map(row =>
-      menu.some(m => m.id === row.recipeId) ? row : EMPTY_ROW(menu)
+      menu.some(m => m.id === row.recipeId && !m.madeToOrder) ? row : EMPTY_ROW(menu)
     ));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, menu]);
@@ -209,6 +212,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     setNotFound([]);
     setUnplaced([]);
     setUnplacedBatches([]);
+    setLeftOutMade([]);
     try {
       const outcome = await productionParser.parse(message);
       if (outcome.ok === false) { setReadError(outcome.message); return; }
@@ -219,7 +223,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
       } else {
         // Nothing matched: leave an empty row to choose from, not the first menu item standing in for what was made.
         setRows([{ recipeId: '', quantity: 1 }]);
-        if (f.notFound.length === 0 && f.unplacedBatches.length === 0) notes.push('No items were found in the note.');
+        if (f.notFound.length === 0 && f.unplacedBatches.length === 0 && f.madeToOrder.length === 0) notes.push('No items were found in the note.');
       }
       if (f.date) setDate(f.date);
       if (f.dateNotUnderstood) notes.push(`Couldn't tell the date from "${f.dateNotUnderstood}". Please check the production date.`);
@@ -227,6 +231,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
       setNotFound(f.notFound);
       setUnplaced(f.unplacedWaste);
       setUnplacedBatches(f.unplacedBatches);
+      setLeftOutMade(f.madeToOrder);
       setReadNotes(notes);
       setFilled(true);
       setError('');
@@ -265,6 +270,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     setNotFound([]);
     setUnplaced([]);
     setUnplacedBatches([]);
+    setLeftOutMade([]);
     setRows([EMPTY_ROW(menu)]);
     setDate(today);
     setNotes('');
@@ -284,7 +290,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
     setError('');
     setInvalidRowIndex(null);
 
-    const badRecipeIndex = rows.findIndex(r => !r.recipeId || !menu.some(m => m.id === r.recipeId));
+    const badRecipeIndex = rows.findIndex(r => !r.recipeId || !menu.some(m => m.id === r.recipeId && !m.madeToOrder));
     if (badRecipeIndex !== -1) {
       setInvalidRowIndex(badRecipeIndex);
       setError(rows.length > 1 ? `Please select a recipe for item ${badRecipeIndex + 1}.` : 'Please select a recipe before logging.');
@@ -417,6 +423,11 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
                   {w.units} {w.name} {w.units === 1 ? 'was' : 'were'} wasted. Once the item is chosen and logged, record it with Discard in the Production Log.
                 </p>
               ))}
+              {leftOutMade.map(name => (
+                <p key={`mto-${name}`} className="text-muted">
+                  Left out {name}: it is made when ordered, so it comes out of stock when you sell it.
+                </p>
+              ))}
               {unplacedBatches.map((b, i) => (
                 <p key={`${b.name}-b${i}`} className="text-amber-800">
                   Left out {fmtQty(b.batches)} {b.batches === 1 ? 'batch' : 'batches'} of {b.name}: set how many one batch makes on the Menu, or enter it in pieces below.
@@ -454,7 +465,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
                   className={`${modalField(invalidRowIndex === i && !row.recipeId)} flex-1 min-w-0 font-semibold`}
                 >
                   <option value="" disabled>Select a recipe...</option>
-                  {menu.map(item => (
+                  {menu.filter(item => !item.madeToOrder).map(item => (
                     <option key={item.id} value={item.id}>{item.name}</option>
                   ))}
                 </select>

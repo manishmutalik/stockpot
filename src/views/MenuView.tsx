@@ -118,7 +118,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     materials, categories, menu, orders, settings, currency, expandedRecipeId, setExpandedRecipeId,
     setIsIngredientSelectorOpen, setActiveRecipeItemId, addMenuItem, updateMenuItem, updateMenuItemField,
     deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, menuFilterOnOpen, openRecipeReader,
-    setItemParts, setBatchSize, productionRuns,
+    setItemParts, setBatchSize, setMadeToOrder, productionRuns,
   } = props;
 
   // Purely local, ephemeral UI state for the shareable nutrition card — not
@@ -426,6 +426,11 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                             {isLoss ? `Loss (${margin.toFixed(0)}%)` : `${margin.toFixed(0)}% Margin`}
                           </span>
                         )}
+                        {item.madeToOrder && !made && (
+                          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                            Made to order
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -700,8 +705,30 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                         </button>
                       </div>
 
-                      <BatchSizeEditor item={item} runs={productionRuns} unitCost={cost} currencySymbol={currency.symbol}
-                        onSet={(makes, scale) => setBatchSize(item.id, makes, scale)} />
+                      {!made && (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-ink">Made when ordered</p>
+                            <p className="text-xs text-muted">
+                              {item.madeToOrder
+                                ? 'Each sale takes the ingredients and items below from stock. No production run needed.'
+                                : 'For cakes, thalis or hampers you make after the order comes in: selling one takes its ingredients from stock.'}
+                            </p>
+                          </div>
+                          <button
+                            type="button" role="switch" aria-checked={!!item.madeToOrder} aria-label="Made when ordered"
+                            onClick={() => setMadeToOrder(item.id, !item.madeToOrder)}
+                            className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${item.madeToOrder ? 'bg-primary' : 'bg-stone-300'}`}
+                          >
+                            <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${item.madeToOrder ? 'left-[22px]' : 'left-0.5'}`} />
+                          </button>
+                        </div>
+                      )}
+
+                      {!item.madeToOrder && (
+                        <BatchSizeEditor item={item} runs={productionRuns} unitCost={cost} currencySymbol={currency.symbol}
+                          onSet={(makes, scale) => setBatchSize(item.id, makes, scale)} />
+                      )}
 
                       <ItemPartsEditor item={item} menu={menu} costed={costed} materials={materials} currencySymbol={currency.symbol}
                         onChange={parts => setItemParts(item.id, parts)} />

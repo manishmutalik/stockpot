@@ -235,6 +235,8 @@ export interface ProductionFormFill {
   unplacedWaste: UnplacedWaste[];
   /** Batches the form cannot turn into pieces: the item does not say what one batch makes, or is not on the menu. */
   unplacedBatches: { name: string; batches: number }[];
+  /** Items made when they are ordered: never logged as production (utils/madeToOrder), so left out and named. */
+  madeToOrder: string[];
 }
 
 /**
@@ -242,15 +244,20 @@ export interface ProductionFormFill {
  * Batches become pieces from the item's batch size. What came out is the number written ("got 9"), or the quantity less
  * the waste written.
  */
-export function buildProductionForm(input: { parsed: ParsedProduction; menu: { id: string; name: string; batchMakes?: number }[]; today: string; askAboutVariants?: boolean }): ProductionFormFill {
+export function buildProductionForm(input: { parsed: ParsedProduction; menu: { id: string; name: string; batchMakes?: number; madeToOrder?: boolean }[]; today: string; askAboutVariants?: boolean }): ProductionFormFill {
   const { parsed, menu, today } = input;
-  const fill: ProductionFormFill = { rows: [], notFound: [], unplacedWaste: [], unplacedBatches: [] };
+  const fill: ProductionFormFill = { rows: [], notFound: [], unplacedWaste: [], unplacedBatches: [], madeToOrder: [] };
 
   const rows = new Map<string, { quantity: number; batches: number; waste: number; made?: number }>();
   for (const li of parsed.lineItems) {
     const resolved = input.askAboutVariants ? resolveMenuItem(li.nameAsWritten, menu) : { kind: 'keep' as const };
     const matched = resolved.kind === 'item' ? resolved.id : resolved.kind === 'keep' && li.menuItemId && menu.some(m => m.id === li.menuItemId) ? li.menuItemId : null;
-    const batchMakes = matched ? menu.find(m => m.id === matched)?.batchMakes : undefined;
+    const matchedItem = matched ? menu.find(m => m.id === matched) : undefined;
+    if (matchedItem?.madeToOrder) {
+      if (!fill.madeToOrder.includes(matchedItem.name)) fill.madeToOrder.push(matchedItem.name);
+      continue;
+    }
+    const batchMakes = matchedItem?.batchMakes;
     if (li.inBatches && !(matched && batchMakes && batchMakes > 0)) {
       fill.unplacedBatches.push({ name: matched ? menu.find(m => m.id === matched)!.name : li.nameAsWritten, batches: li.quantity });
       continue;

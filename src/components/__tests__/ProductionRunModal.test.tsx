@@ -258,3 +258,15 @@ describe('ProductionRunModal — items made from other items', () => {
     expect(screen.getByText(/Takes 3 Sponge Base from stock \(2 there\): not enough/)).toBeTruthy();
   });
 });
+
+describe('ProductionRunModal — items made when ordered', () => {
+  it('does not offer them: they are not made ahead', () => {
+    const items = [
+      { id: 'pcake', name: 'Pineapple cake', recipe: [], sellingPrice: 900, madeToOrder: true },
+      { id: 'cookie', name: 'Cookie', recipe: [], sellingPrice: 5 },
+    ];
+    render(<ProductionRunModal isOpen onClose={vi.fn()} menu={items as unknown as MenuItem[]} materials={[]} onSave={vi.fn()} currency={currency} />);
+    expect(screen.queryByRole('option', { name: 'Pineapple cake' })).toBeNull();
+    expect(screen.getByDisplayValue('Cookie')).toBeTruthy();
+  });
+});

@@ -201,7 +201,20 @@ while one batch keeps the same ingredients (the per-piece recipe and parts scale
 **Use X** does (`useMenuActions.setBatchSize`, `keep-batch`). `from-whole-batch` divides a recipe typed for the whole batch.
 Validators allow a yield up to `MAX_YIELD_OVER` (3) times what was planned.
 
-## 4.10 Rules of thumb when changing money code
+## 4.10 Items made when ordered: `src/utils/madeToOrder.ts`
+
+An item with `madeToOrder` has no shelf. `planOrderGroup` skips the stock cap for it and, for an order from stock,
+`takeForSale` takes its own recipe from materials (in each material's unit) and its parts from finished stock, recording
+`Order.taken`; `planHandOver` does the same for a pre-order. Short stock goes below nothing and is returned as
+`shortages` (the web alerts, the phone gets a note), as production does. `holdsStock` is false for an order with `taken`
+(it holds no finished units); `hasTakenStock` covers both. `planOrderGiveBack` (delete, reset) and `planOrderChange` (item
+or quantity edit: give back, then take again, capped by the shelf for a shelf item) are shared by the web hook. The
+production plan refuses a made-to-order item (`made_to_order`), and the production reader leaves it out by name.
+
+Profit is untouched (orders are stamped as before). `madeToOrderSpend` (the `taken.cost` of sales in a range) is shown
+beside production spend, and `madeToOrderUse` feeds `reorderSuggestions`.
+
+## 4.11 Rules of thumb when changing money code
 
 - Add the figure to `profit.ts`/`pricing.ts`/`billing.ts` with a test; do not compute it in a component or route.
 - If it changes what is *written*, change the plan (both web and phone follow), not the hook.

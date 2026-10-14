@@ -16,8 +16,9 @@
  * reported as "not enough history yet", and one with no use in the window is
  * never flagged.
  */
-import type { MenuItem, RawMaterial, WastageLog } from '../types';
+import type { MenuItem, Order, RawMaterial, WastageLog } from '../types';
 import { convertAmount } from './conversions';
+import { madeToOrderUse } from './madeToOrder';
 import { addDays, daysBetween } from './localDate';
 
 /** Days of use the rate is averaged over. */
@@ -86,6 +87,8 @@ export function reorderSuggestions(input: {
   materials: MaterialLike[];
   menu: MenuLike[];
   productionRuns: RunLike[];
+  /** Sales of items made when ordered, which take their ingredients as they are made (utils/madeToOrder). Absent: none. */
+  orders?: Pick<Order, 'date' | 'taken' | 'cancelledOn'>[];
   wastageLogs: Pick<WastageLog, 'type' | 'itemId' | 'quantity' | 'date'>[];
   /** Today in the business's time zone. */
   today: string;
@@ -111,6 +114,9 @@ export function reorderSuggestions(input: {
       if (!material) continue;
       record(material.id, run.date, convertAmount(req.amount, req.unit || 'g', material.unit) * (run.quantityProduced || 0));
     }
+  }
+  for (const use of madeToOrderUse(input.orders ?? [])) {
+    for (const m of use.materials) if (byId.has(m.materialId)) record(m.materialId, use.date, m.amount);
   }
   for (const log of wastageLogs) {
     if (log.type === 'material' && byId.has(log.itemId)) record(log.itemId, log.date, log.quantity);

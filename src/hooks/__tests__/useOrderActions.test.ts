@@ -319,6 +319,37 @@ describe('deleteOrder — restoring the stock an order had claimed', () => {
   });
 });
 
+describe('made-to-order orders — giving back and changing what they took', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const cream = { id: 'cream', name: 'Cream', unit: 'ml', initialStock: 700, costPerUnit: 0.4, category: 'Raw Materials', dateAdded: '2026-01-01' } as RawMaterial;
+  const menu: MenuItem[] = [
+    { id: 'base', name: 'Base', sellingPrice: 0, notForSale: true, recipe: [], finishedGoodsStock: 1 },
+    { id: 'cake', name: 'Cake', sellingPrice: 900, madeToOrder: true, recipe: [{ materialId: 'cream', amount: 150, unit: 'ml' }], parts: [{ itemId: 'base', quantity: 1 }] },
+  ];
+  const order: Order = { id: 'o1', menuItemId: 'cake', quantity: 2, date: '2026-01-01', taken: { materials: [{ materialId: 'cream', amount: 300 }], parts: [{ itemId: 'base', quantity: 2 }], cost: 120 } };
+  const written = (path: string) => batchSet.mock.calls.find(([ref]: { path: string }[]) => ref.path.endsWith(path))?.[1];
+
+  it('deleting gives back the cream and the bases it took, and no finished cakes', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [order], '2026-01-01', showConfirm, vi.fn(), [cream]));
+    await result.current.deleteOrder('o1');
+    expect(written('/materials/cream')).toEqual({ initialStock: 1000 });
+    expect(written('/menu/base')).toEqual({ finishedGoodsStock: 3 });
+    expect(written('/menu/cake')).toBeUndefined();
+  });
+
+  it('changing the quantity gives back and takes again, in one save', async () => {
+    const { result } = renderHook(() => useOrderActions(menu, [order], '2026-01-01', showConfirm, vi.fn(), [cream]));
+    await result.current.updateOrder('o1', 'quantity', 1);
+    expect(written('/materials/cream')).toEqual({ initialStock: 850 });
+    expect(written('/menu/base')).toEqual({ finishedGoodsStock: 2 });
+    expect(written('/orders/o1')).toMatchObject({ quantity: 1, taken: { parts: [{ itemId: 'base', quantity: 1 }] } });
+    expect(batchCommit).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('resetOrders — bulk-deleting a date, restoring stock aggregated per item', () => {
   beforeEach(() => {
     vi.clearAllMocks();

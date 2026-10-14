@@ -7,6 +7,7 @@ import { CustomerCombobox } from './CustomerCombobox';
 import type { CustomerSuggestion } from '../utils/customers';
 import type { NotFoundItem } from '../utils/orderParse';
 import { buildPreorderConfirmation, buildWhatsAppUrl } from '../utils/billing';
+import { saleNeeds, takeForSale, type NeedLine, type Stock } from '../utils/madeToOrder';
 
 interface MenuItem {
   id: string;
@@ -14,6 +15,8 @@ interface MenuItem {
   emoji?: string;
   sellingPrice: number;
   finishedGoodsStock?: number;
+  /** Made when ordered: no shelf; selling it takes its ingredients and parts (utils/madeToOrder). */
+  madeToOrder?: boolean;
 }
 
 export interface OrderLineItem {
@@ -73,6 +76,8 @@ interface AddOrderModalProps {
   today?: string;
   /** GST settings, so an advance can be compared with what the customer will owe. */
   gst?: { gstApplicable?: boolean; gstRate?: number; gstPricingMode?: string };
+  /** Every item (bases included) and the materials, to show what a made-to-order item will take. Absent: not shown. */
+  stock?: Stock;
 }
 
 const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderRow => ({ menuItemId: menu[0]?.id || '', quantity: 1 });
@@ -89,7 +94,7 @@ const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderRow => ({ menuItemId: menu[0]?.
  * @param currency - Locale currency config; only `symbol` is used for display.
  * @param presetMenuItemId - See AddOrderModalProps.
  */
-export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser, customers = [], today: todayProp, gst }: AddOrderModalProps) {
+export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser, customers = [], today: todayProp, gst, stock }: AddOrderModalProps) {
   const today = todayProp ?? new Date().toISOString().split('T')[0];
   const [date,          setDate]          = useState(today);
   const [customerName,  setCustomerName]  = useState('');
@@ -154,6 +159,18 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
   const discount = Math.max(parseFloat(discountText) || 0, 0);
   const totalValue = Math.max(subtotal - discount, 0);
   const preorder = mode === 'preorder';
+  // What each made-to-order row will take, each row from what the rows above it leave (two cakes share the cream).
+  const needs = useMemo(() => {
+    if (!stock) return lineItems.map(() => null as NeedLine[] | null);
+    let left: Stock = stock;
+    return lineItems.map(li => {
+      const item = stock.menu.find(m => m.id === li.menuItemId);
+      if (!item?.madeToOrder || !(li.quantity > 0)) return null;
+      const lines = saleNeeds(item, li.quantity, left);
+      left = takeForSale(item, li.quantity, left).stock;
+      return lines;
+    });
+  }, [stock, lineItems]);
   const owed = amountOwed(totalValue, gst);
   const advance = preorder ? Math.max(parseFloat(advanceText) || 0, 0) : 0;
   const balance = Math.max(owed - advance, 0);
@@ -326,6 +343,8 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
       }
       for (const [menuItemId, requested] of requestedByItem) {
         const item = menu.find(m => m.id === menuItemId);
+        // Made when ordered: no shelf to run out of.
+        if (item?.madeToOrder) continue;
         const available = item?.finishedGoodsStock ?? 0;
         if (requested > available) {
           setInvalidRowIndex(lineItems.findIndex(li => li.menuItemId === menuItemId));
@@ -541,7 +560,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
                   >
                     <option value="" disabled>Select an item...</option>
                     {menu.map(m => (
-                      <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name} ({m.finishedGoodsStock ?? 0} in stock)</option>
+                      <option key={m.id} value={m.id}>{m.emoji ? `${m.emoji} ` : ''}{m.name} ({m.madeToOrder ? 'made to order' : `${m.finishedGoodsStock ?? 0} in stock`})</option>
                     ))}
                   </select>
                   <QuantityStepper
@@ -561,6 +580,9 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
                 </div>
                 {item && (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 px-1 font-mono text-[11px] text-muted">
+                    {item.madeToOrder ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary">Made to order</span>
+                    ) : (
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-full font-semibold ${
                         preorder && li.quantity > stock ? 'bg-amber-100 text-amber-700' : stock <= 0 ? 'bg-coral/10 text-coral' : 'bg-margin/10 text-[#006143]'
@@ -568,6 +590,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
                     >
                       {preorder && li.quantity > stock ? `${stock} on the shelf · not baked yet` : `${stock} available`}
                     </span>
+                    )}
                     <label className="inline-flex items-center gap-1">
                       <span>{currency.symbol}</span>
                       <input
@@ -585,6 +608,9 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
                       <span>each = {currency.symbol}{(priceOf(li) * li.quantity).toFixed(2)}</span>
                     </label>
                   </div>
+                )}
+                {needs[i] && needs[i]!.length > 0 && (
+                  <TakesLine lines={needs[i]!} preorder={preorder} />
                 )}
               </div>
             );
@@ -807,5 +833,28 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
       </div>
       </>)}
     </ModalShell>
+  );
+}
+
+/**
+ * Under a made-to-order row: what it will take from stock, with what is there now, short amounts in amber. Saving still
+ * works when something is short (it has been made); stock then goes below nothing, as in production.
+ */
+function TakesLine({ lines, preorder }: { lines: NeedLine[]; preorder: boolean }) {
+  const fmt = (n: number) => String(Math.round(n * 100) / 100);
+  const short = lines.some(l => l.need > l.have + 1e-9);
+  return (
+    <p className={`mt-1 px-1 text-[11px] leading-relaxed ${short && !preorder ? 'text-amber-700' : 'text-muted'}`}>
+      {preorder ? 'Takes, when you hand it over: ' : 'Takes: '}
+      {lines.map((l, i) => (
+        <React.Fragment key={l.id}>
+          {i > 0 && ' · '}
+          <span className={l.need > l.have + 1e-9 ? 'font-semibold' : ''}>
+            {l.part ? `${fmt(l.need)} ${l.name}` : `${fmt(l.need)} ${l.unit} ${l.name}`} ({fmt(Math.max(l.have, 0))} there)
+          </span>
+        </React.Fragment>
+      ))}
+      {short && !preorder && '. Not enough of some: it still saves, and stock goes below nothing until you restock.'}
+    </p>
   );
 }

@@ -76,4 +76,18 @@ describe('parts in the menu actions', () => {
     await whole.setBatchSize('base', 4.5, 'from-whole-batch');
     expect(setDoc).toHaveBeenLastCalledWith({ path: 'users/user1/menu/base' }, { batchMakes: 4.5, recipe: [{ materialId: 'gel', amount: 200, unit: 'g' }] }, { merge: true });
   });
+
+  it('makes an item made when ordered, clearing the shelf only once the owner agrees', async () => {
+    const onShelf = { ...cake, finishedGoodsStock: 3 };
+    const { h } = setup([base, onShelf]);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    await h.setMadeToOrder('cake', true);
+    expect(setDoc).not.toHaveBeenCalled();
+    await h.setMadeToOrder('cake', true);
+    expect(confirm.mock.calls[1][0]).toMatch(/^3 Pineapple Cream Cake are on the shelf/);
+    expect(setDoc).toHaveBeenLastCalledWith({ path: 'users/user1/menu/cake' }, { madeToOrder: true, finishedGoodsStock: 0 }, { merge: true });
+    await h.setMadeToOrder('cake', false);
+    expect(setDoc).toHaveBeenLastCalledWith({ path: 'users/user1/menu/cake' }, { madeToOrder: false }, { merge: true });
+    confirm.mockRestore();
+  });
 });

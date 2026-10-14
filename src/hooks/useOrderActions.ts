@@ -22,9 +22,10 @@ import { auth, db, doc, setDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../types';
 import { formatShortDate } from '../utils/localDate';
-import { holdsStock, isOpenPreorder } from '../utils/preorders';
+import { hasTakenStock, isOpenPreorder } from '../utils/preorders';
 import { stampFor } from '../utils/orderPricing';
-import { planOrderGroup, planHandOver, planMarkPaid, planDismissClaim, paymentFields as planPaymentFields, randomId } from '../utils/plans';
+import { planOrderGroup, planHandOver, planMarkPaid, planDismissClaim, planOrderChange, planOrderGiveBack, paymentFields as planPaymentFields, randomId } from '../utils/plans';
+import type { Shortage } from '../utils/madeToOrder';
 import { addWritesToBatch } from '../utils/plans/clientCommit';
 import { costView } from '../utils/itemParts';
 
@@ -48,6 +49,11 @@ export function useOrderActions(
   const todayDate = () => (options.today ? options.today() : new Date().toISOString().split('T')[0]);
   /** What to write to record how an order was paid, with the fee rate in force right now. */
   const paymentFields = (method: PaymentMethod) => planPaymentFields(method, paymentFeeRates);
+
+  /** "Not enough on hand: 1 Sponge base, 200 ml Whipping cream." for what a made-to-order sale left short. */
+  const shortNote = (shortages: Shortage[] | undefined) => (shortages && shortages.length > 0
+    ? ` Not enough on hand, so stock went below nothing: ${shortages.map(s => `${Math.round(s.short * 100) / 100} ${s.unit} ${s.name}`).join(', ')}. Restock or log what you made to correct it.`
+    : '');
 
   const describeLines = (lines: { menuItemId: string; quantity: number }[], items: MenuItem[]) =>
     lines.map(l => `${l.quantity} ${items.find(m => m.id === l.menuItemId)?.name ?? 'item'}`).join(', ');
@@ -109,7 +115,7 @@ export function useOrderActions(
       showAlert(plan.error.title, plan.error.message);
       throw new Error(plan.error.thrown);
     }
-    const { preorder, requestedByItem } = plan;
+    const { preorder, requestedByItem, shortages } = plan;
 
     try {
       const batch = writeBatch(db);
@@ -119,7 +125,7 @@ export function useOrderActions(
         const due = formatShortDate(common.date);
         const notBaked = [...requestedByItem]
           .map(([id, qty]) => ({ item: menu.find(m => m.id === id)!, qty }))
-          .filter(({ item, qty }) => qty > (item.finishedGoodsStock ?? 0))
+          .filter(({ item, qty }) => !item.madeToOrder && qty > (item.finishedGoodsStock ?? 0))
           .map(({ item, qty }) => `${qty} ${item.name}`);
         showAlert(
           'Pre-order Added',
@@ -130,9 +136,9 @@ export function useOrderActions(
         const firstItemName = menu.find(m => m.id === lineItems[0].menuItemId)?.name;
         showAlert(
           'Order Added',
-          lineItems.length > 1
+          (lineItems.length > 1
             ? `Added an order with ${lineItems.length} items.`
-            : `Added order for ${lineItems[0].quantity} unit(s) of ${firstItemName}.`
+            : `Added order for ${lineItems[0].quantity} unit(s) of ${firstItemName}.`) + shortNote(shortages)
         );
       }
     } catch (err: any) {
@@ -183,6 +189,7 @@ export function useOrderActions(
       const batch = writeBatch(db);
       addWritesToBatch(batch, userId, plan.writes);
       await batch.commit();
+      if (plan.shortages && plan.shortages.length > 0) showAlert('Handed Over', `Handed over.${shortNote(plan.shortages)}`);
       return true;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${order.id}`);
@@ -296,9 +303,9 @@ export function useOrderActions(
     const userId = auth.currentUser.uid;
     const order = orders.find(o => o.id === id);
 
-    // An order that holds no stock (a pre-order not yet handed over, or a cancelled order) has nothing to
+    // An order that has taken no stock (a pre-order not yet handed over, or a cancelled order) has nothing to
     // rebalance: changing its item or quantity must neither check nor move stock, or it would add units that never left the shelf.
-    if (order && !holdsStock(order) && (field === 'menuItemId' || field === 'quantity')) {
+    if (order && !hasTakenStock(order) && (field === 'menuItemId' || field === 'quantity')) {
       const newMenuItemId = field === 'menuItemId' ? String(value) : order.menuItemId;
       const newQuantity = field === 'quantity' ? Number(value) : order.quantity;
       if (!newMenuItemId || newQuantity < 1) return; // ignore transient/invalid input mid-edit
@@ -320,49 +327,22 @@ export function useOrderActions(
       return;
     }
 
+    // An order that has taken its stock gives back what it holds (shelf units, or a made-to-order item's ingredients and
+    // parts) and takes what the new item and quantity need, capped by the shelf for a shelf item (utils/plans planOrderChange).
     if (order && (field === 'menuItemId' || field === 'quantity')) {
       const newMenuItemId = field === 'menuItemId' ? String(value) : order.menuItemId;
       const newQuantity = field === 'quantity' ? Number(value) : order.quantity;
       if (!newMenuItemId || newQuantity < 1) return; // ignore transient/invalid input mid-edit
-
-      const sameItem = newMenuItemId === order.menuItemId;
-      const targetItem = menu.find(m => m.id === newMenuItemId);
-      if (!targetItem) {
-        showAlert('Error', 'That menu item could not be found.');
+      const plan = planOrderChange({ order, menuItemId: newMenuItemId, quantity: newQuantity, menu, materials });
+      if (plan.ok === false) {
+        showAlert(plan.error.title, plan.error.message);
         return;
       }
-      // This order already holds `order.quantity` of its current item — that's
-      // available to reclaim on top of finishedGoodsStock when the item isn't
-      // changing, since it's this same order's own claim being resized.
-      const alreadyClaimedOfTarget = sameItem ? order.quantity : 0;
-      const availableForTarget = (targetItem.finishedGoodsStock ?? 0) + alreadyClaimedOfTarget;
-      if (newQuantity > availableForTarget) {
-        showAlert('Not Enough Stock', `Only ${availableForTarget} unit(s) of "${targetItem.name}" available.`);
-        return;
-      }
-
       try {
         const batch = writeBatch(db);
-        // Changing the item re-stamps the order from the new item; changing only the quantity
-        // keeps the stamp, since the unit price and cost didn't change.
-        batch.set(doc(db, 'users', userId, 'orders', id), {
-          menuItemId: newMenuItemId,
-          quantity: newQuantity,
-          ...(sameItem ? {} : stampFor(costView(targetItem, menu), materials)),
-        }, { merge: true });
-
-        if (sameItem) {
-          const delta = order.quantity - newQuantity; // positive = release back, negative = claim more
-          batch.set(doc(db, 'users', userId, 'menu', newMenuItemId), { finishedGoodsStock: (targetItem.finishedGoodsStock ?? 0) + delta }, { merge: true });
-        } else {
-          const oldItem = menu.find(m => m.id === order.menuItemId);
-          if (oldItem) {
-            batch.set(doc(db, 'users', userId, 'menu', order.menuItemId), { finishedGoodsStock: (oldItem.finishedGoodsStock ?? 0) + order.quantity }, { merge: true });
-          }
-          batch.set(doc(db, 'users', userId, 'menu', newMenuItemId), { finishedGoodsStock: (targetItem.finishedGoodsStock ?? 0) - newQuantity }, { merge: true });
-        }
-
+        addWritesToBatch(batch, userId, plan.writes);
         await batch.commit();
+        if (plan.shortages.length > 0) showAlert('Order Changed', `Changed.${shortNote(plan.shortages)}`);
       } catch (err) {
         handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/orders/${id}`);
       }
@@ -395,13 +375,9 @@ export function useOrderActions(
     try {
       const batch = writeBatch(db);
       batch.delete(doc(db, 'users', userId, 'orders', id));
-      // Only an order that held stock gives any back: deleting a pre-order that never took it must not add phantom units.
-      if (order && holdsStock(order)) {
-        const item = menu.find(m => m.id === order.menuItemId);
-        if (item) {
-          batch.set(doc(db, 'users', userId, 'menu', order.menuItemId), { finishedGoodsStock: (item.finishedGoodsStock ?? 0) + order.quantity }, { merge: true });
-        }
-      }
+      // Only an order that took stock gives any back (shelf units, or a made-to-order item's ingredients and parts):
+      // deleting a pre-order that never took it must not add phantom units.
+      if (order) addWritesToBatch(batch, userId, planOrderGiveBack({ orders: [order], menu, materials }));
       await batch.commit();
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, `users/${userId}/orders/${id}`);
@@ -424,22 +400,13 @@ export function useOrderActions(
         const ordersToDelete = orders.filter(o => o.date === orderDate);
         if (ordersToDelete.length === 0) return;
 
-        const restoreByItem = new Map<string, number>();
-        // Only the orders that held stock give any back.
-        for (const order of ordersToDelete.filter(holdsStock)) {
-          restoreByItem.set(order.menuItemId, (restoreByItem.get(order.menuItemId) ?? 0) + order.quantity);
-        }
-
         try {
           const batch = writeBatch(db);
           for (const order of ordersToDelete) {
             batch.delete(doc(db, 'users', userId, 'orders', order.id));
           }
-          for (const [menuItemId, restoreQty] of restoreByItem) {
-            const item = menu.find(m => m.id === menuItemId);
-            if (!item) continue;
-            batch.set(doc(db, 'users', userId, 'menu', menuItemId), { finishedGoodsStock: (item.finishedGoodsStock ?? 0) + restoreQty }, { merge: true });
-          }
+          // Only the orders that took stock give any back, one write per document.
+          addWritesToBatch(batch, userId, planOrderGiveBack({ orders: ordersToDelete, menu, materials }));
           await batch.commit();
         } catch (err) {
           handleFirestoreError(err, OperationType.DELETE, `users/${userId}/orders`);

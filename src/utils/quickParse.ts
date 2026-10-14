@@ -256,9 +256,11 @@ export function previewOrder(input: {
       return {
         menuItemId: o.menuItemId, name: item?.name ?? 'Item', quantity: o.quantity, unitPrice: unit,
         lineTotal: Math.round(unit * o.quantity * 100) / 100,
-        stockAfter: plan.preorder ? null : (item?.finishedGoodsStock ?? 0) - (plan.requestedByItem.get(o.menuItemId) ?? 0),
+        // An item made when ordered has no shelf: it takes its ingredients instead (utils/madeToOrder).
+        stockAfter: plan.preorder || item?.madeToOrder ? null : (item?.finishedGoodsStock ?? 0) - (plan.requestedByItem.get(o.menuItemId) ?? 0),
       };
     }),
+    ...(plan.shortages.length > 0 && { shortages: plan.shortages }),
     total, advance, balanceDue: balance,
     label: { total: money(total), balanceDue: money(balance), advance: advance === null ? null : money(advance) },
   } };
@@ -311,6 +313,7 @@ export function buildProductionDraft(input: {
   const rows: ProductionDraft['rows'] = [...rowsById.values()];
   if (fill.notes && rows.length > 0) rows[0].notes = fill.notes;
   for (const w of fill.unplacedWaste) notes.push(`${w.units} ${w.name} wasted: record it with Discard in the web app's Production Log.`);
+  for (const name of fill.madeToOrder) notes.push(`Left out ${name}: it is made when ordered, so it comes out of stock when you sell it.`);
   for (const b of fill.unplacedBatches) notes.push(`Left out ${b.batches} ${b.batches === 1 ? 'batch' : 'batches'} of ${b.name}: set how many one batch makes on the web app's Menu, or say how many pieces.`);
 
   return { draft: { ...(date !== today && { date }), rows }, questions, notes };

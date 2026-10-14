@@ -324,9 +324,28 @@ export function useMenuActions(
     }
   };
 
+  /**
+   * Made when it is ordered, or kept on the shelf (utils/madeToOrder). An item made to order has no shelf, so units still
+   * on it are cleared once the owner agrees; otherwise it stays as it is, to sell those first.
+   */
+  const setMadeToOrder = async (itemId: string, on: boolean) => {
+    if (!auth.currentUser) return;
+    const userId = auth.currentUser.uid;
+    const item = menu.find(m => m.id === itemId);
+    if (!item) return;
+    const onShelf = Math.round((item.finishedGoodsStock ?? 0) * 100) / 100;
+    if (on && onShelf > 0 && !window.confirm(`${onShelf} ${item.name} ${onShelf === 1 ? 'is' : 'are'} on the shelf. Made to order, it has no shelf: clear ${onShelf === 1 ? 'it' : 'them'} and make it when ordered from now on?\n\nCancel to sell ${onShelf === 1 ? 'it' : 'them'} first.`)) return;
+    try {
+      await setDoc(doc(db, 'users', userId, 'menu', itemId), on ? { madeToOrder: true, finishedGoodsStock: 0 } : { madeToOrder: false }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/menu/${itemId}`);
+    }
+  };
+
   return {
     addMenuItem,
     setItemParts,
+    setMadeToOrder,
     setBatchSize,
     updateMenuItem,
     updateMenuItemField,

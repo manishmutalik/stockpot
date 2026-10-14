@@ -8,12 +8,17 @@
  * the order is made, and an advance can never exceed what is owed.
  *
  * Every message and error string here is the one the hook has always shown.
+ *
+ * An item made when it is ordered (utils/madeToOrder) has no shelf: selling one takes its ingredients and parts instead,
+ * with no cap (short stock is warned about, as in production), and the order keeps what it took.
  */
-import type { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../../types';
+import type { BakerySettings, MenuItem, Order, OrderTaken, PaymentMethod, RawMaterial } from '../../types';
 import { costView } from '../itemParts';
+import { giveBack, isMadeToOrder, shortagesIn, takeForSale, type Shortage, type Stock } from '../madeToOrder';
+import { holdsStock } from '../preorders';
 import { stampFor } from '../orderPricing';
 import { saleAmounts } from '../profit';
-import type { PlanContext, PlanError, PlannedWrite } from './types';
+import { collapseWrites, type PlanContext, type PlanError, type PlannedWrite } from './types';
 
 type FeeRates = Partial<Record<PaymentMethod, number>>;
 
@@ -46,7 +51,7 @@ export interface OrderLineItem {
 }
 
 export type OrderGroupPlan =
-  | { ok: true; writes: PlannedWrite[]; orders: Order[]; preorder: boolean; requestedByItem: Map<string, number> }
+  | { ok: true; writes: PlannedWrite[]; orders: Order[]; preorder: boolean; requestedByItem: Map<string, number>; /** What made-to-order items left short. */ shortages: Shortage[] }
   | { ok: false; error: PlanError };
 
 /**
@@ -54,7 +59,8 @@ export type OrderGroupPlan =
  * are written together (all or nothing). More than one line item shares one
  * orderGroupId; a single item gets none. Stock is a hard cap: an order from stock
  * can only claim what `finishedGoodsStock` covers, with the same item on several
- * lines counted together. A pre-order checks and takes no stock now.
+ * lines counted together. A pre-order checks and takes no stock now. An item made to order is not capped: it takes its
+ * ingredients and parts (going below nothing if short, reported in `shortages`), and the order records them.
  */
 export function planOrderGroup(input: {
   common: OrderGroupCommon;
@@ -97,10 +103,11 @@ export function planOrderGroup(input: {
   for (const li of lineItems) {
     requestedByItem.set(li.menuItemId, (requestedByItem.get(li.menuItemId) ?? 0) + li.quantity);
   }
-  // A pre-order takes no stock until it is handed over, so only an order from stock is capped.
+  // A pre-order takes no stock until it is handed over, so only an order from stock is capped; an item made to order has no shelf.
   if (!preorder) {
     for (const [menuItemId, requested] of requestedByItem) {
       const item = menu.find(m => m.id === menuItemId)!;
+      if (isMadeToOrder(item)) continue;
       const available = item.finishedGoodsStock ?? 0;
       if (requested > available) {
         return { ok: false, error: {
@@ -160,9 +167,21 @@ export function planOrderGroup(input: {
   }
 
   const writes: PlannedWrite[] = [];
+  const stockWrites: PlannedWrite[] = [];
   const orders: Order[] = [];
+  let stock: Stock = { materials, menu };
+  const taken: OrderTaken[] = [];
   drafts.forEach((draft, index) => {
     const order: Order = { ...draft };
+    const item = menu.find(m => m.id === order.menuItemId)!;
+    // Made now, from what it is made of.
+    if (!preorder && isMadeToOrder(item)) {
+      const t = takeForSale(item, order.quantity, stock);
+      order.taken = t.taken;
+      stock = t.stock;
+      stockWrites.push(...t.writes);
+      taken.push(t.taken);
+    }
     // With an advance, whether the balance is still owed decides the payment status for the whole order.
     const unpaid = advance ? !advanceCoversAll : common.paymentStatus === 'unpaid';
     // Only "pay later" is stored; an order with no value counts as paid.
@@ -179,12 +198,14 @@ export function planOrderGroup(input: {
   });
   if (!preorder) {
     for (const [menuItemId, requested] of requestedByItem) {
-      const item = menu.find(m => m.id === menuItemId)!;
+      const item = stock.menu.find(m => m.id === menuItemId)!;
+      if (isMadeToOrder(item)) continue;
       const current = item.finishedGoodsStock ?? 0;
-      writes.push({ collection: 'menu', id: menuItemId, data: { finishedGoodsStock: current - requested }, merge: true });
+      stockWrites.push({ collection: 'menu', id: menuItemId, data: { finishedGoodsStock: current - requested }, merge: true });
+      stock = { ...stock, menu: stock.menu.map(m => (m.id === menuItemId ? { ...m, finishedGoodsStock: current - requested } : m)) };
     }
   }
-  return { ok: true, writes, orders, preorder, requestedByItem };
+  return { ok: true, writes: [...writes, ...collapseWrites(stockWrites)], orders, preorder, requestedByItem, shortages: shortagesIn(stock, taken) };
 }
 
 export type HandOverPlan =
@@ -193,13 +214,14 @@ export type HandOverPlan =
   /** Handing over is not allowed (cancelled) or not possible (short of stock). */
   | { kind: 'error'; title: string; message: string; code: 'cancelled' | 'insufficient_stock' }
   /** `atomic` is false for an ordinary order, which is one plain field write. */
-  | { kind: 'ok'; writes: PlannedWrite[]; atomic: boolean };
+  | { kind: 'ok'; writes: PlannedWrite[]; atomic: boolean; /** What made-to-order items left short. */ shortages?: Shortage[] };
 
 /**
  * Marks an order as handed over. An ordinary order is a plain completion flag, since its stock was claimed when it
  * was created. A pre-order takes its stock now: every item of the order (handed over whole, all or nothing) is checked
  * against the same hard cap, then the stock is claimed, every item marked claimed and handed over, and the ingredient
- * and packaging costs re-stamped, because that is when the item was made. The price agreed at booking is kept.
+ * and packaging costs re-stamped, because that is when the item was made. The price agreed at booking is kept. An item
+ * made to order takes its ingredients and parts now instead, with no cap, and the order records them.
  */
 export function planHandOver(input: { order: Order; orders: Order[]; menu: MenuItem[]; materials: RawMaterial[] }): HandOverPlan {
   const { order, orders, menu, materials } = input;
@@ -223,6 +245,7 @@ export function planHandOver(input: { order: Order; orders: Order[]; menu: MenuI
   for (const [menuItemId, requested] of requestedByItem) {
     const item = menu.find(m => m.id === menuItemId);
     const available = item?.finishedGoodsStock ?? 0;
+    if (item && isMadeToOrder(item)) continue;
     if (!item || requested > available) {
       return { kind: 'error', code: 'insufficient_stock', title: 'Not Enough Stock',
         message: `Only ${available} unit(s) of "${item?.name ?? 'this item'}" in stock, but this pre-order needs ${requested}. Log a production run first.` };
@@ -230,9 +253,20 @@ export function planHandOver(input: { order: Order; orders: Order[]; menu: MenuI
   }
 
   const writes: PlannedWrite[] = [];
+  const stockWrites: PlannedWrite[] = [];
+  let stock: Stock = { materials, menu };
+  const taken: OrderTaken[] = [];
   for (const o of toHandOver) {
     const item = menu.find(m => m.id === o.menuItemId)!;
     const costs = stampFor(costView(item, menu), materials);
+    let made: OrderTaken | undefined;
+    if (isMadeToOrder(item)) {
+      const t = takeForSale(item, o.quantity, stock);
+      made = t.taken;
+      stock = t.stock;
+      stockWrites.push(...t.writes);
+      taken.push(t.taken);
+    }
     writes.push({ collection: 'orders', id: o.id, merge: true, data: {
       stockClaimed: true,
       fulfilled: true,
@@ -240,13 +274,81 @@ export function planHandOver(input: { order: Order; orders: Order[]; menu: MenuI
       unitIngredientCostAtSale: costs.unitIngredientCostAtSale,
       unitPackagingCostAtSale: costs.unitPackagingCostAtSale,
       unitInputGstAtSale: costs.unitInputGstAtSale,
+      ...(made && { taken: made }),
     } });
   }
   for (const [menuItemId, requested] of requestedByItem) {
-    const item = menu.find(m => m.id === menuItemId)!;
-    writes.push({ collection: 'menu', id: menuItemId, merge: true, data: { finishedGoodsStock: (item.finishedGoodsStock ?? 0) - requested } });
+    const item = stock.menu.find(m => m.id === menuItemId)!;
+    if (isMadeToOrder(item)) continue;
+    stockWrites.push({ collection: 'menu', id: menuItemId, merge: true, data: { finishedGoodsStock: (item.finishedGoodsStock ?? 0) - requested } });
   }
-  return { kind: 'ok', atomic: true, writes };
+  return { kind: 'ok', atomic: true, writes: [...writes, ...collapseWrites(stockWrites)], shortages: shortagesIn(stock, taken) };
+}
+
+/**
+ * What deleting orders puts back: an order made to order gives back exactly what it took; an order that holds finished
+ * stock gives back its quantity; a pre-order not handed over, or a cancelled order, gives back nothing.
+ */
+export function planOrderGiveBack(input: { orders: Order[]; menu: MenuItem[]; materials: RawMaterial[] }): PlannedWrite[] {
+  let stock: Stock = { materials: input.materials, menu: input.menu };
+  const writes: PlannedWrite[] = [];
+  for (const o of input.orders) {
+    if (o.cancelledOn) continue;
+    if (o.taken) {
+      const back = giveBack(o.taken, stock);
+      stock = back.stock;
+      writes.push(...back.writes);
+    } else if (holdsStock(o)) {
+      const item = stock.menu.find(m => m.id === o.menuItemId);
+      if (!item) continue;
+      const next = (item.finishedGoodsStock ?? 0) + o.quantity;
+      writes.push({ collection: 'menu', id: item.id, merge: true, data: { finishedGoodsStock: next } });
+      stock = { ...stock, menu: stock.menu.map(m => (m.id === item.id ? { ...m, finishedGoodsStock: next } : m)) };
+    }
+  }
+  return collapseWrites(writes);
+}
+
+export type OrderChangePlan =
+  | { ok: true; writes: PlannedWrite[]; shortages: Shortage[] }
+  | { ok: false; error: PlanError };
+
+/**
+ * Changes the item or quantity of an order that has already taken its stock (an order from stock, or a pre-order handed
+ * over): what it took is given back and the new item and quantity are taken again, in one go. A shelf item is capped by
+ * what is there (its own units count, being given back first); an item made to order takes its ingredients and parts. A
+ * different item is priced and costed as that item; only the quantity keeps the agreed price.
+ */
+export function planOrderChange(input: { order: Order; menuItemId: string; quantity: number; menu: MenuItem[]; materials: RawMaterial[] }): OrderChangePlan {
+  const { order, menuItemId, quantity, menu, materials } = input;
+  const target = menu.find(m => m.id === menuItemId);
+  if (!target) {
+    return { ok: false, error: { code: 'unknown_item', title: 'Error', message: 'That menu item could not be found.', thrown: `planOrderChange: no menu item "${menuItemId}"` } };
+  }
+  const back = planOrderGiveBack({ orders: [order], menu, materials });
+  // The stock as it is once this order's own claim is back.
+  let stock: Stock = {
+    materials: materials.map(m => { const w = back.find(x => x.collection === 'materials' && x.id === m.id); return w ? { ...m, initialStock: w.data.initialStock as number } : m; }),
+    menu: menu.map(m => { const w = back.find(x => x.collection === 'menu' && x.id === m.id); return w ? { ...m, finishedGoodsStock: w.data.finishedGoodsStock as number } : m; }),
+  };
+  const writes: PlannedWrite[] = [...back];
+  const stamp = menuItemId === order.menuItemId ? {} : stampFor(costView(target, menu), materials);
+
+  if (isMadeToOrder(target)) {
+    const t = takeForSale(target, quantity, stock);
+    stock = t.stock;
+    writes.push(...t.writes);
+    writes.push({ collection: 'orders', id: order.id, merge: true, data: { menuItemId, quantity, ...stamp, taken: t.taken } });
+    return { ok: true, writes: collapseWrites(writes), shortages: shortagesIn(stock, [t.taken]) };
+  }
+
+  const available = stock.menu.find(m => m.id === menuItemId)!.finishedGoodsStock ?? 0;
+  if (quantity > available) {
+    return { ok: false, error: { code: 'insufficient_stock', title: 'Not Enough Stock', message: `Only ${available} unit(s) of "${target.name}" available.`, thrown: `planOrderChange: insufficient stock for "${menuItemId}"` } };
+  }
+  writes.push({ collection: 'menu', id: menuItemId, merge: true, data: { finishedGoodsStock: available - quantity } });
+  writes.push({ collection: 'orders', id: order.id, merge: true, data: { menuItemId, quantity, ...stamp, ...(order.taken && { taken: null }) } });
+  return { ok: true, writes: collapseWrites(writes), shortages: [] };
 }
 
 /**

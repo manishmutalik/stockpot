@@ -749,7 +749,7 @@ function BakeryApp() {
   // ── Menu / Recipe Actions ────────────────────────────────────────────────────
   // Extracted to src/hooks/useMenuActions.ts as part of the Phase 4 breakup.
   const {
-    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize,
+    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder,
     copyMenuItem, addIngredientToRecipe, addQuickIngredientsToRecipe,
     updateRecipeIngredient, removeIngredientFromRecipe,
   } = useMenuActions(menu, materials, orders, showAlert, { today: () => todayInZone(settings.timezone) });
@@ -855,6 +855,8 @@ function BakeryApp() {
   // Reading a pasted order message into the Add Order form (offered only where AI is available).
   // Orders are for items sold on the menu: a base made only for cream cakes is left out of the order form and its reader.
   const saleMenu = useMemo(() => forSale(menu), [menu]);
+  // Everything a made-to-order sale takes from: every item (bases too) and the materials (utils/madeToOrder).
+  const orderStock = useMemo(() => ({ materials, menu }), [materials, menu]);
   const orderParser = useOrderParser({ orders, menu: saleMenu, materials: remainingInventory, settings, signedIn: !!user, dataReady });
   const productionParser = useProductionParser({ menu, settings, signedIn: !!user, dataReady });
   // Reading recipes from photos or text into menu items (offered only where AI is available).
@@ -1295,7 +1297,7 @@ function BakeryApp() {
     inventoryUsage, summaryInventoryUsage, remainingInventory, sortedRemainingInventory, lowStockItems,
     summaryFinancials, activeOrdersCount, averageOrderValue, financials, chartData, handleRangeChange,
     refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
-    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize,
+    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder,
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
@@ -1642,6 +1644,7 @@ function BakeryApp() {
           customers={customerDirectory}
           today={todayInZone(settings.timezone)}
           gst={settings}
+          stock={orderStock}
         />
         {recipeReader && recipeReaderFor && (
           <RecipeReaderModal

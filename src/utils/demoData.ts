@@ -1,7 +1,7 @@
 import { convertAmount } from './conversions';
 import { stampFor, type OrderStamp } from './orderPricing';
 import { costView } from './itemParts';
-import type { PaymentMethod, PriceLogEntry } from '../types';
+import type { OrderTaken, PaymentMethod, PriceLogEntry } from '../types';
 
 /**
  * Sample data for the demo sandbox.
@@ -33,13 +33,15 @@ export interface DemoMenuItem {
   notForSale?: boolean;
   /** How many one batch makes (utils/batches): the sponge base, 4.5 from one mix. */
   batchMakes?: number;
+  /** Made when ordered (utils/madeToOrder): the cream cake, assembled on a base for each order. */
+  madeToOrder?: boolean;
 }
 export interface DemoOrder {
   id: string; menuItemId: string; quantity: number; date: string;
   customerName: string; customerPhone: string; fulfilled: boolean;
 }
 /** A demo order carries its price and cost stamp, like every order made in the app. */
-export type DemoOrderWithStamp = DemoOrder & OrderStamp & { paymentMethod: PaymentMethod; paymentFeeRate: number; discount?: number };
+export type DemoOrderWithStamp = DemoOrder & OrderStamp & { paymentMethod: PaymentMethod; paymentFeeRate: number; discount?: number; taken?: OrderTaken };
 export interface DemoRun {
   id: string; recipeId: string; quantityProduced: number; quantityYield?: number; remainingQuantity: number;
   date: string; expiryDate: string; purpose: string; costTotal: number; createdAt: number;
@@ -127,9 +129,9 @@ export function buildDemoData(userId: string, today: string) {
         { materialId: 'm_oil', amount: 40, unit: 'ml' },
       ],
     },
-    // A cream cake built on one base.
+    // A cream cake built on one base, assembled when it is ordered.
     {
-      id: 'menu_pinecake', name: 'Pineapple Cream Cake 1 kg', sellingPrice: 950, emoji: '🎂',
+      id: 'menu_pinecake', name: 'Pineapple Cream Cake 1 kg', sellingPrice: 950, emoji: '🎂', madeToOrder: true,
       recipe: [
         { materialId: 'm_cream', amount: 150, unit: 'g' },
         { materialId: 'm_pineapple', amount: 100, unit: 'g' },
@@ -146,6 +148,20 @@ export function buildDemoData(userId: string, today: string) {
       const mat = purchases.find(m => m.id === req.materialId)!;
       return sum + convertAmount(req.amount, req.unit, mat.unit) * mat.costPerUnit;
     }, 0) + (item.parts ?? []).reduce((sum, p) => sum + p.quantity * recipeUnitCost(p.itemId), 0);
+  };
+
+  // What a made-to-order sale took (utils/madeToOrder): its own ingredients, in each material's unit, and its parts.
+  const takenBy = (menuId: string, quantity: number): OrderTaken => {
+    const item = menuBase.find(m => m.id === menuId)!;
+    const materials = item.recipe.map(req => {
+      const mat = purchases.find(m => m.id === req.materialId)!;
+      return { materialId: mat.id, amount: round4(convertAmount(req.amount, req.unit, mat.unit) * quantity) };
+    });
+    return {
+      materials,
+      parts: (item.parts ?? []).map(p => ({ itemId: p.itemId, quantity: p.quantity * quantity })),
+      cost: round2(materials.reduce((sum, m) => sum + m.amount * purchases.find(x => x.id === m.materialId)!.costPerUnit, 0)),
+    };
   };
 
   // ── Orders (one per customer) ──────────────────────────────────────────────
@@ -168,6 +184,8 @@ export function buildDemoData(userId: string, today: string) {
     ['menu_croissant', 10, 5, 'Hotel Udupi Grand', '+91 90350 60602'],
     ['menu_muffin', 15, 6, 'Greenfield School Fete', '+91 80410 70701'],
     ['menu_bread', 5, 6, 'Hotel Sai Residency', '+91 99001 30301'],
+    // Made when ordered: the cream and pineapple came out of materials, and the bases off the base shelf.
+    ['menu_pinecake', 2, 1, 'Ananya Rao', '+91 98450 10104'],
   ];
   // Each order is stamped with what its item sold for and cost to make, as the app does when an
   // order is created, so the demo's figures are exact rather than "estimated".
@@ -183,6 +201,7 @@ export function buildDemoData(userId: string, today: string) {
       ...stampFor(costView(menuBase.find(m => m.id === menuItemId)!, menuBase), purchases),
       paymentMethod, paymentFeeRate: DEMO_FEE_RATES[paymentMethod] ?? 0,
       ...(customerName === 'Brew & Bite Café' && { discount: 150 }),
+      ...(menuBase.find(m => m.id === menuItemId)!.madeToOrder && { taken: takenBy(menuItemId, quantity) }),
     };
   });
 
@@ -198,12 +217,15 @@ export function buildDemoData(userId: string, today: string) {
     ['run_8', 'menu_muffin', 25, undefined, 2, 3],
     ['run_9', 'menu_bread', 15, undefined, 2, 2],
     ['run_10', 'menu_base', 9, 8, 2, 4, 2], // two batches of sponge base, one short of the 9 planned
-    ['run_11', 'menu_pinecake', 3, undefined, 1, 2], // three cream cakes, on three of those bases
   ];
 
   // Units ordered per item are taken from the oldest batches first (FIFO); so are the parts later runs used (bases).
   const orderedByItem = new Map<string, number>();
-  for (const o of orders) orderedByItem.set(o.menuItemId, (orderedByItem.get(o.menuItemId) ?? 0) + o.quantity);
+  // A made-to-order sale takes its parts (bases), not finished cakes.
+  for (const o of orders) {
+    if (o.taken) for (const p of o.taken.parts) orderedByItem.set(p.itemId, (orderedByItem.get(p.itemId) ?? 0) + p.quantity);
+    else orderedByItem.set(o.menuItemId, (orderedByItem.get(o.menuItemId) ?? 0) + o.quantity);
+  }
   const partsUsedBy = (recipeId: string, produced: number) => (menuBase.find(m => m.id === recipeId)!.parts ?? []).map(p => ({ itemId: p.itemId, quantity: p.quantity * produced }));
   for (const [, recipeId, produced] of runRows) {
     for (const p of partsUsedBy(recipeId, produced)) orderedByItem.set(p.itemId, (orderedByItem.get(p.itemId) ?? 0) + p.quantity);
@@ -257,6 +279,8 @@ export function buildDemoData(userId: string, today: string) {
       usedByMaterial.set(mat.id, (usedByMaterial.get(mat.id) ?? 0) + used);
     }
   }
+  // And what made-to-order sales took.
+  for (const o of orders) for (const t of o.taken?.materials ?? []) usedByMaterial.set(t.materialId, (usedByMaterial.get(t.materialId) ?? 0) + t.amount);
   const materials: DemoMaterial[] = purchases.map(({ bought, ...m }) => ({
     ...m,
     initialStock: round4(bought - (usedByMaterial.get(m.id) ?? 0)),

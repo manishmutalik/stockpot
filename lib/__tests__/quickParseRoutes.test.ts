@@ -78,6 +78,17 @@ describe('the request', () => {
 });
 
 describe('a clear order', () => {
+  it('for an item made when ordered, shows no shelf and says what would go short, and still lets it save', async () => {
+    const { deps, mem } = world({ model: vi.fn().mockResolvedValue({ raw: reading({ lineItems: [{ nameAsWritten: 'pineapple cake', menuItemId: 'pcake', quantity: 1 }] }) }) });
+    mem.seed(UID, 'menu', 'pcake', { name: 'Pineapple Cake', sellingPrice: 900, madeToOrder: true, recipe: [{ materialId: 'eggs', amount: 40, unit: 'pcs' }] });
+    const r = await call(deps, say('1 pineapple cake'));
+    // Only how it was paid is asked: never whether there is stock.
+    expect(r.body.questions.map((q: { id: string }) => q.id)).toEqual(['payment']);
+    expect(r.body.preview.lines[0].stockAfter).toBeNull();
+    expect(r.body.preview.shortages).toEqual([{ materialId: 'eggs', name: 'Eggs', unit: 'pcs', short: 10 }]);
+    expect(r.body.notes).toContain('Not enough on hand, so stock will go below nothing: 10 pcs Eggs.');
+  });
+
   it('becomes a draft the save endpoint takes, with the figures to confirm, and counts one parse use', async () => {
     const { deps } = world({ model: vi.fn().mockResolvedValue({ raw: reading({ customerName: 'Ravi', paymentStatus: 'paid', paymentMethod: 'upi' }) }) });
     const r = await call(deps, say('Ravi took 2 sourdough, paid by UPI'));
@@ -121,7 +132,7 @@ describe('what the message leaves open', () => {
   it('asks whether it was paid when it does not say', async () => {
     const { deps } = world();
     const r = await call(deps, say('2 sourdough'));
-    expect(r.body.questions.map((q: any) => q.id)).toEqual(['payment']);
+    expect(r.body.questions.map((q: { id: string }) => q.id)).toEqual(['payment']);
     expect(r.body.questions[0].options.map((o: any) => o.value)).toEqual(['upi', 'cash', 'card', 'other', 'later']);
     expect(r.body.draft.common.paymentStatus).toBeUndefined();
   });
@@ -475,6 +486,14 @@ describe('something made', () => {
     const r = await call(deps, made('made 2 batches of sponge, got 8'));
     expect(r.body.draft.rows).toEqual([{ recipeId: 'base', quantityProduced: 9, quantityYield: 8, batches: 2 }]);
     expect(r.body.preview.rows[0]).toMatchObject({ quantityProduced: 9, quantityYield: 8, stockAfter: 8 });
+  });
+
+  it('leaves out an item made when ordered, and says why', async () => {
+    const { deps, mem } = world();
+    mem.seed(UID, 'menu', 'pcake', { name: 'Pineapple Cake', sellingPrice: 900, madeToOrder: true, recipe: [{ materialId: 'flour', amount: 100, unit: 'g' }] });
+    deps.productionModel.mockResolvedValue({ raw: production({ lineItems: [{ nameAsWritten: 'pineapple cake', menuItemId: 'pcake', quantity: 2, wasteUnits: null }] }) });
+    const r = await call(deps, made('made 2 pineapple cake'));
+    expect(r.body.notes).toEqual([expect.stringMatching(/Left out Pineapple Cake: it is made when ordered/)]);
   });
 
   it('leaves out batches of an item with no batch size, and says how to fix it', async () => {
