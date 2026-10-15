@@ -174,7 +174,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       steps(
         'Open **Stock / Inventory** and click **Add Item**.',
-        'Give the name, the unit you keep it in (g, kg, ml, l or pieces), how much you have now, and the cost per unit.',
+        'Give the name, the unit you keep it in (g, kg, ml, l or pieces), how much you have now, and the cost per unit. Eggs start in pieces; change it if you keep them by weight.',
         'Set a **Threshold**: when stock drops to it, the material shows as low and you are told.',
         'Optional: its category (Raw Materials, Packaging…), the GST you pay on it, and the expiry date of what you have.',
       ),
