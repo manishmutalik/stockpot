@@ -33,6 +33,37 @@ describe('AddMaterialModal', () => {
     expect(props.onChange).toHaveBeenLastCalledWith('expiry', '2026-05-01');
   });
 
+  it('puts eggs in pieces until a unit is chosen, and leaves other things in the unit it opened with', () => {
+    const props = setup();
+    fireEvent.change(screen.getByLabelText('Item name *'), { target: { value: 'Eggs' } });
+    expect(props.onChange).toHaveBeenCalledWith('unit', 'pcs');
+    props.onChange.mockClear();
+    // The form's state lives in App; here the name changes again while the unit still reads grams.
+    fireEvent.change(screen.getByLabelText('Item name *'), { target: { value: 'Maida' } });
+    expect(props.onChange).not.toHaveBeenCalledWith('unit', expect.anything());
+    fireEvent.change(screen.getByLabelText('Item name *'), { target: { value: 'Desi anda' } });
+    expect(props.onChange).toHaveBeenLastCalledWith('unit', 'pcs');
+  });
+
+  it('goes back to the unit it opened with when the name stops being something counted', () => {
+    const onChange = vi.fn();
+    const props = { category: 'Dairy', currency: { symbol: '$' }, onChange, onSubmit: vi.fn(), onClose: vi.fn() };
+    const { rerender } = render(<AddMaterialModal {...props} fields={empty} />);
+    fireEvent.change(screen.getByLabelText('Item name *'), { target: { value: 'Eggs' } });
+    rerender(<AddMaterialModal {...props} fields={{ ...empty, name: 'Eggs', unit: 'pcs' }} />);
+    fireEvent.change(screen.getByLabelText('Item name *'), { target: { value: 'Eggless premix' } });
+    expect(onChange).toHaveBeenLastCalledWith('unit', 'g');
+  });
+
+  it('never overrides a unit the owner chose', () => {
+    const props = setup();
+    fireEvent.change(screen.getByLabelText('Unit'), { target: { value: 'kg' } });
+    props.onChange.mockClear();
+    fireEvent.change(screen.getByLabelText('Item name *'), { target: { value: 'Eggs' } });
+    expect(props.onChange).toHaveBeenCalledTimes(1);
+    expect(props.onChange).toHaveBeenLastCalledWith('name', 'Eggs');
+  });
+
   it('cannot be submitted without a name, then submits and closes', () => {
     const props = setup();
     expect((screen.getByRole('button', { name: /Add Item/ }) as HTMLButtonElement).disabled).toBe(true);

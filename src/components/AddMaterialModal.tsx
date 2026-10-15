@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Check, Plus } from 'lucide-react';
 import { ModalShell, MODAL_LABEL, modalField } from './ModalShell';
+import { isCountedByThePiece } from '../utils/kitchenMeasures';
 
 export interface AddMaterialFields {
   name: string;
@@ -20,8 +21,21 @@ interface AddMaterialModalProps {
   onClose: () => void;
 }
 
-/** Form for adding one raw material to the category being browsed. State and the save handler live in App. */
+/**
+ * Form for adding one raw material to the category being browsed. State and the save handler live in App.
+ * Until a unit is chosen here, it follows the name: something counted, not weighed (eggs), is in pieces; anything else
+ * keeps the unit the form opened with.
+ */
 export function AddMaterialModal({ category, currency, fields, onChange, onSubmit, onClose }: AddMaterialModalProps) {
+  const [unitChosen, setUnitChosen] = useState(false);
+  const [openedWith] = useState(fields.unit);
+  const changeName = (name: string) => {
+    onChange('name', name);
+    if (!unitChosen) {
+      const unit = isCountedByThePiece(name) ? 'pcs' : openedWith;
+      if (unit !== fields.unit) onChange('unit', unit);
+    }
+  };
   return (
     <ModalShell
       title="Add New Item"
@@ -59,7 +73,7 @@ export function AddMaterialModal({ category, currency, fields, onChange, onSubmi
           required
           autoFocus
           value={fields.name}
-          onChange={(e) => onChange('name', e.target.value)}
+          onChange={(e) => changeName(e.target.value)}
           placeholder="e.g. All-Purpose Flour"
           className={`${modalField()} font-semibold`}
         />
@@ -67,7 +81,7 @@ export function AddMaterialModal({ category, currency, fields, onChange, onSubmi
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label htmlFor="mat-unit" className={MODAL_LABEL}>Unit</label>
-          <select id="mat-unit" value={fields.unit} onChange={(e) => onChange('unit', e.target.value)} className={`${modalField()} font-semibold`}>
+          <select id="mat-unit" value={fields.unit} onChange={(e) => { setUnitChosen(true); onChange('unit', e.target.value); }} className={`${modalField()} font-semibold`}>
             <option value="g">g (grams)</option>
             <option value="kg">kg (kilograms)</option>
             <option value="ml">ml (millilitres)</option>

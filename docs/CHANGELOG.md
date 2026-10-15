@@ -1,5 +1,12 @@
 # Changelog
 
+## Eggs start in pieces
+
+Adding a material called Eggs (or egg, anda, अंडा) in **Stock / Inventory** now picks **pcs (pieces)** as its unit, so
+"2 eggs" in a recipe stays 2 eggs. The unit follows the name only until you choose one yourself. The recipe reader already
+suggests pieces for a new egg material; both use the same list of things that are counted, not weighed
+(`isCountedByThePiece` in `src/utils/kitchenMeasures.ts`). Web only.
+
 ## Recipe reader: bases made ahead and kept
 
 When the recipe reader finds a component (a sponge base, a ganache, whipped cream), there are now three choices, on the

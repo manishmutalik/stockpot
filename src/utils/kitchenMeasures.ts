@@ -271,6 +271,12 @@ export function recipeUnitFor(materialUnit: string): string {
   return u;
 }
 
+/** Whether something of this name is counted, not weighed (eggs): a new material of it is suggested in pieces. */
+export function isCountedByThePiece(name: string): boolean {
+  const entry = typicalWeightFor(name);
+  return !!entry?.gramsPerPiece && !entry.gramsPerTsp;
+}
+
 /** The unit a new material for this ingredient is suggested in. */
 export function suggestMaterialUnit(ingredient: ParsedIngredient): 'g' | 'ml' | 'pcs' {
   if (ingredient.unit === 'ml' || ingredient.unit === 'l') return 'ml';
