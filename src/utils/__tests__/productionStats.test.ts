@@ -54,3 +54,14 @@ describe('getRunStatus', () => {
     expect(getRunStatus(run('a', { remainingQuantity: 3, date: '2026-03-07' }), '2026-03-10').label).toBe('Check freshness · 3 left');
   });
 });
+
+describe('summarizeProduction with items counted by weight', () => {
+  it('counts units and the cost per unit from pieces only, and runs and cost from everything', () => {
+    const runs = [
+      { id: 'a', recipeId: 'cookie', date: '2026-03-10', quantityProduced: 10, costTotal: 50 },
+      { id: 'b', recipeId: 'ganache', date: '2026-03-10', quantityProduced: 0.8, costTotal: 320 },
+    ] as unknown as Parameters<typeof summarizeProduction>[0];
+    const s = summarizeProduction(runs, '2026-03-10', r => r.recipeId !== 'ganache');
+    expect(s).toMatchObject({ totalRuns: 2, unitsProduced: 10, totalCost: 370, costPerUnit: 5 });
+  });
+});

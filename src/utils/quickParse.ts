@@ -18,6 +18,7 @@ import { customerLabels, groupOrdersByCustomer } from './customers';
 import { planOrderGroup, planProductionSession, productionRunCost, type OrderGroupCommon, type OrderLineItem, type ProductionRunInput } from './plans';
 import type { ProductionFormFill } from './productionParse';
 import { effectiveRecipe, partsOf } from './itemParts';
+import { itemUnit } from './itemUnits';
 import type { NotFoundItem, OrderFormFill } from './orderParse';
 import type { Order } from '../types';
 import type { Answer, OrderDraft, OrderPreview, ProductionDraft, ProductionPreview, Question, QuickKind } from './quickApiTypes';
@@ -314,6 +315,7 @@ export function buildProductionDraft(input: {
   if (fill.notes && rows.length > 0) rows[0].notes = fill.notes;
   for (const w of fill.unplacedWaste) notes.push(`${w.units} ${w.name} wasted: record it with Discard in the web app's Production Log.`);
   for (const name of fill.madeToOrder) notes.push(`Left out ${name}: it is made when ordered, so it comes out of stock when you sell it.`);
+  for (const name of fill.byWeight) notes.push(`Left out ${name}: it is counted by weight. Say how many batches you made, or log it in kg on the web app.`);
   for (const b of fill.unplacedBatches) notes.push(`Left out ${b.batches} ${b.batches === 1 ? 'batch' : 'batches'} of ${b.name}: set how many one batch makes on the web app's Menu, or say how many pieces.`);
 
   return { draft: { ...(date !== today && { date }), rows }, questions, notes };
@@ -356,12 +358,18 @@ export function previewProduction(input: {
   const plan = planProductionSession(inputs, { materials, menu }, { newId: () => `preview-${++n}`, now: () => 0 });
   if (plan.ok === false) return { ok: false, message: plan.error.message };
 
-  const rows = inputs.map(r => ({
-    recipeId: r.recipeId, name: menu.find(m => m.id === r.recipeId)?.name ?? 'Item',
-    quantityProduced: r.quantityProduced, quantityYield: r.quantityYield, costTotal: r.costTotal,
-    costPerUnit: r.quantityYield > 0 ? Math.round((r.costTotal / r.quantityYield) * 100) / 100 : 0,
-    stockAfter: plan.state.menu.find(m => m.id === r.recipeId)?.finishedGoodsStock ?? 0,
-  }));
+  const rows = inputs.map(r => {
+    const item = menu.find(m => m.id === r.recipeId);
+    const unit = itemUnit(item);
+    return {
+      recipeId: r.recipeId, name: item?.name ?? 'Item',
+      // Counted by weight (a ganache): quantities in kg (utils/itemUnits).
+      ...(unit !== 'pcs' && { countedIn: unit }),
+      quantityProduced: r.quantityProduced, quantityYield: r.quantityYield, costTotal: r.costTotal,
+      costPerUnit: r.quantityYield > 0 ? Math.round((r.costTotal / r.quantityYield) * 100) / 100 : 0,
+      stockAfter: plan.state.menu.find(m => m.id === r.recipeId)?.finishedGoodsStock ?? 0,
+    };
+  });
   const total = Math.round(rows.reduce((s, r) => s + r.costTotal, 0) * 100) / 100;
   const shortages = productionShortages(plan.state, inputs.map(r => r.recipeId));
   return { ok: true, preview: { date: day, rows, shortages, total, label: { total: formatAmount(total, currency) } } };

@@ -8,6 +8,7 @@
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { formatItemQuantity, perUnit } from '../../../src/utils/itemUnits';
 import type { Currency, OrderDraft, OrderPreview, PaymentDraft, PaymentPreview, ProductionPreview, RestockPreview } from '../../../src/utils/quickApiTypes';
 import { formatAmount } from '../../../src/utils/money';
 import { formatDay } from '../lib/dates';
@@ -139,10 +140,22 @@ export function ProductionConfirm({ preview, currency, accepted, onAccept }: { p
         <Text style={label}>MADE ON {day(preview.date).toUpperCase()}</Text>
         {preview.rows.map(r => (
           <View key={r.recipeId} style={{ gap: 2 }}>
-            <Line left={`${r.name} × ${r.quantityProduced}`} right={formatAmount(r.costTotal, currency)} />
-            <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.grey }}>
-              {r.quantityYield !== r.quantityProduced ? `${r.quantityYield} sellable · ` : ''}{formatAmount(r.costPerUnit, currency)} each to make · {r.stockAfter} in stock after
-            </Text>
+            {r.countedIn ? (
+              <>
+                {/* Counted by weight (a ganache): "800 g", per kg (utils/itemUnits). */}
+                <Line left={`${r.name}, ${formatItemQuantity(r.countedIn, r.quantityProduced)}`} right={formatAmount(r.costTotal, currency)} />
+                <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.grey }}>
+                  {r.quantityYield !== r.quantityProduced ? `${formatItemQuantity(r.countedIn, r.quantityYield)} came out · ` : ''}{formatAmount(r.costPerUnit, currency)} {perUnit(r.countedIn)} · {formatItemQuantity(r.countedIn, r.stockAfter)} in stock after
+                </Text>
+              </>
+            ) : (
+              <>
+                <Line left={`${r.name} × ${r.quantityProduced}`} right={formatAmount(r.costTotal, currency)} />
+                <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.grey }}>
+                  {r.quantityYield !== r.quantityProduced ? `${r.quantityYield} sellable · ` : ''}{formatAmount(r.costPerUnit, currency)} each to make · {r.stockAfter} in stock after
+                </Text>
+              </>
+            )}
           </View>
         ))}
         <View style={{ backgroundColor: colors.inputFill, borderRadius: radius.md, padding: 12 }}>

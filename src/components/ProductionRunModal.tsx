@@ -4,6 +4,7 @@ import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShe
 import { productionRunCost } from '../utils/plans/planProduction';
 import { effectiveRecipe, partsNeeded } from '../utils/itemParts';
 import { expectedUnits, MAX_YIELD_OVER, runYieldLoss } from '../utils/batches';
+import { formatItemQuantity, itemUnit, type ItemUnit } from '../utils/itemUnits';
 import type { ProductionParser } from '../hooks/useProductionParser';
 import type { NotFoundItem } from '../utils/orderParse';
 import type { ProductionFillRow, ProductionFormFill, UnplacedWaste } from '../utils/productionParse';
@@ -22,6 +23,8 @@ interface MenuItem {
   batchMakes?: number;
   /** Made when it is ordered: never logged as production (utils/madeToOrder). */
   madeToOrder?: boolean;
+  /** Counted by weight or volume (utils/itemUnits). */
+  countedIn?: 'kg' | 'l';
 }
 
 interface RawMaterial {
@@ -170,13 +173,17 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
       const out = used.map(p => {
         const inStock = stock.get(p.itemId) ?? 0;
         stock.set(p.itemId, inStock - p.quantity);
-        return { itemId: p.itemId, name: menu.find(m => m.id === p.itemId)?.name ?? 'item', quantity: p.quantity, inStock, short: p.quantity > inStock + 1e-9 };
+        const part = menu.find(m => m.id === p.itemId);
+        return { itemId: p.itemId, name: part?.name ?? 'item', unit: itemUnit(part), quantity: p.quantity, inStock, short: p.quantity > inStock + 1e-9 };
       });
       if (item && qty > 0) stock.set(item.id, (stock.get(item.id) ?? 0) + (actualOf(menu, row) || 0));
       return out;
     });
   }, [rows, menu]);
   const fmtQty = (n: number) => String(Math.round(n * 100) / 100);
+  /** A part's amount: "2 Sponge base", "150 g of Ganache". */
+  const partAmount = (unit: ItemUnit, n: number, name: string) => (unit === 'pcs' ? `${fmtQty(n)} ${name}` : `${formatItemQuantity(unit, n)} of ${name}`);
+  const unitOfRow = (row: ProductionRow) => itemUnit(menu.find(m => m.id === row.recipeId));
 
   // ─── Row Management ─────────────────────────────────────────────────────────
   const updateRow = (index: number, patch: Partial<ProductionRow>) => {
@@ -223,8 +230,9 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
       } else {
         // Nothing matched: leave an empty row to choose from, not the first menu item standing in for what was made.
         setRows([{ recipeId: '', quantity: 1 }]);
-        if (f.notFound.length === 0 && f.unplacedBatches.length === 0 && f.madeToOrder.length === 0) notes.push('No items were found in the note.');
+        if (f.notFound.length === 0 && f.unplacedBatches.length === 0 && f.madeToOrder.length === 0 && f.byWeight.length === 0) notes.push('No items were found in the note.');
       }
+      for (const name of f.byWeight) notes.push(`Left out ${name}: it is counted by weight. Choose it below and enter how much you made, in kg.`);
       if (f.date) setDate(f.date);
       if (f.dateNotUnderstood) notes.push(`Couldn't tell the date from "${f.dateNotUnderstood}". Please check the production date.`);
       if (f.notes !== undefined) setNotes(f.notes);
@@ -353,9 +361,11 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
 
   if (!isOpen) return null;
 
-  // Per piece that came out: a short batch makes each piece cost more.
-  const totalUnits = rows.reduce((sum, r) => sum + (actualOf(menu, r) || 0), 0);
+  // Per piece (kg) that came out: a short batch makes each piece cost more. Not shown for pieces and kilos together.
+  const rowUnits = new Set<ItemUnit>(rows.filter(r => r.recipeId).map(unitOfRow));
+  const totalUnits = rowUnits.size <= 1 ? rows.reduce((sum, r) => sum + (actualOf(menu, r) || 0), 0) : 0;
   const perUnit = totalUnits > 0 ? costTotal / totalUnits : 0;
+  const perWhat = ({ pcs: 'unit', kg: 'kg', l: 'litre' } as const)[[...rowUnits][0] ?? 'pcs'];
   const money = (n: number) => `${currency.symbol}${n.toFixed(2)}`;
 
   return (
@@ -474,7 +484,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
                   onChange={n => updateRow(i, { quantity: n })}
                   invalid={invalidRowIndex === i && !(row.quantity > 0)}
                   decimal
-                  label={row.inBatches ? 'Batches' : 'Pieces'}
+                  label={row.inBatches ? 'Batches' : ({ pcs: 'Pieces', kg: 'kg', l: 'Litres' } as const)[unitOfRow(row)]}
                 />
                 {rows.length > 1 && (
                   <button
@@ -490,6 +500,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
                 <RowOutcome
                   row={row}
                   makes={batchMakesOf(menu, row.recipeId)}
+                  unit={unitOfRow(row)}
                   planned={plannedOf(menu, row)}
                   cost={rowCosts[i]}
                   showCost={rows.length > 1}
@@ -501,7 +512,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
               )}
               {partUse[i].map(p => (
                 <div key={p.itemId} className={`mt-1 px-1 text-[11px] ${p.short ? 'text-amber-700 font-semibold' : 'text-muted'}`}>
-                  Takes {fmtQty(p.quantity)} {p.name} from stock ({fmtQty(p.inStock)} there){p.short ? ': not enough. Log the batch you made first, or it goes below nothing.' : ''}
+                  Takes {partAmount(p.unit, p.quantity, p.name)} from stock ({p.unit === 'pcs' ? fmtQty(p.inStock) : formatItemQuantity(p.unit, p.inStock)} there){p.short ? ': not enough. Log the batch you made first, or it goes below nothing.' : ''}
                 </div>
               ))}
             </div>
@@ -547,7 +558,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
           <div className="flex items-baseline flex-wrap gap-x-2 mt-0.5">
             <span className="text-2xl font-mono font-semibold text-ink">{currency.symbol}{costTotal.toFixed(2)}</span>
             {totalUnits > 0 && (
-              <span className="font-mono text-xs text-muted">({currency.symbol}{perUnit.toFixed(2)} / unit)</span>
+              <span className="font-mono text-xs text-muted">({currency.symbol}{perUnit.toFixed(2)} / {perWhat})</span>
             )}
           </div>
         </div>
@@ -564,9 +575,11 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
  * a short batch cost (utils/batches). Closed until asked for, unless the row is in batches, where it is the usual thing to
  * fill in.
  */
-function RowOutcome({ row, makes, planned, cost, showCost, money, invalid, onBatches, onMade }: {
+function RowOutcome({ row, makes, unit, planned, cost, showCost, money, invalid, onBatches, onMade }: {
   row: ProductionRow;
   makes?: number;
+  /** What the item is counted in (utils/itemUnits). */
+  unit: ItemUnit;
   planned: number;
   cost: number;
   showCost: boolean;
@@ -576,9 +589,10 @@ function RowOutcome({ row, makes, planned, cost, showCost, money, invalid, onBat
   onMade: (made: string | undefined) => void;
 }) {
   const fmt = (n: number) => String(Math.round(n * 100) / 100);
+  const say = (n: number) => (unit === 'pcs' ? fmt(n) : formatItemQuantity(unit, n));
   const actual = row.made === undefined || row.made === '' || !Number.isFinite(Number(row.made)) ? null : Number(row.made);
   const loss = actual === null ? 0 : runYieldLoss({ quantityProduced: planned, quantityYield: actual, costTotal: cost });
-  const diff = actual === null ? 0 : Math.round((actual - planned) * 100) / 100;
+  const diff = actual === null ? 0 : Math.round((actual - planned) * 1000) / 1000;
   const toggle = (on: boolean, label: string) => (
     <button
       type="button" onClick={() => onBatches(on)} aria-pressed={!!row.inBatches === on}
@@ -590,10 +604,10 @@ function RowOutcome({ row, makes, planned, cost, showCost, money, invalid, onBat
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {makes && (
           <span className="inline-flex rounded-lg bg-stone-100 p-0.5" role="group" aria-label="Count in">
-            {toggle(true, 'Batches')}{toggle(false, 'Pieces')}
+            {toggle(true, 'Batches')}{toggle(false, ({ pcs: 'Pieces', kg: 'kg', l: 'Litres' } as const)[unit])}
           </span>
         )}
-        {makes && row.inBatches && <span>Makes <span className="font-mono font-semibold text-ink">{fmt(planned)}</span> (one batch makes {fmt(makes)})</span>}
+        {makes && row.inBatches && <span>Makes <span className="font-mono font-semibold text-ink">{say(planned)}</span> (one batch makes {say(makes)})</span>}
         {showCost && <span className="font-mono">Material cost <span className="font-semibold text-ink">{money(cost)}</span></span>}
         {row.made === undefined && (
           <button type="button" onClick={() => onMade('')} className="font-semibold text-primary hover:text-primary-dark">+ Came out different?</button>
@@ -608,15 +622,15 @@ function RowOutcome({ row, makes, planned, cost, showCost, money, invalid, onBat
               value={row.made}
               onChange={e => {
                 const t = e.target.value.replace(',', '.');
-                if (/^\d*\.?\d{0,2}$/.test(t)) onMade(t);
+                if ((unit === 'pcs' ? /^\d*\.?\d{0,2}$/ : /^\d*\.?\d{0,3}$/).test(t)) onMade(t);
               }}
               placeholder={fmt(planned)}
               className={`w-20 rounded-lg border bg-white px-2 py-1 text-right font-mono text-sm font-semibold text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 ${invalid && actual !== null ? 'border-coral' : 'border-stone-200'}`}
             />
-            <span>pieces</span>
+            <span>{({ pcs: 'pieces', kg: 'kg', l: 'litres' } as const)[unit]}</span>
           </label>
-          {diff < 0 && <span className="font-semibold text-amber-700">{fmt(-diff)} short · {money(loss)} lost in production</span>}
-          {diff > 0 && <span className="font-semibold text-[#006143]">{fmt(diff)} more than planned</span>}
+          {diff < 0 && <span className="font-semibold text-amber-700">{say(-diff)} short · {money(loss)} lost in production</span>}
+          {diff > 0 && <span className="font-semibold text-[#006143]">{say(diff)} more than planned</span>}
           {!row.inBatches && (
             <button type="button" onClick={() => onMade(undefined)} className="text-muted hover:text-ink underline">As planned</button>
           )}

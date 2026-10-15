@@ -14,6 +14,7 @@ import { basePriceOf } from '../utils/gstCalculations';
 import { costMenu, itemsUsing } from '../utils/itemParts';
 import { ItemPartsEditor } from '../components/ItemPartsEditor';
 import { BatchSizeEditor } from '../components/BatchSizeEditor';
+import { formatItemQuantity, itemUnit, perUnit } from '../utils/itemUnits';
 import { DEFAULT_TARGET_MARGIN, itemsNeedingRepricing, marginDrift, suggestedPriceFor } from '../utils/pricing';
 import { MarginDriftPanel } from '../components/MarginDriftPanel';
 import { PriceInput } from '../components/PriceInput';
@@ -118,7 +119,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     materials, categories, menu, orders, settings, currency, expandedRecipeId, setExpandedRecipeId,
     setIsIngredientSelectorOpen, setActiveRecipeItemId, addMenuItem, updateMenuItem, updateMenuItemField,
     deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, menuFilterOnOpen, openRecipeReader,
-    setItemParts, setBatchSize, setMadeToOrder, productionRuns,
+    setItemParts, setBatchSize, setMadeToOrder, setCountedIn, productionRuns,
   } = props;
 
   // Purely local, ephemeral UI state for the shareable nutrition card — not
@@ -366,6 +367,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
         {ordered.map((item) => {
           const cost = recipeCost(cv(item).recipe, materials);
           const made = !!item.notForSale;
+          const unit = itemUnit(item);
           const usedIn = itemsUsing<MenuItemType>(menu, item.id);
           const { margin, tier, isLoss } = getMarginInfo(basePriceOf(item.sellingPrice, settings), cost);
           const expanded = expandedRecipeId === item.id;
@@ -408,7 +410,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                         placeholder="Item Name"
                       />
                       <div className="flex flex-wrap items-center gap-2 mt-1">
-                        <span className="font-mono text-[11px] text-muted">Cost: {money(cost)}</span>
+                        <span className="font-mono text-[11px] text-muted">Cost: {money(cost)}{unit !== 'pcs' && ` ${perUnit(unit)}`}</span>
                         {unpriced.length > 0 && (
                           <span
                             className="font-mono text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-amber-100 text-amber-800"
@@ -483,7 +485,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                 {made && (
                   <p className="text-xs text-muted">
                     {usedIn.length > 0 ? <>Used in {usedIn.map(u => u.name).join(', ')}. </> : <>Not used in any item yet: add it to one with “Add a made item” in its recipe. </>}
-                    In stock: <span className="font-mono font-semibold text-ink">{Math.round((item.finishedGoodsStock ?? 0) * 100) / 100}</span>
+                    In stock: <span className="font-mono font-semibold text-ink">{formatItemQuantity(unit, item.finishedGoodsStock ?? 0)}</span>
                   </p>
                 )}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -620,7 +622,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div className="flex flex-wrap items-stretch gap-3">
                           <div className="p-3 bg-white rounded-xl shadow-sm">
-                            <h4 className={`${LABEL} mb-1`}>Recipe cost</h4>
+                            <h4 className={`${LABEL} mb-1`}>{unit === 'pcs' ? 'Recipe cost' : `Cost ${perUnit(unit)}`}</h4>
                             <div className="font-mono text-xl font-semibold text-primary">{money(cost)}</div>
                           </div>
                           {(() => {
@@ -704,6 +706,30 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                           <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${made ? 'left-0.5' : 'left-[22px]'}`} />
                         </button>
                       </div>
+
+                      {made && (
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-ink">Counted in</p>
+                            <p className="text-xs text-muted">
+                              {unit === 'pcs'
+                                ? 'Pieces, such as sponge bases. A ganache, custard or whipped cream is easier by weight.'
+                                : `The recipe below is for 1 ${unit === 'kg' ? 'kg' : 'litre'}, and its stock and batches are in ${unit === 'kg' ? 'kg' : 'litres'}. Other items use it in ${unit === 'kg' ? 'grams' : 'ml'}.`}
+                            </p>
+                          </div>
+                          <div role="radiogroup" aria-label="Counted in" className="flex rounded-lg bg-stone-100 p-0.5 text-xs">
+                            {([['pcs', 'Pieces'], ['kg', 'kg'], ['l', 'Litres']] as const).map(([u, label]) => (
+                              <button
+                                key={u} type="button" role="radio" aria-checked={unit === u}
+                                onClick={() => setCountedIn(item.id, u === 'pcs' ? null : u)}
+                                className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${unit === u ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {!made && (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">

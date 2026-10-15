@@ -93,6 +93,8 @@ export function readRecipeImportBody(body: unknown): Read<RecipeImportBody> {
     }
     if (it.batchMakes !== undefined && !positive(it.batchMakes, 10_000)) return bad('How many one batch makes must be above nothing.');
     if ((it.notForSale !== undefined && it.notForSale !== true) || (it.madeToOrder !== undefined && it.madeToOrder !== true)) return bad('A recipe is marked in a way that is not understood.');
+    // Counted by weight: only an item made for other items (selling by weight comes later).
+    if (it.countedIn !== undefined && ((it.countedIn !== 'kg' && it.countedIn !== 'l') || it.notForSale !== true)) return bad('A recipe is marked in a way that is not understood.');
     const parts: NonNullable<RecipeImportItem['parts']> = [];
     if (it.parts !== undefined) {
       if (!Array.isArray(it.parts) || it.parts.length > 20) return bad('A recipe has too many items in it.');
@@ -108,6 +110,7 @@ export function readRecipeImportBody(body: unknown): Read<RecipeImportBody> {
       target, lines,
       ...(it.batchMakes !== undefined && { batchMakes: it.batchMakes as number }),
       ...(it.notForSale === true && { notForSale: true }),
+      ...((it.countedIn === 'kg' || it.countedIn === 'l') && { countedIn: it.countedIn }),
       ...(it.madeToOrder === true && { madeToOrder: true }),
       ...(parts.length > 0 && { parts }),
     });
@@ -144,7 +147,7 @@ export function createQuickRecipeSetupHandler(deps: QuickRouteDeps) {
         const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
         return {
           materials: (materials as unknown as RawMaterial[]).map(view).sort(byName),
-          menu: (menu as unknown as MenuItem[]).map(m => ({ id: m.id, name: m.name || 'Item' })).sort(byName),
+          menu: (menu as unknown as MenuItem[]).map(m => ({ id: m.id, name: m.name || 'Item', ...((m.countedIn === 'kg' || m.countedIn === 'l') && { countedIn: m.countedIn }) })).sort(byName),
           currency: currencyOf(settings as Parameters<typeof currencyOf>[0]),
         };
       });

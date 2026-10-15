@@ -1,5 +1,24 @@
 # Changelog
 
+## Things made by weight: ganache, custard, whipped cream
+
+An item made for other items can now be **Counted in** pieces, **kg** or **Litres** (Recipes & Menus, in its recipe).
+Counted in kg, its recipe is for 1 kg, its stock and batches are in kg ("One batch makes 0.8"), its cost is per kg, and a
+cake uses it in grams: **Add a made item** › Ganache › 150 g. Logging the cakes takes 150 g each from the ganache's stock,
+and the cake's cost includes 150 g of it.
+
+- **Production:** a ganache is logged in kg or batches, with what actually came out in kg ("50 g short").
+  The Production screen shows it as 750 g / 1.2 kg, and leaves it out of the unit counts.
+- **Read a recipe:** **Made ahead and kept** has **Counted in**. "Makes 800 g" is read as 0.8 kg (never 800 pieces); if
+  the recipe gives no yield, the ingredients are added up and offered ("The ingredients add up to 800 g. Use 800 g").
+  **How much goes into one** is in grams. Same on the phone.
+- **Phone production:** a ganache is shown in grams and kg; a count of pieces of it is left out with a note (batches
+  work as before).
+- Only items made for other items can be counted by weight for now; selling by weight (paneer by the kg) comes next.
+  The unit can be changed while nothing uses the item; stock counted the old way is cleared, once you agree.
+
+Data: `MenuItem.countedIn` ('kg' or 'l'). The server must be redeployed and the phone needs a new APK.
+
 ## Recipe reader: bases made ahead and kept
 
 When the recipe reader finds a component (a sponge base, a ganache, whipped cream), there are now three choices, on the

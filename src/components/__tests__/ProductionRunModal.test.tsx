@@ -270,3 +270,28 @@ describe('ProductionRunModal — items made when ordered', () => {
     expect(screen.getByDisplayValue('Cookie')).toBeTruthy();
   });
 });
+
+describe('ProductionRunModal — items counted by weight', () => {
+  const weighed = [
+    { id: 'ganache', name: 'Ganache', recipe: [], sellingPrice: 0, notForSale: true, countedIn: 'kg', batchMakes: 0.8, finishedGoodsStock: 0.5 },
+    { id: 'truffle', name: 'Truffle Cake', recipe: [], sellingPrice: 900, parts: [{ itemId: 'ganache', quantity: 0.15 }] },
+  ];
+
+  it('logs batches of ganache in kg, and what came out in kg', async () => {
+    const onSave = vi.fn().mockResolvedValue({ succeededCount: 1, failedIndex: null });
+    render(<ProductionRunModal isOpen onClose={vi.fn()} menu={weighed as unknown as MenuItem[]} materials={[]} onSave={onSave} currency={currency} />);
+    expect(screen.getByText(/Makes/).textContent).toBe('Makes 800 g (one batch makes 800 g)');
+    expect(screen.getByRole('button', { name: 'kg' })).toBeTruthy();
+    const made = screen.getByLabelText('Actually made');
+    fireEvent.change(made, { target: { value: '0.75' } });
+    expect(screen.getByText(/50 g short/)).toBeTruthy();
+    expect(made.parentElement!.textContent).toContain('kg');
+  });
+
+  it('says how much of it a cake takes, in grams', () => {
+    render(<ProductionRunModal isOpen onClose={vi.fn()} menu={[...weighed].reverse() as unknown as MenuItem[]} materials={[]} onSave={vi.fn()} currency={currency} />);
+    expect(screen.getByText(/Takes 150 g of Ganache from stock \(500 g there\)/)).toBeTruthy();
+    fireEvent.change(screen.getAllByPlaceholderText('Qty')[0], { target: { value: '4' } });
+    expect(screen.getByText(/Takes 600 g of Ganache from stock \(500 g there\): not enough/)).toBeTruthy();
+  });
+});

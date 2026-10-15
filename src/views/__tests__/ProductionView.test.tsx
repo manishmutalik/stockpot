@@ -131,3 +131,23 @@ describe('ProductionView', () => {
     expect(screen.getByText('No production runs yet')).toBeTruthy();
   });
 });
+
+describe('ProductionView, items counted by weight', () => {
+  const ganache = { id: 'ganache', name: 'Ganache', sellingPrice: 0, notForSale: true, countedIn: 'kg', finishedGoodsStock: 0.75, recipe: [] };
+
+  it('shows ganache in grams and kilos, and keeps it out of the unit counts', () => {
+    const props = makeProps({
+      menu: [...menu, ganache],
+      productionRuns: [run('a', { createdAt: 3 }), run('g', { recipeId: 'ganache', quantityProduced: 1.6, quantityYield: 1.5, batches: 2, remainingQuantity: 0.75, costTotal: 640, createdAt: 4 })],
+    });
+    render(<ProductionView {...props} />);
+    expect(screen.getByText('Units Baked').nextElementSibling?.textContent).toBe('10');
+    expect(screen.getByText('3 units on shelf, 1 by weight')).toBeTruthy();
+    expect(screen.getByText('750 g')).toBeTruthy();
+    expect(screen.getByText('1.6 kg')).toBeTruthy();
+    expect(screen.getByText(/-100 g waste/)).toBeTruthy();
+    expect(screen.getByText(/\/ kg$/)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Discard Ganache'));
+    expect(props.setDiscardTarget).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'ganache', maxQty: 0.75, unit: 'kg' }));
+  });
+});

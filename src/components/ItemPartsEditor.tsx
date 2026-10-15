@@ -3,10 +3,12 @@ import { Layers, X } from 'lucide-react';
 import type { ItemPart, MenuItem, RawMaterial } from '../types';
 import { partCandidates } from '../utils/itemParts';
 import { recipeCost } from '../utils/menuStats';
+import { fromEntry, itemUnit, perUnit, smallUnit, toEntry } from '../utils/itemUnits';
 
 /**
- * In the recipe editor: the other items this one is made from (a sponge base in a cream cake, cookies in a hamper), each
- * with how many go into one and what that costs. Making the item takes them from their finished stock (utils/itemParts).
+ * In the recipe editor: the other items this one is made from (a sponge base in a cream cake, cookies in a hamper, a
+ * ganache), each with how many go into one (for an item counted by weight, how many grams: utils/itemUnits) and what that
+ * costs. Making the item takes them from their finished stock (utils/itemParts).
  * Only items that would not put this one inside itself are offered.
  */
 export const ItemPartsEditor: React.FC<{
@@ -38,7 +40,11 @@ export const ItemPartsEditor: React.FC<{
           <select
             aria-label="Add a made item"
             value=""
-            onChange={e => { if (e.target.value) onChange([...parts, { itemId: e.target.value, quantity: 1 }]); }}
+            onChange={e => {
+              const added = menu.find(m => m.id === e.target.value);
+              // A piece, or 100 g (100 ml) of something counted by weight.
+              if (added) onChange([...parts, { itemId: added.id, quantity: itemUnit(added) === 'pcs' ? 1 : 0.1 }]);
+            }}
             className="h-9 rounded-lg border border-stone-200 bg-white px-3 text-sm font-medium text-ink outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           >
             <option value="">+ Add a made item…</option>
@@ -55,14 +61,17 @@ export const ItemPartsEditor: React.FC<{
         <div className="space-y-2">
           {parts.map((p, i) => {
             const part = menu.find(m => m.id === p.itemId);
+            const unit = itemUnit(part);
+            const small = smallUnit(unit);
             return (
               <div key={p.itemId} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2 shadow-sm">
                 <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink">{part?.name ?? 'Missing item'}</span>
                 <QuantityInput
-                  label={`How many ${part?.name ?? 'of it'} go into one`}
-                  value={p.quantity}
-                  onCommit={q => onChange(parts.map((x, j) => (j === i ? { ...x, quantity: q } : x)))}
+                  label={small ? `How much ${part?.name ?? 'of it'} goes into one, in ${small}` : `How many ${part?.name ?? 'of it'} go into one`}
+                  value={toEntry(unit, p.quantity)}
+                  onCommit={q => onChange(parts.map((x, j) => (j === i ? { ...x, quantity: fromEntry(unit, q) } : x)))}
                 />
+                <span className="w-6 text-xs text-muted">{small ?? ''}</span>
                 <span className="w-20 text-right font-mono text-xs text-muted">{money(unitCost(p.itemId) * p.quantity)}</span>
                 <button type="button" aria-label={`Remove ${part?.name ?? 'item'}`} onClick={() => onChange(parts.filter((_, j) => j !== i))}
                   className="p-1.5 rounded-lg text-muted hover:text-coral hover:bg-coral/10">
@@ -71,7 +80,10 @@ export const ItemPartsEditor: React.FC<{
               </div>
             );
           })}
-          <p className="text-[11px] text-muted">Per one of this item. Use 0.5 for half (a half-kg cake on half a base).</p>
+          <p className="text-[11px] text-muted">
+            {itemUnit(item) === 'pcs' ? 'Per one of this item.' : `${perUnit(itemUnit(item)).replace('per', 'Per')} of this item.`}
+            {parts.some(p => itemUnit(menu.find(m => m.id === p.itemId)) === 'pcs') && ' Use 0.5 for half (a half-kg cake on half a base).'}
+          </p>
         </div>
       )}
     </section>

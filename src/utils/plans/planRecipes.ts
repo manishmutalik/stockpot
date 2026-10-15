@@ -50,6 +50,11 @@ export interface RecipeImportItem {
   batchMakes?: number;
   /** Made only to go into other items (a base made ahead and kept). New items only. */
   notForSale?: boolean;
+  /**
+   * Counted by weight or volume (a ganache: utils/itemUnits): its lines and batch size are then per kg (litre). New items
+   * made for other items only.
+   */
+  countedIn?: 'kg' | 'l';
   /** Made when it is ordered. */
   madeToOrder?: boolean;
   /** Other items that go into one of it. */
@@ -204,7 +209,7 @@ export function planImportRecipes(input: {
       const menuItem: MenuItem = {
         id, name, sellingPrice, recipe: mergeRecipeLines(recipe), emoji: item.target.emoji || '🧁', ...batch,
         ...(partsOfItem[i] && { parts: partsOfItem[i] }),
-        ...(item.notForSale && { notForSale: true }),
+        ...(item.notForSale && { notForSale: true, ...((item.countedIn === 'kg' || item.countedIn === 'l') && { countedIn: item.countedIn }) }),
         ...(item.madeToOrder && { madeToOrder: true }),
       };
       // Priced at what it costs with its parts (a cream cake counts its base).

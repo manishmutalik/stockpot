@@ -11,21 +11,24 @@
  *  - A recipe the reader marked as a component (whipped cream, ganache, a sponge base) must be settled by the owner: sold
  *    on its own; mixed into another item each time, with how many of that item one batch covers (its ingredients are
  *    written into that item's recipe); or made ahead and kept, saved as its own item not sold on the menu, with its batch
- *    size, and used as a part of another item (utils/itemParts), so many to one of it.
+ *    size, and used as a part of another item (utils/itemParts), so many to one of it. One made ahead can be counted in
+ *    pieces (a sponge base) or by weight or volume (a ganache: utils/itemUnits): then its batch size and how much goes into
+ *    one are in kg (litres), its recipe is per kg, and "makes 800 g" in the recipe is read as 0.8 kg.
  *  - A sold recipe can be made when ordered (utils/madeToOrder).
  *  - A recipe whose name is an existing menu item replaces that item's recipe unless the owner chooses otherwise.
  *  - Nothing can be saved while a question is open: `draftIssues` lists them.
  */
-import type { MenuItem, RawMaterial } from '../types';
+import type { ItemUnitByMeasure, MenuItem, RawMaterial } from '../types';
 import { convertAmount } from './conversions';
-import { matchMaterialByName, perItem, resolveLine, suggestMaterialUnit, type LineAnswers, type LineQuestion, type LineResolution } from './kitchenMeasures';
+import { matchMaterialByName, parseAmount, perItem, resolveLine, suggestMaterialUnit, type LineAnswers, type LineQuestion, type LineResolution } from './kitchenMeasures';
+import { itemUnit, type ItemUnit } from './itemUnits';
 import { squash } from './orderParse';
 import type { MaterialMemory, NewMaterialInput, RecipeImportItem, RecipeImportLine } from './plans/planRecipes';
 import type { ParsedIngredient, ParsedRecipes } from './recipeParse';
 
 /** What the draft needs of a material and a menu item (the phone has only these: quickApiTypes' RecipeSetupView). */
 export type DraftMaterial = Pick<RawMaterial, 'id' | 'name' | 'unit'> & Partial<Pick<RawMaterial, 'costPerUnit' | 'gramsPerTsp' | 'gramsPerPiece'>>;
-export type DraftMenuItem = Pick<MenuItem, 'id' | 'name'>;
+export type DraftMenuItem = Pick<MenuItem, 'id' | 'name'> & Partial<Pick<MenuItem, 'countedIn'>>;
 
 export type LineChoice = { kind: 'existing'; id: string } | { kind: 'new'; key: string } | { kind: 'skip' };
 
@@ -62,6 +65,12 @@ export interface DraftRecipe {
   sellingPrice: number | null;
   /** A sold item made when it is ordered (utils/madeToOrder). */
   madeToOrder?: boolean;
+  /** One made ahead and kept, counted by weight or volume: `makes` and its use's `perItem` are then in kg (litres). */
+  countedIn?: ItemUnitByMeasure;
+  /** What the recipe says one batch makes, when it says a weight or volume ("800 g", "1.5 litres"), in kg (litres). */
+  measuredYield?: { unit: ItemUnitByMeasure; amount: number };
+  /** How many pieces the reader found one batch makes, kept to go back to from a weight. */
+  makesRead?: number;
   lines: DraftLine[];
 }
 
@@ -86,6 +95,78 @@ const PER_BUY_UNIT: Record<DraftNewMaterial['unit'], number> = { g: 1000, ml: 10
 
 const capitalise = (s: string) => s.trim().charAt(0).toUpperCase() + s.trim().slice(1);
 
+const WEIGHT_UNITS: Record<string, { unit: ItemUnitByMeasure; per: number }> = {
+  kg: { unit: 'kg', per: 1 }, kgs: { unit: 'kg', per: 1 }, kilo: { unit: 'kg', per: 1 }, kilos: { unit: 'kg', per: 1 }, kilogram: { unit: 'kg', per: 1 }, kilograms: { unit: 'kg', per: 1 },
+  g: { unit: 'kg', per: 0.001 }, gm: { unit: 'kg', per: 0.001 }, gms: { unit: 'kg', per: 0.001 }, gram: { unit: 'kg', per: 0.001 }, grams: { unit: 'kg', per: 0.001 }, gr: { unit: 'kg', per: 0.001 },
+  l: { unit: 'l', per: 1 }, ltr: { unit: 'l', per: 1 }, litre: { unit: 'l', per: 1 }, litres: { unit: 'l', per: 1 }, liter: { unit: 'l', per: 1 }, liters: { unit: 'l', per: 1 },
+  ml: { unit: 'l', per: 0.001 },
+};
+
+/** A yield written as a weight or volume ("800 g", "about 1.5 kg", "½ litre"), in kg (litres); null for anything else. */
+export function measuredYield(asWritten: string | undefined): { unit: ItemUnitByMeasure; amount: number } | null {
+  if (!asWritten) return null;
+  const m = asWritten.toLowerCase().match(/(\d+(?:\.\d+)?(?:\s*\/\s*\d+)?|\d*\s*[½¼¾])\s*(kilograms?|kilos?|kgs?|grams?|gms?|gm|gr|g|litres?|liters?|ltr|ml|l)\b/);
+  if (!m) return null;
+  const amount = parseAmount(m[1].replace(/\s*\/\s*/, '/'));
+  const unit = WEIGHT_UNITS[m[2]];
+  if (amount === null || !unit) return null;
+  const total = Math.round(amount * unit.per * 1e6) / 1e6;
+  return total > 0 ? { unit: unit.unit, amount: total } : null;
+}
+
+/** The unit a recipe's item is counted in: an existing item's own, else what the owner chose for one made ahead. */
+export function recipeUnit(recipe: DraftRecipe, menu: DraftMenuItem[]): ItemUnit {
+  if (recipe.target.kind === 'existing') {
+    const id = recipe.target.menuItemId;
+    return itemUnit(menu.find(m => m.id === id));
+  }
+  return recipe.use.kind === 'kept' ? itemUnit(recipe) : 'pcs';
+}
+
+/**
+ * What the recipe is for, as the owner chooses it. Made ahead and kept, it is counted by weight when the recipe gives its
+ * yield as a weight (its batch size then that weight), or as the item on the menu it goes to is; anything else is counted
+ * in pieces.
+ */
+export function chooseUse(recipe: DraftRecipe, kind: Exclude<DraftUse['kind'], 'undecided'>, menu: DraftMenuItem[] = []): void {
+  if (kind === 'kept') {
+    const existing = recipe.target.kind === 'existing' ? menu.find(m => m.id === (recipe.target as { menuItemId: string }).menuItemId) : undefined;
+    const unit = existing ? (existing.countedIn ?? null) : recipe.measuredYield?.unit ?? null;
+    recipe.use = { kind: 'kept', of: null, perItem: unit ? null : 1 };
+    setKeptUnit(recipe, unit);
+    return;
+  }
+  recipe.use = kind === 'sell' ? { kind: 'sell' } : { kind: 'part', of: null, covers: null };
+  if (recipe.countedIn) setKeptUnit(recipe, null);
+}
+
+/** Counts a recipe made ahead and kept in pieces (null) or by weight: its batch size and how much goes into one start again. */
+export function setKeptUnit(recipe: DraftRecipe, unit: ItemUnitByMeasure | null): void {
+  if ((recipe.countedIn ?? null) === unit) return;
+  if (unit) recipe.countedIn = unit; else delete recipe.countedIn;
+  recipe.makes = unit
+    ? (recipe.measuredYield?.unit === unit ? recipe.measuredYield.amount : null)
+    : recipe.makesRead ?? null;
+  if (recipe.use.kind === 'kept') recipe.use.perItem = unit ? null : 1;
+}
+
+/**
+ * What one batch's ingredients weigh together, in kg (litres for a recipe counted in litres; 1 ml is taken as 1 g), when
+ * every line is worked out in grams or millilitres: a starting point for the batch size of something made by weight.
+ */
+export function batchWeight(draft: RecipeDraft, recipe: DraftRecipe, materials: DraftMaterial[]): number | null {
+  let grams = 0;
+  for (const l of recipe.lines) {
+    if (l.choice.kind === 'skip') continue;
+    const res = resolveDraftLine(draft, recipe, l, materials);
+    if (!res || res.status !== 'ok') return null;
+    if (res.skipped) continue;
+    if (res.recipeUnit !== 'g' && res.recipeUnit !== 'ml') return null;
+    grams += res.batchAmount;
+  }
+  return grams > 0 ? Math.round(grams) / 1000 : null;
+}
+
 export function buildDraft(parsed: ParsedRecipes, input: { materials: DraftMaterial[]; menu: DraftMenuItem[]; fromPhotos: boolean; forMenuItemId?: string }): RecipeDraft {
   const newMaterials: DraftNewMaterial[] = [];
   const newKeyFor = (ingredient: ParsedIngredient): string => {
@@ -102,11 +183,16 @@ export function buildDraft(parsed: ParsedRecipes, input: { materials: DraftMater
     const existing = single && input.forMenuItemId
       ? input.menu.find(m => m.id === input.forMenuItemId)
       : (name ? input.menu.find(m => squash(m.name) === squash(name)) : undefined);
+    // "Makes 800 g" is a weight, not 800 pieces: kept to count the item by weight if it is made ahead and kept.
+    const weighed = measuredYield(r.makesAsWritten);
+    const makesRead = weighed ? undefined : r.makes;
     return {
       key: `r${ri + 1}`,
       include: true,
       name: existing && !name ? existing.name : name,
-      makes: r.makes ?? null,
+      makes: makesRead ?? null,
+      ...(makesRead !== undefined && { makesRead }),
+      ...(weighed && { measuredYield: weighed }),
       ...(r.makesAsWritten && { makesAsWritten: r.makesAsWritten }),
       looksLikeComponent: r.looksLikeComponent,
       looksCutOff: r.looksCutOff,
@@ -216,11 +302,14 @@ export function keptPieceCost(draft: RecipeDraft, kept: DraftRecipe, materials: 
   return costs.some(c => c === null) ? null : costs.reduce((a: number, c) => a + c!, 0);
 }
 
-/** The recipes made ahead and kept that go into `recipe` (a sold recipe on this page), with how many and what each costs. */
-export function keptPartsOf(draft: RecipeDraft, recipe: DraftRecipe, materials: DraftMaterial[]): { key: string; name: string; perItem: number; cost: number | null }[] {
+/**
+ * The recipes made ahead and kept that go into `recipe` (a sold recipe on this page), with how many (in their unit: pieces,
+ * or kg for one counted by weight) and what one piece (one kg) of each costs.
+ */
+export function keptPartsOf(draft: RecipeDraft, recipe: DraftRecipe, materials: DraftMaterial[]): { key: string; name: string; perItem: number; unit: ItemUnit; cost: number | null }[] {
   return draft.recipes
     .filter(k => k.include && k.use.kind === 'kept' && k.use.of === `recipe:${recipe.key}` && (k.use.perItem ?? 0) > 0)
-    .map(k => ({ key: k.key, name: k.name.trim() || 'A base', perItem: (k.use as { perItem: number }).perItem, cost: keptPieceCost(draft, k, materials) }));
+    .map(k => ({ key: k.key, name: k.name.trim() || 'A base', perItem: (k.use as { perItem: number }).perItem, unit: itemUnit(k), cost: keptPieceCost(draft, k, materials) }));
 }
 
 /** The cost of a line for one item, when the line is worked out and its material has a price. */
@@ -253,11 +342,12 @@ export function draftIssues(draft: RecipeDraft, materials: DraftMaterial[], menu
     }
     if (r.use.kind === 'kept') {
       if (r.target.kind === 'new' && !r.name.trim()) issues.push({ recipeKey: r.key, message: 'Give the item made ahead a name.' });
-      if (!(r.makes! > 0)) issues.push({ recipeKey: r.key, message: `${label}: how many does one batch make?` });
+      const unit = recipeUnit(r, menu);
+      if (!(r.makes! > 0)) issues.push({ recipeKey: r.key, message: unit === 'pcs' ? `${label}: how many does one batch make?` : `${label}: how much does one batch make?` });
       if (r.use.of) {
         const target = componentTarget(draft, menu, r.use.of);
         if (!target) issues.push({ recipeKey: r.key, message: `${label}: which item is it used in?` });
-        else if (!(r.use.perItem! > 0)) issues.push({ recipeKey: r.key, message: `${label}: how many go into one ${target.name.trim() || 'item'}?` });
+        else if (!(r.use.perItem! > 0)) issues.push({ recipeKey: r.key, message: unit === 'pcs' ? `${label}: how many go into one ${target.name.trim() || 'item'}?` : `${label}: how much goes into one ${target.name.trim() || 'item'}?` });
       }
     }
     const kept = r.lines.filter(l => l.choice.kind !== 'skip');
@@ -318,7 +408,7 @@ export function draftToImport(draft: RecipeDraft, materials: DraftMaterial[], me
       target: r.target.kind === 'new' ? { kind: 'new', name: r.name.trim() } : { kind: 'existing', menuItemId: r.target.menuItemId, mode: r.target.mode },
       lines: linesOf(r),
       batchMakes: r.makes!,
-      ...(r.target.kind === 'new' && { notForSale: true }),
+      ...(r.target.kind === 'new' && { notForSale: true, ...(r.countedIn && { countedIn: r.countedIn }) }),
     };
     items.push(item);
     byRecipe.set(`recipe:${r.key}`, item);

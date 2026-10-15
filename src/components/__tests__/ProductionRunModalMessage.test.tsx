@@ -8,7 +8,7 @@ const menu = [
   { id: 'cookie', name: 'Cookie', recipe: [], sellingPrice: 5 },
 ];
 const currency = { symbol: '$' };
-const form = (over: Record<string, unknown> = {}) => ({ rows: [], notFound: [], unplacedWaste: [], unplacedBatches: [], madeToOrder: [], ...over });
+const form = (over: Record<string, unknown> = {}) => ({ rows: [], notFound: [], unplacedWaste: [], unplacedBatches: [], madeToOrder: [], byWeight: [], ...over });
 
 function renderModal(parserForm: any | null, onSave = vi.fn().mockResolvedValue({ succeededCount: 1, failedIndex: null })) {
   const parse = vi.fn().mockResolvedValue({ ok: true, form: parserForm });

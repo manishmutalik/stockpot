@@ -18,15 +18,23 @@ export interface ProductionSummary {
 
 export const sellableOf = (run: ProductionRun) => run.quantityYield ?? run.quantityProduced;
 
-export function summarizeProduction(runs: ProductionRun[], today: string): ProductionSummary {
+/**
+ * Headline production figures. Units and the cost per unit count only runs of items counted in pieces (`inPieces`; all of
+ * them when not given): a kilo of ganache is not a unit (utils/itemUnits). Runs and cost count everything.
+ */
+export function summarizeProduction(runs: ProductionRun[], today: string, inPieces: (run: ProductionRun) => boolean = () => true): ProductionSummary {
   let unitsProduced = 0;
   let unitsSellable = 0;
   let totalCost = 0;
+  let unitsCost = 0;
   let runsThisWeek = 0;
   for (const r of runs) {
-    unitsProduced += r.quantityProduced || 0;
-    unitsSellable += sellableOf(r) || 0;
     totalCost += runSpend(r);
+    if (inPieces(r)) {
+      unitsProduced += r.quantityProduced || 0;
+      unitsSellable += sellableOf(r) || 0;
+      unitsCost += runSpend(r);
+    }
     const age = daysBetween(r.date, today);
     if (age >= 0 && age <= 6) runsThisWeek += 1;
   }
@@ -37,7 +45,7 @@ export function summarizeProduction(runs: ProductionRun[], today: string): Produ
     unitsSellable,
     yieldPercent: unitsProduced > 0 ? (unitsSellable / unitsProduced) * 100 : 100,
     totalCost,
-    costPerUnit: unitsProduced > 0 ? totalCost / unitsProduced : 0,
+    costPerUnit: unitsProduced > 0 ? unitsCost / unitsProduced : 0,
   };
 }
 

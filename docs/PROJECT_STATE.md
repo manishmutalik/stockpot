@@ -268,6 +268,11 @@ Nothing is queued. The AI list in the handoff is complete.
 
 ## Open items for the user (none blocking)
 
+- **Things made by weight: built.** `MenuItem.countedIn` ('kg' | 'l') for items made for other items: recipe per kg,
+  stock/batches/production in kg, parts typed in grams (`src/utils/itemUnits.ts`, guide 4.10a). Read a recipe reads
+  "makes 800 g" as 0.8 kg and suggests the batch from the ingredients' weight. Next, agreed: selling by weight (paneer by
+  the kg): decimal order quantities, price per kg on bills, the order reader understanding "half kilo".
+
 - **Items made from other items: steps 1 to 4 built.** An item's recipe can use other items (`parts`: a sponge base in a
   cream cake, cookies in a hamper), and an item can be kept off the menu (`notForSale`). Costs flatten through parts
   everywhere; production takes parts from their finished stock; production spend counts each ingredient once

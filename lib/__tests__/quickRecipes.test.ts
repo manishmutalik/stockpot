@@ -162,6 +162,31 @@ describe('POST /mobile/recipes, a base made ahead and kept', () => {
   });
 });
 
+describe('POST /mobile/recipes, a ganache kept by weight', () => {
+  it('lists an item counted by weight as such, and saves a new one counted in kg, used in grams', async () => {
+    const { mem, deps } = world();
+    mem.seed(UID, 'menu', 'menu_cream', { name: 'Whipped cream', sellingPrice: 0, notForSale: true, countedIn: 'l', recipe: [] });
+    const setup = (await call(createQuickRecipeSetupHandler(deps), {})).body as RecipeSetupView;
+    expect(setup.menu).toEqual([{ id: 'menu_cake', name: 'Black Forest Cake' }, { id: 'menu_cream', name: 'Whipped cream', countedIn: 'l' }]);
+
+    const r = await save(deps, { newMaterials: [], remember: [], items: [
+      { key: 'recipe:r2', target: { kind: 'new', name: 'Ganache' }, lines: [{ material: { existingId: 'm_sugar' }, amount: 500, unit: 'g' }], batchMakes: 0.8, notForSale: true, countedIn: 'kg' },
+      { target: { kind: 'existing', menuItemId: 'menu_cake', mode: 'add' }, lines: [], parts: [{ item: { newKey: 'recipe:r2' }, quantity: 0.15 }] },
+    ] });
+    expect(r.code).toBe(201);
+    expect(mem.read(UID, 'menu', 'id1')).toMatchObject({ name: 'Ganache', notForSale: true, countedIn: 'kg', batchMakes: 0.8 });
+    expect(mem.read(UID, 'menu', 'menu_cake')!.parts).toEqual([{ itemId: 'id1', quantity: 0.15 }]);
+  });
+
+  it('refuses counting by weight on an item sold on the menu, or in a unit it does not know', () => {
+    const line = { material: { existingId: 'm_flour' }, amount: 10, unit: 'g' };
+    const body = (item: Record<string, unknown>) => ({ items: [{ target: { kind: 'new', name: 'Ganache' }, lines: [line], ...item }], newMaterials: [], remember: [] });
+    expect(readRecipeImportBody(body({ notForSale: true, countedIn: 'kg' })).ok).toBe(true);
+    expect(readRecipeImportBody(body({ countedIn: 'kg' })).ok).toBe(false);
+    expect(readRecipeImportBody(body({ notForSale: true, countedIn: 'g' })).ok).toBe(false);
+  });
+});
+
 describe('readRecipeImportBody', () => {
   const line = { material: { existingId: 'm_flour' }, amount: 10, unit: 'g' };
   const ok = { items: [{ target: { kind: 'new', name: 'Brownie', sellingPrice: 50 }, lines: [line] }], newMaterials: [], remember: [] };
