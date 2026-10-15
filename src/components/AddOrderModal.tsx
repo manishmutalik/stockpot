@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Calendar, Check, CirclePlus, Clock, Loader2, MapPin, MessageCircle, Phone, ShoppingBag, Sparkles, StickyNote, Trash2, User } from 'lucide-react';
+import { AiBlockedNote } from './AiBlockedNote';
 import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
 import { PAYMENT_METHODS, type PaymentMethod } from '../types';
 import type { OrderParser } from '../hooks/useOrderParser';
@@ -70,6 +71,8 @@ interface AddOrderModalProps {
   presetMenuItemId?: string | null;
   /** When set, the form offers to fill itself from a pasted message (only for accounts AI is available to). */
   orderParser?: OrderParser | null;
+  /** When AI is not available but the owner can act on it, why: shown in place of the AI box. */
+  aiBlocked?: string | null;
   /** Past customers, suggested while the name or phone number is typed. Empty or absent: the fields are plain inputs. */
   customers?: CustomerSuggestion[];
   /** Today in the business's time zone ("last order 12 days ago", and a later date means a pre-order). Defaults to the UTC date. */
@@ -94,7 +97,7 @@ const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderRow => ({ menuItemId: menu[0]?.
  * @param currency - Locale currency config; only `symbol` is used for display.
  * @param presetMenuItemId - See AddOrderModalProps.
  */
-export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser, customers = [], today: todayProp, gst, stock }: AddOrderModalProps) {
+export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser, aiBlocked, customers = [], today: todayProp, gst, stock }: AddOrderModalProps) {
   const today = todayProp ?? new Date().toISOString().split('T')[0];
   const [date,          setDate]          = useState(today);
   const [customerName,  setCustomerName]  = useState('');
@@ -491,6 +494,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
       </div>
 
       {/* Fill the form from a pasted message (only when AI is available) */}
+      {!orderParser && aiBlocked && <AiBlockedNote title="Fill from a message" message={aiBlocked} />}
       {orderParser && (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-3">
           <label htmlFor="order-message" className={`${MODAL_LABEL} flex items-center gap-1.5 !mb-0 text-primary`}>

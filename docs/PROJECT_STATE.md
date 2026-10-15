@@ -273,6 +273,11 @@ Nothing is queued. The AI list in the handoff is complete.
   "makes 800 g" as 0.8 kg and suggests the batch from the ingredients' weight. Next, agreed: selling by weight (paneer by
   the kg): decimal order quantities, price per kg on bills, the order reader understanding "half kilo".
 
+- **Email verification: built.** Email-and-password sign-ups get a verification email; Settings › User Account shows a
+  notice with Send verification email / I've verified it while unverified. The AI allow-list (`AI_ALLOWED_EMAILS`) only
+  counts verified emails, so this is what lets an allow-listed email account in (`AI_ALLOWED_UIDS` works without it). Where
+  the owner can act on why AI is off (verify, take a plan, leave the demo), Read a recipe and the order/production message
+  boxes say so instead of hiding (`src/utils/aiAccess.ts`).
 - **Items made from other items: steps 1 to 4 built.** An item's recipe can use other items (`parts`: a sponge base in a
   cream cake, cookies in a hamper), and an item can be kept off the menu (`notForSale`). Costs flatten through parts
   everywhere; production takes parts from their finished stock; production spend counts each ingredient once

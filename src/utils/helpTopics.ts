@@ -174,7 +174,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     body: [
       steps(
         'Open **Stock / Inventory** and click **Add Item**.',
-        'Give the name, the unit you keep it in (g, kg, ml, l or pieces), how much you have now, and the cost per unit.',
+        'Give the name, the unit you keep it in (g, kg, ml, l or pieces), how much you have now, and the cost per unit. Eggs start in pieces; change it if you keep them by weight.',
         'Set a **Threshold**: when stock drops to it, the material shows as low and you are told.',
         'Optional: its category (Raw Materials, Packaging…), the GST you pay on it, and the expiry date of what you have.',
       ),
@@ -624,11 +624,12 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: 'q-ai-unavailable', section: 'questions', apps: ['web', 'phone'],
     title: 'An AI feature is missing or says it is not available',
     summary: 'Voice reading, recipe reading, the briefing and Ask your business.',
-    keywords: ['ai', 'not available', 'missing', 'limit', 'voice', 'read recipe', 'briefing'],
+    keywords: ['ai', 'not available', 'missing', 'limit', 'voice', 'read recipe', 'briefing', 'verify', 'verification', 'email'],
     body: [
       points(
         'They are not available in the demo kitchen.',
         'They need an active plan or trial.',
+        'If you signed up with an email and password, verify your email first: on the website, go to **Settings › User Account**, press **Send verification email**, open the link in it (check spam too), then press **I\'ve verified it**.',
         'Each has a daily limit (recipes: 15 a day and 75 a month). The limit resets the next day.',
         'If a reading comes back wrong, change it before saving: nothing is saved until you check it.',
       ),

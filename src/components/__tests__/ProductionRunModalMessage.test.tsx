@@ -135,3 +135,11 @@ describe('filling the production form from a note', () => {
     expect(screen.queryByText(/Filled from your note/)).toBeNull();
   });
 });
+
+describe('when AI is not available but could be', () => {
+  it('says why in place of the note box', () => {
+    render(<ProductionRunModal isOpen onClose={vi.fn()} menu={menu as never} materials={[]} onSave={vi.fn()} currency={currency} productionParser={null} aiBlocked="Verify your email to use AI features." />);
+    expect(screen.getByRole('note').textContent).toContain('Verify your email to use AI features.');
+    expect(screen.queryByRole('button', { name: 'Fill the form' })).toBeNull();
+  });
+});

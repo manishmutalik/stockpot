@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { heapedFactor, matchMaterialByName, parseAmount, perItem, recipeUnitFor, resolveLine, suggestMaterialUnit, typicalWeightFor, type LineInput } from '../kitchenMeasures';
+import { heapedFactor, isCountedByThePiece, matchMaterialByName, parseAmount, perItem, recipeUnitFor, resolveLine, suggestMaterialUnit, typicalWeightFor, type LineInput } from '../kitchenMeasures';
 import type { ParsedIngredient } from '../recipeParse';
 
 const ing = (over: Partial<ParsedIngredient> = {}): ParsedIngredient => ({
@@ -134,5 +134,12 @@ describe('resolveLine', () => {
 
   it('divides a batch into one item\'s share', () => {
     expect(perItem(250, 12)).toBeCloseTo(20.8333, 4);
+  });
+});
+
+describe('isCountedByThePiece', () => {
+  it('knows eggs are counted, in any of their names, and nothing else is', () => {
+    for (const name of ['Eggs', 'egg', 'Farm eggs', 'Anda', 'अंडा']) expect(isCountedByThePiece(name)).toBe(true);
+    for (const name of ['Eggless premix', 'Maida', 'Butter', '']) expect(isCountedByThePiece(name)).toBe(false);
   });
 });
