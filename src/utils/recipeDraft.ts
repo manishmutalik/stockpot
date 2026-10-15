@@ -21,7 +21,7 @@
 import type { ItemUnitByMeasure, MenuItem, RawMaterial } from '../types';
 import { convertAmount } from './conversions';
 import { matchMaterialByName, parseAmount, perItem, resolveLine, suggestMaterialUnit, type LineAnswers, type LineQuestion, type LineResolution } from './kitchenMeasures';
-import { itemUnit, type ItemUnit } from './itemUnits';
+import { defaultEntryUnit, ENTRY_UNITS, entryUnitsFor, familyOf, fromEntryUnit, inEntryUnit, itemUnit, type EntryUnit, type ItemUnit } from './itemUnits';
 import { squash } from './orderParse';
 import type { MaterialMemory, NewMaterialInput, RecipeImportItem, RecipeImportLine } from './plans/planRecipes';
 import type { ParsedIngredient, ParsedRecipes } from './recipeParse';
@@ -65,14 +65,19 @@ export interface DraftRecipe {
   sellingPrice: number | null;
   /** A sold item made when it is ordered (utils/madeToOrder). */
   madeToOrder?: boolean;
-  /** One made ahead and kept, counted by weight or volume: `makes` and its use's `perItem` are then in kg (litres). */
+  /** Counted by weight or volume, as "One batch makes" was typed: `makes` (and a kept one's `perItem`) are then in kg (litres). */
   countedIn?: ItemUnitByMeasure;
   /** What the recipe says one batch makes, when it says a weight or volume ("800 g", "1.5 litres"), in kg (litres). */
-  measuredYield?: { unit: ItemUnitByMeasure; amount: number };
+  measuredYield?: MeasuredYield;
+  /** What "One batch makes" is typed in, as chosen beside it (utils/itemUnits); absent: the default for the item's unit. */
+  makesIn?: EntryUnit;
   /** How many pieces the reader found one batch makes, kept to go back to from a weight. */
   makesRead?: number;
   lines: DraftLine[];
 }
+
+/** A yield read as a weight or volume: in kg (litres), and the unit it was written in. */
+export interface MeasuredYield { unit: ItemUnitByMeasure; amount: number; writtenIn: EntryUnit }
 
 export interface DraftNewMaterial {
   key: string;
@@ -102,8 +107,11 @@ const WEIGHT_UNITS: Record<string, { unit: ItemUnitByMeasure; per: number }> = {
   ml: { unit: 'l', per: 0.001 },
 };
 
-/** A yield written as a weight or volume ("800 g", "about 1.5 kg", "½ litre"), in kg (litres); null for anything else. */
-export function measuredYield(asWritten: string | undefined): { unit: ItemUnitByMeasure; amount: number } | null {
+/**
+ * A yield written as a weight or volume ("800 g", "about 1.5 kg", "½ litre"), in kg (litres), with the unit it was written in;
+ * null for anything else.
+ */
+export function measuredYield(asWritten: string | undefined): MeasuredYield | null {
   if (!asWritten) return null;
   const m = asWritten.toLowerCase().match(/(\d+(?:\.\d+)?(?:\s*\/\s*\d+)?|\d*\s*[½¼¾])\s*(kilograms?|kilos?|kgs?|grams?|gms?|gm|gr|g|litres?|liters?|ltr|ml|l)\b/);
   if (!m) return null;
@@ -111,47 +119,87 @@ export function measuredYield(asWritten: string | undefined): { unit: ItemUnitBy
   const unit = WEIGHT_UNITS[m[2]];
   if (amount === null || !unit) return null;
   const total = Math.round(amount * unit.per * 1e6) / 1e6;
-  return total > 0 ? { unit: unit.unit, amount: total } : null;
+  return total > 0 ? { unit: unit.unit, amount: total, writtenIn: unit.per === 1 ? unit.unit : unit.unit === 'kg' ? 'g' : 'ml' } : null;
 }
 
 /** Whether the check screen asks what the recipe is for (sold, mixed in, made ahead): a component, or a yield by weight. */
 export const asksWhatItIs = (recipe: DraftRecipe): boolean =>
   recipe.looksLikeComponent || !!recipe.measuredYield || recipe.use.kind !== 'sell';
 
-/** The unit a recipe's item is counted in: an existing item's own, else what the owner chose for one made ahead. */
+/**
+ * The unit a recipe's item is counted in: an existing item's own; else, for one sold or made ahead, what "One batch makes"
+ * was typed in (utils/itemUnits). A component mixed into another item has no unit of its own.
+ */
 export function recipeUnit(recipe: DraftRecipe, menu: DraftMenuItem[]): ItemUnit {
   if (recipe.target.kind === 'existing') {
     const id = recipe.target.menuItemId;
     return itemUnit(menu.find(m => m.id === id));
   }
-  return recipe.use.kind === 'kept' ? itemUnit(recipe) : 'pcs';
+  return recipe.use.kind === 'kept' || recipe.use.kind === 'sell' ? itemUnit(recipe) : 'pcs';
+}
+
+/** What "One batch makes" is typed in: the unit chosen beside it, or by default pieces, g or kg (ml or litres). */
+export function makesUnitOf(recipe: DraftRecipe, menu: DraftMenuItem[]): EntryUnit {
+  const unit = recipeUnit(recipe, menu);
+  if (recipe.makesIn && familyOf(recipe.makesIn) === unit) return recipe.makesIn;
+  return defaultEntryUnit(unit, recipe.makes);
+}
+
+/** The units "One batch makes" can be typed in: any, unless the recipe goes to an item already on the menu. */
+export const makesUnitsFor = (recipe: DraftRecipe, menu: DraftMenuItem[]): EntryUnit[] =>
+  recipe.target.kind === 'existing' ? entryUnitsFor(recipeUnit(recipe, menu)) : ENTRY_UNITS.map(u => u.value);
+
+/** "One batch makes" as typed, in its unit (400 for 0.4 kg shown in g). */
+export const makesShown = (recipe: DraftRecipe, menu: DraftMenuItem[]): number | null =>
+  recipe.makes === null ? null : inEntryUnit(recipe.makes, makesUnitOf(recipe, menu));
+
+/** Sets "One batch makes" from what was typed, in the unit beside it. */
+export function setMakes(recipe: DraftRecipe, typed: number | null, menu: DraftMenuItem[]): void {
+  recipe.makes = typed === null || !(typed > 0) ? null : fromEntryUnit(typed, makesUnitOf(recipe, menu));
 }
 
 /**
- * What the recipe is for, as the owner chooses it. Made ahead and kept, it is counted by weight when the recipe gives its
- * yield as a weight (its batch size then that weight), or as the item on the menu it goes to is; anything else is counted
- * in pieces.
+ * Chooses the unit beside "One batch makes": the number typed stays and now means that unit (1.5 is 1.5 kg once kg is
+ * chosen). It is also what a new item is counted in: pieces, or by weight (g, kg) or volume (ml, litres). Changing between
+ * pieces and weight starts "how much goes into one" again, as its meaning changes. A recipe going to an item already on
+ * the menu keeps that item's unit.
+ */
+export function setMakesUnit(recipe: DraftRecipe, unit: EntryUnit, menu: DraftMenuItem[]): void {
+  if (!makesUnitsFor(recipe, menu).includes(unit)) return;
+  const shown = makesShown(recipe, menu);
+  const before = recipeUnit(recipe, menu);
+  const family = familyOf(unit);
+  if (recipe.target.kind === 'new') {
+    if (family === 'pcs') delete recipe.countedIn; else recipe.countedIn = family;
+  }
+  recipe.makesIn = unit;
+  recipe.makes = shown === null ? null : fromEntryUnit(shown, unit);
+  if (before !== family && recipe.use.kind === 'kept') recipe.use.perItem = family === 'pcs' ? 1 : null;
+}
+
+/**
+ * What the recipe is for, as the owner chooses it. Made ahead and kept, it starts counted as the recipe gives its yield (by
+ * weight for "makes 400 g"), or as the item on the menu it goes to is. Sold, it starts in pieces (selling by weight comes
+ * later). Mixed into another item, it has no batch of its own.
  */
 export function chooseUse(recipe: DraftRecipe, kind: Exclude<DraftUse['kind'], 'undecided'>, menu: DraftMenuItem[] = []): void {
+  delete recipe.makesIn;
   if (kind === 'kept') {
     const existing = recipe.target.kind === 'existing' ? menu.find(m => m.id === (recipe.target as { menuItemId: string }).menuItemId) : undefined;
     const unit = existing ? (existing.countedIn ?? null) : recipe.measuredYield?.unit ?? null;
     recipe.use = { kind: 'kept', of: null, perItem: unit ? null : 1 };
-    setKeptUnit(recipe, unit);
+    if (unit) recipe.countedIn = unit; else delete recipe.countedIn;
+    if (recipe.measuredYield && recipe.measuredYield.unit === unit) {
+      recipe.makes = recipe.measuredYield.amount;
+      recipe.makesIn = recipe.measuredYield.writtenIn;
+    } else {
+      recipe.makes = recipe.makesRead ?? null;
+    }
     return;
   }
   recipe.use = kind === 'sell' ? { kind: 'sell' } : { kind: 'part', of: null, covers: null };
-  if (recipe.countedIn) setKeptUnit(recipe, null);
-}
-
-/** Counts a recipe made ahead and kept in pieces (null) or by weight: its batch size and how much goes into one start again. */
-export function setKeptUnit(recipe: DraftRecipe, unit: ItemUnitByMeasure | null): void {
-  if ((recipe.countedIn ?? null) === unit) return;
-  if (unit) recipe.countedIn = unit; else delete recipe.countedIn;
-  recipe.makes = unit
-    ? (recipe.measuredYield?.unit === unit ? recipe.measuredYield.amount : null)
-    : recipe.makesRead ?? null;
-  if (recipe.use.kind === 'kept') recipe.use.perItem = unit ? null : 1;
+  delete recipe.countedIn;
+  recipe.makes = recipe.makesRead ?? null;
 }
 
 /**
@@ -339,7 +387,9 @@ export function draftIssues(draft: RecipeDraft, materials: DraftMaterial[], menu
     if (r.use.kind === 'undecided') issues.push({ recipeKey: r.key, message: `${label}: do you sell it, mix it into another item, or make it ahead and keep it?` });
     if (r.use.kind === 'sell') {
       if (r.target.kind === 'new' && !r.name.trim()) issues.push({ recipeKey: r.key, message: 'Give the recipe a name.' });
-      if (!(r.makes! > 0)) issues.push({ recipeKey: r.key, message: `${label}: how many does one batch make?` });
+      if (recipeUnit(r, menu) !== 'pcs') {
+        issues.push({ recipeKey: r.key, message: `${label}: selling by weight is not available yet. Say how many pieces one batch makes, or choose "Made ahead and kept" to keep it by weight.` });
+      } else if (!(r.makes! > 0)) issues.push({ recipeKey: r.key, message: `${label}: how many does one batch make?` });
     }
     if (r.use.kind === 'part') {
       const target = componentTarget(draft, menu, r.use.of);

@@ -5,11 +5,11 @@ import type { MenuItem, RawMaterial } from '../types';
 import type { RecipeReader } from '../hooks/useRecipeReader';
 import { perItem } from '../utils/kitchenMeasures';
 import { squash } from '../utils/orderParse';
-import { formatItemQuantity, fromEntry, perUnit, toEntry } from '../utils/itemUnits';
+import { ENTRY_UNITS, formatItemQuantity, fromEntry, perUnit, toEntry } from '../utils/itemUnits';
 import { RECIPE_MAX_PHOTOS } from '../utils/recipeParse';
 import {
   BUY_UNIT, asksWhatItIs, batchShare, batchWeight, buildDraft, chooseLineMaterial, chooseUse, draftIssues, draftToImport, keptPartsOf, lineCostPerItem, lineMaterial,
-  questionPrompt, recipeUnit, resolveDraftLine, setKeptUnit, usedNewMaterials,
+  makesShown, makesUnitOf, makesUnitsFor, questionPrompt, recipeUnit, resolveDraftLine, setMakes, setMakesUnit, usedNewMaterials,
   type DraftImport, type DraftLine, type DraftRecipe, type RecipeDraft,
 } from '../utils/recipeDraft';
 
@@ -293,28 +293,13 @@ const RecipeCard: React.FC<{
               )}
               {recipe.use.kind === 'kept' && (
                 <div className="grid sm:grid-cols-3 gap-3">
-                  {recipe.target.kind === 'new' && (
-                    <div className="sm:col-span-3 flex flex-wrap items-center gap-3">
-                      <span className="text-sm text-ink">Counted in</span>
-                      <div role="radiogroup" aria-label={`${label} counted in`} className="flex rounded-lg bg-white p-0.5 text-xs border border-stone-200">
-                        {([['pcs', 'Pieces'], ['kg', 'kg'], ['l', 'Litres']] as const).map(([u, text]) => (
-                          <button key={u} type="button" role="radio" aria-checked={unit === u} onClick={() => set(r => setKeptUnit(r, u === 'pcs' ? null : u))}
-                            className={`px-3 py-1 rounded-md font-semibold ${unit === u ? 'bg-primary text-white' : 'text-muted hover:text-ink'}`}>{text}</button>
-                        ))}
-                      </div>
-                      <span className="text-[11px] text-muted">{unit === 'pcs' ? 'A sponge base, a dough ball.' : 'A ganache, a custard, whipped cream: kept and used by weight.'}</span>
-                    </div>
-                  )}
                   <div>
-                    <label className={MODAL_LABEL} htmlFor={`${recipe.key}-makes`}>One batch makes{unit !== 'pcs' && ` (${unit === 'kg' ? 'g' : 'ml'})`}</label>
-                    {/* By weight, typed as the recipe says it: grams (millilitres), kept in kg. */}
-                    <NumberInput key={unit} id={`${recipe.key}-makes`} value={recipe.makes ? toEntry(unit, recipe.makes) : null} placeholder={unit === 'pcs' ? 'e.g. 4.5' : 'e.g. 800'}
-                      onChange={n => set(r => { r.makes = n === null ? null : fromEntry(unit, n); })} className={modalField(!recipe.makes)} />
+                    <MakesField recipe={recipe} menu={menu} set={set} />
                     {recipe.makesAsWritten && <p className="text-[11px] text-muted mt-1">Written: “{recipe.makesAsWritten}”</p>}
                     {weight !== null && Math.abs((recipe.makes ?? 0) - weight) > 0.0005 && (
                       <p className="text-[11px] text-muted mt-1">
                         The ingredients add up to {formatItemQuantity(unit, weight)}.{' '}
-                        <button type="button" onClick={() => set(r => { r.makes = weight; })} className="font-semibold text-primary hover:underline">Use {formatItemQuantity(unit, weight)}</button>
+                        <button type="button" onClick={() => set(r => { r.makes = weight; delete r.makesIn; })} className="font-semibold text-primary hover:underline">Use {formatItemQuantity(unit, weight)}</button>
                         {' '}(less if some cooks off)
                       </p>
                     )}
@@ -348,8 +333,8 @@ const RecipeCard: React.FC<{
                       <select id={`${recipe.key}-target`} value={targetValue} className={modalField()}
                         onChange={e => set(r => {
                           r.target = e.target.value === 'new' ? { kind: 'new' } : { kind: 'existing', menuItemId: existing.id, mode: e.target.value as 'replace' | 'add' };
-                          // Kept in the unit of the item on the menu it goes to.
-                          if (r.target.kind === 'existing') setKeptUnit(r, existing.countedIn ?? null);
+                          // An item on the menu keeps its own unit: the batch is typed in it afresh.
+                          delete r.makesIn;
                         })}>
                         <option value="replace">Use {existing.name}, and replace its recipe</option>
                         <option value="add">Use {existing.name}, and add to its recipe</option>
@@ -364,12 +349,12 @@ const RecipeCard: React.FC<{
           {recipe.use.kind === 'sell' && (
             <div className="grid sm:grid-cols-3 gap-3">
               <div>
-                <label className={MODAL_LABEL} htmlFor={`${recipe.key}-makes`}>One batch makes</label>
-                <NumberInput id={`${recipe.key}-makes`} value={recipe.makes} placeholder="How many?"
-                  onChange={n => set(r => { r.makes = n; })} className={modalField(!recipe.makes)} />
+                <MakesField recipe={recipe} menu={menu} set={set} />
                 {recipe.makesAsWritten && <p className="text-[11px] text-muted mt-1">Written: “{recipe.makesAsWritten}”</p>}
-                {recipe.measuredYield && (
-                  <p className="text-[11px] text-amber-700 mt-1">That is a weight, not a number of pieces. Kept and used by weight in other items? Choose “Made ahead and kept” above.</p>
+                {unit !== 'pcs' ? (
+                  <p className="text-[11px] text-amber-700 mt-1">Selling by weight is not available yet. Choose pieces and say how many it makes, or choose “Made ahead and kept” above to keep it by weight.</p>
+                ) : recipe.measuredYield && (
+                  <p className="text-[11px] text-muted mt-1">Written as a weight: say how many pieces it makes (1 for one cake), or choose kg to keep it by weight.</p>
                 )}
               </div>
               {existing ? (
@@ -396,6 +381,9 @@ const RecipeCard: React.FC<{
             </div>
           )}
 
+          {share !== null && recipe.use.kind !== 'part' && (
+            <p className="text-xs text-muted">Each amount below is for {unit === 'pcs' ? 'one piece' : `1 ${unit === 'kg' ? 'kg' : 'litre'}`}.</p>
+          )}
           <ul className="divide-y divide-stone-100">
             {recipe.lines.map((line, i) => (
               <IngredientRow key={line.key} draft={draft} recipe={recipe} line={line} materials={materials} currency={currency} cost={costs[i]} share={share}
@@ -417,6 +405,35 @@ const RecipeCard: React.FC<{
         </>
       )}
     </section>
+  );
+};
+
+// ── One batch makes ──────────────────────────────────────────────────────────
+
+/**
+ * "One batch makes": a number and the unit beside it (pieces, g, kg, ml, litres), which together say how big a batch is and
+ * what the item is counted in (utils/itemUnits). Changing the unit keeps the number: 1.5 is 1.5 kg once kg is chosen.
+ */
+const MakesField: React.FC<{ recipe: DraftRecipe; menu: MenuItem[]; set: (fn: (r: DraftRecipe) => void) => void }> = ({ recipe, menu, set }) => {
+  const unit = makesUnitOf(recipe, menu);
+  const units = makesUnitsFor(recipe, menu);
+  return (
+    <>
+      <label className={MODAL_LABEL} htmlFor={`${recipe.key}-makes`}>One batch makes</label>
+      <div className="flex gap-2">
+        <NumberInput key={unit} id={`${recipe.key}-makes`} value={makesShown(recipe, menu)} placeholder={unit === 'pcs' ? 'How many?' : 'How much?'}
+          onChange={n => set(r => setMakes(r, n, menu))} className={`${modalField(!recipe.makes)} min-w-0 flex-1`} />
+        <select aria-label="One batch makes, in" value={unit} disabled={units.length === 1} onChange={e => set(r => setMakesUnit(r, e.target.value as typeof unit, menu))}
+          className={`${modalField()} !w-28 shrink-0`}>
+          {ENTRY_UNITS.filter(u => units.includes(u.value)).map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+        </select>
+      </div>
+      {recipe.target.kind === 'existing' && recipe.measuredYield && unit === 'pcs' && (
+        <p className="text-[11px] text-amber-700 mt-1">
+          {menu.find(m => m.id === (recipe.target as { menuItemId: string }).menuItemId)?.name} is counted in pieces on your menu. To keep it by weight, save this as a new item, or change it on the Menu first.
+        </p>
+      )}
+    </>
   );
 };
 

@@ -608,7 +608,7 @@ export interface AppViewProps {
   /** Made when it is ordered, or kept on the shelf (utils/madeToOrder). */
   setMadeToOrder: (itemId: string, on: boolean) => void;
   /** Counts an item made for other items in kg or litres, or (null) in pieces (utils/itemUnits). */
-  setCountedIn: (itemId: string, unit: ItemUnitByMeasure | null) => void;
+  setCountedIn: (itemId: string, unit: ItemUnitByMeasure | null) => Promise<boolean>;
   /** Sets how many one batch makes, optionally rescaling the recipe (utils/batches). */
   setBatchSize: (itemId: string, makes: number | null, scale?: 'keep-batch' | 'from-whole-batch') => void;
   clearFinishedGoodsStock: (id: string) => void;

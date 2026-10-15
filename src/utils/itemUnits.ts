@@ -52,3 +52,36 @@ export const toEntry = (unit: ItemUnit, quantity: number): number => (unit === '
 
 /** What was typed back to the item's unit. */
 export const fromEntry = (unit: ItemUnit, typed: number): number => (unit === 'pcs' ? typed : round(typed / 1000, 6));
+
+/**
+ * What a quantity of an item can be typed in, beside its number: pieces, or grams or kilograms (millilitres or litres) for
+ * an item counted by weight (volume). The one chosen says both the item's unit and the size of the number: "1.5 kg" and
+ * "1500 g" are the same batch.
+ */
+export type EntryUnit = 'pcs' | 'g' | 'kg' | 'ml' | 'l';
+
+export const ENTRY_UNITS: { value: EntryUnit; label: string }[] = [
+  { value: 'pcs', label: 'pieces' }, { value: 'g', label: 'g' }, { value: 'kg', label: 'kg' }, { value: 'ml', label: 'ml' }, { value: 'l', label: 'litres' },
+];
+
+const FAMILY: Record<EntryUnit, ItemUnit> = { pcs: 'pcs', g: 'kg', kg: 'kg', ml: 'l', l: 'l' };
+const PER: Record<EntryUnit, number> = { pcs: 1, g: 0.001, kg: 1, ml: 0.001, l: 1 };
+
+/** The unit an item is counted in when a quantity is typed in `unit`: grams are kg, millilitres litres. */
+export const familyOf = (unit: EntryUnit): ItemUnit => FAMILY[unit];
+
+/** The units a quantity of an item counted in `unit` can be typed in. */
+export const entryUnitsFor = (unit: ItemUnit): EntryUnit[] => ENTRY_UNITS.map(u => u.value).filter(u => FAMILY[u] === unit);
+
+/** What to show a quantity in by default: grams (millilitres) below 1 kg (litre), else kg (litres); pieces as they are. */
+export function defaultEntryUnit(unit: ItemUnit, quantity: number | null): EntryUnit {
+  if (unit === 'pcs') return 'pcs';
+  const small = quantity !== null && quantity > 0 && quantity < 1;
+  return unit === 'kg' ? (small ? 'g' : 'kg') : (small ? 'ml' : 'l');
+}
+
+/** A quantity in the item's unit, as a number in `unit` (0.4 kg is 400 in g). */
+export const inEntryUnit = (quantity: number, unit: EntryUnit): number => round(quantity / PER[unit], 3);
+
+/** A number typed in `unit`, in the item's unit (400 g is 0.4 kg). */
+export const fromEntryUnit = (typed: number, unit: EntryUnit): number => round(typed * PER[unit], 6);

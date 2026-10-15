@@ -1,5 +1,15 @@
 # Changelog
 
+## One batch makes: a number and its unit
+
+- **One batch makes** now has a unit beside it: pieces, g, kg, ml or litres, in Read a recipe (web and phone) and on the
+  Menu. The unit is what the item is counted in, and it is carried through to what is saved: 1.5 with kg is a batch of
+  1.5 kg, counted by weight, its recipe per kg; changing the unit keeps the number (1.5 pieces becomes 1.5 kg).
+  "Makes 800 g" in a recipe fills in 800 and g. The separate **Counted in** choice is gone: this replaces it.
+- Read a recipe says what the amounts are for ("Each amount below is for 1 kg" or "for one piece").
+- A sold recipe set to kg is flagged: selling by weight is not available yet. A recipe going to an item already on the
+  menu keeps that item's unit, and says so when the recipe gives a weight but the item is counted in pieces.
+
 ## Made by weight: batch size in grams
 
 - For an item counted in kg (litres), **One batch makes** is typed in grams (ml), as recipes say it: 400 for a ganache

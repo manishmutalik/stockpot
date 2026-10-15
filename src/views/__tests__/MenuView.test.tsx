@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MenuView } from '../MenuView';
 
 const materials: any[] = [
@@ -123,25 +123,24 @@ describe('MenuView', () => {
       expect(props.addIngredientToRecipe).toHaveBeenCalledWith('cake', 'Packaging Materials');
     });
 
-    it('counts an item made for other items in pieces or by weight, and shows its cost and stock that way', () => {
-      const ganache = { id: 'ganache', name: 'Ganache', sellingPrice: 0, notForSale: true, countedIn: 'kg', finishedGoodsStock: 0.75, recipe: [{ materialId: 'flour', amount: 500, unit: 'g' }] };
-      const props = open({ menu: [...menu, ganache], expandedRecipeId: 'ganache', setCountedIn: vi.fn() });
+    it('shows an item counted by weight in kg, and counts it by the unit beside its batch', async () => {
+      const ganache = { id: 'ganache', name: 'Ganache', sellingPrice: 0, notForSale: true, countedIn: 'kg', finishedGoodsStock: 0.75, batchMakes: 0.4, recipe: [{ materialId: 'flour', amount: 500, unit: 'g' }] };
+      const props = open({ menu: [...menu, ganache], expandedRecipeId: 'ganache', setCountedIn: vi.fn(async () => true), setBatchSize: vi.fn(), productionRuns: [] });
       render(<MenuView {...props} />);
       const g = card('Ganache');
       expect(within(g).getByText(/^Cost: .* per kg$/)).toBeTruthy();
       expect(within(g).getByText('750 g')).toBeTruthy();
       expect(within(g).getByText('Cost per kg')).toBeTruthy();
-      const choice = within(g).getByRole('radiogroup', { name: 'Counted in' });
-      expect(within(choice).getByRole('radio', { name: 'kg' }).getAttribute('aria-checked')).toBe('true');
-      fireEvent.click(within(choice).getByRole('radio', { name: 'Pieces' }));
-      expect(props.setCountedIn).toHaveBeenCalledWith('ganache', null);
-      fireEvent.click(within(choice).getByRole('radio', { name: 'Litres' }));
-      expect(props.setCountedIn).toHaveBeenCalledWith('ganache', 'l');
+      const unit = within(g).getByLabelText('One batch makes, in') as HTMLSelectElement;
+      expect(unit.value).toBe('g');
+      expect((within(g).getByLabelText('One batch makes') as HTMLInputElement).value).toBe('400');
+      fireEvent.change(unit, { target: { value: 'pcs' } });
+      await waitFor(() => expect(props.setCountedIn).toHaveBeenCalledWith('ganache', null));
     });
 
-    it('offers no Counted in choice for an item sold on the menu', () => {
-      render(<MenuView {...open()} />);
-      expect(screen.queryByRole('radiogroup', { name: 'Counted in' })).toBeNull();
+    it('offers only pieces beside the batch of an item sold on the menu', () => {
+      render(<MenuView {...open({ setBatchSize: vi.fn() })} />);
+      expect(screen.queryByLabelText('One batch makes, in')).toBeNull();
     });
 
     it('prompts for servings before estimating nutrition', () => {
