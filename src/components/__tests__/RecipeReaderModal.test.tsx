@@ -107,10 +107,12 @@ describe('RecipeReaderModal', () => {
     fireEvent.click(within(cookies).getByRole('button', { name: /Use 168 g/ }));
     const ganache = screen.getByRole('region', { name: 'Chocolate ganache' });
     fireEvent.click(within(ganache).getByLabelText('Made ahead and kept'));
-    fireEvent.click(within(within(ganache).getByRole('radiogroup', { name: 'Chocolate ganache counted in' })).getByRole('radio', { name: 'kg' }));
+    fireEvent.change(within(ganache).getByLabelText('One batch makes, in'), { target: { value: 'kg' } });
     // 100 ml of cream: the batch weighs about 100 g.
     fireEvent.click(within(ganache).getByRole('button', { name: 'Use 100 g' }));
-    expect((within(ganache).getByLabelText('One batch makes (g)') as HTMLInputElement).value).toBe('100');
+    expect((within(ganache).getByLabelText('One batch makes') as HTMLInputElement).value).toBe('100');
+    expect((within(ganache).getByLabelText('One batch makes, in') as HTMLSelectElement).value).toBe('g');
+    expect(within(ganache).getByText('Each amount below is for 1 kg.')).toBeTruthy();
     fireEvent.change(within(ganache).getByLabelText('Used in (optional)'), { target: { value: 'recipe:r1' } });
     fireEvent.change(within(ganache).getByLabelText('How much goes into one (g)'), { target: { value: '5' } });
     expect(within(cookies).getByText(/\+ 5 g Chocolate ganache/)).toBeTruthy();
@@ -124,6 +126,28 @@ describe('RecipeReaderModal', () => {
     expect(data.items[0]).toMatchObject({ key: 'recipe:r2', notForSale: true, countedIn: 'kg', batchMakes: 0.1 });
     expect(data.items[0].lines.map((l: { amount: number; unit: string }) => [l.amount, l.unit])).toEqual([[1000, 'ml']]);
     expect(data.items[1].parts).toEqual([{ item: { newKey: 'recipe:r2' }, quantity: 0.005 }]);
+  });
+
+  it('carries the number typed when the unit beside it changes: 1.5 is 1.5 kg, and the recipe is per kg', async () => {
+    const { onSave } = open();
+    await readText();
+    const cookies = screen.getByRole('region', { name: 'Choco Chip Cookies' });
+    fireEvent.click(within(cookies).getByRole('button', { name: /Use 168 g/ }));
+    const ganache = screen.getByRole('region', { name: 'Chocolate ganache' });
+    fireEvent.click(within(ganache).getByLabelText('Made ahead and kept'));
+    fireEvent.change(within(ganache).getByLabelText('One batch makes'), { target: { value: '1.5' } });
+    expect(within(ganache).getByText('Each amount below is for one piece.')).toBeTruthy();
+    fireEvent.change(within(ganache).getByLabelText('One batch makes, in'), { target: { value: 'kg' } });
+    expect((within(ganache).getByLabelText('One batch makes') as HTMLInputElement).value).toBe('1.5');
+    expect(within(ganache).getByText('Each amount below is for 1 kg.')).toBeTruthy();
+    const save = screen.getByRole('button', { name: 'Save 2 recipes' }) as HTMLButtonElement;
+    await waitFor(() => expect(save.disabled).toBe(false));
+    fireEvent.click(save);
+    await screen.findByText('Recipe saved');
+    const data = onSave.mock.calls[0][0];
+    // 100 ml of cream in 1.5 kg: 66.67 ml per kg.
+    expect(data.items[0]).toMatchObject({ notForSale: true, countedIn: 'kg', batchMakes: 1.5 });
+    expect(data.items[0].lines.map((l: { amount: number }) => l.amount)).toEqual([66.6667]);
   });
 
   it('keeps a decimal point while it is typed', async () => {

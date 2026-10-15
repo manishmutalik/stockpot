@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { asksWhatItIs, batchWeight, buildDraft, chooseLineMaterial, chooseUse, measuredYield, recipeUnit, setKeptUnit, draftIssues, draftToImport, keptPartsOf, keptPieceCost, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
+import { asksWhatItIs, batchWeight, buildDraft, chooseLineMaterial, chooseUse, makesShown, makesUnitOf, measuredYield, recipeUnit, setMakes, setMakesUnit, draftIssues, draftToImport, keptPartsOf, keptPieceCost, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
 import type { ParsedIngredient, ParsedRecipe, ParsedRecipes } from '../recipeParse';
 import type { MenuItem, RawMaterial } from '../../types';
 import { planImportRecipes } from '../plans/planRecipes';
@@ -249,11 +249,11 @@ describe('a ganache made ahead and kept by weight', () => {
   const draft = (g: ParsedRecipe) => buildDraft({ recipes: [cake, g], moreNotRead: false }, { materials: mats, menu, fromPhotos: false });
 
   it('reads a yield written as a weight or volume', () => {
-    expect(measuredYield('makes 800 g')).toEqual({ unit: 'kg', amount: 0.8 });
-    expect(measuredYield('about 1.5 kg')).toEqual({ unit: 'kg', amount: 1.5 });
-    expect(measuredYield('1/2 kg')).toEqual({ unit: 'kg', amount: 0.5 });
-    expect(measuredYield('750ml')).toEqual({ unit: 'l', amount: 0.75 });
-    expect(measuredYield('2 litres')).toEqual({ unit: 'l', amount: 2 });
+    expect(measuredYield('makes 800 g')).toEqual({ unit: 'kg', amount: 0.8, writtenIn: 'g' });
+    expect(measuredYield('about 1.5 kg')).toEqual({ unit: 'kg', amount: 1.5, writtenIn: 'kg' });
+    expect(measuredYield('1/2 kg')).toEqual({ unit: 'kg', amount: 0.5, writtenIn: 'kg' });
+    expect(measuredYield('750ml')).toEqual({ unit: 'l', amount: 0.75, writtenIn: 'ml' });
+    expect(measuredYield('2 litres')).toEqual({ unit: 'l', amount: 2, writtenIn: 'l' });
     expect(measuredYield('makes 12')).toBeNull();
     expect(measuredYield('one 8 inch cake')).toBeNull();
     expect(measuredYield(undefined)).toBeNull();
@@ -267,32 +267,70 @@ describe('a ganache made ahead and kept by weight', () => {
     expect(g.use).toEqual({ kind: 'undecided' });
     expect(asksWhatItIs(g)).toBe(true);
     expect(asksWhatItIs(d.recipes[0])).toBe(false);
-    expect(g.measuredYield).toEqual({ unit: 'kg', amount: 0.8 });
+    expect(g.measuredYield).toEqual({ unit: 'kg', amount: 0.8, writtenIn: 'g' });
     chooseUse(g, 'kept');
     expect(g).toMatchObject({ countedIn: 'kg', makes: 0.8, use: { kind: 'kept', of: null, perItem: null } });
     expect(recipeUnit(g, menu)).toBe('kg');
+    // Shown as written: 800 g.
+    expect(makesUnitOf(g, menu)).toBe('g');
+    expect(makesShown(g, menu)).toBe(800);
     chooseUse(g, 'part');
     expect(g.countedIn).toBeUndefined();
     expect(g.makes).toBeNull();
+    // Sold, it starts in pieces: a weight is not a number of pieces.
+    chooseUse(g, 'sell');
+    expect(recipeUnit(g, menu)).toBe('pcs');
+    expect(g.makes).toBeNull();
   });
 
-  it('can be switched between pieces and kg, starting its sizes again', () => {
+  it('takes "One batch makes" with its unit, and keeps the number when the unit changes: 1.5 becomes 1.5 kg', () => {
     const d = draft(ganache('makes 4', 4));
     const g = d.recipes[1];
     chooseUse(g, 'kept');
     expect(g).toMatchObject({ makes: 4, use: { perItem: 1 } });
-    setKeptUnit(g, 'kg');
-    expect(g).toMatchObject({ countedIn: 'kg', makes: null, use: { perItem: null } });
-    setKeptUnit(g, null);
-    expect(g).toMatchObject({ makes: 4, use: { perItem: 1 } });
+    expect(makesUnitOf(g, menu)).toBe('pcs');
+    setMakes(g, 1.5, menu);
+    expect(g.makes).toBe(1.5);
+    setMakesUnit(g, 'kg', menu);
+    // Counted in kg now: the 1.5 is 1.5 kg, and how much goes into one is asked afresh (grams, not pieces).
+    expect(g).toMatchObject({ countedIn: 'kg', makes: 1.5, use: { perItem: null } });
+    expect(recipeUnit(g, menu)).toBe('kg');
+    setMakesUnit(g, 'g', menu);
+    // Typed in grams, the same number is 1.5 g: the number stays as typed, the unit says what it is.
+    expect(g.makes).toBe(0.0015);
+    setMakes(g, 1500, menu);
+    expect(g.makes).toBe(1.5);
+    setMakesUnit(g, 'pcs', menu);
     expect(g.countedIn).toBeUndefined();
+    expect(g).toMatchObject({ makes: 1500, use: { perItem: 1 } });
+  });
+
+  it('flags a sold recipe counted by weight: selling by weight comes later', () => {
+    const d = draft({ ...ganache('makes 4', 4), name: 'Fudge' });
+    const g = d.recipes[1];
+    chooseUse(g, 'sell');
+    setMakesUnit(g, 'kg', menu);
+    expect(draftIssues(d, mats, menu).map(i => i.message)).toContain('Fudge: selling by weight is not available yet. Say how many pieces one batch makes, or choose "Made ahead and kept" to keep it by weight.');
+    setMakesUnit(g, 'pcs', menu);
+    expect(draftIssues(d, mats, menu).some(i => i.message.startsWith('Fudge: selling by weight'))).toBe(false);
+  });
+
+  it('keeps the unit of an item already on the menu', () => {
+    const onMenu = [{ id: 'g1', name: 'Chocolate ganache', countedIn: 'kg' as const }];
+    const d = buildDraft({ recipes: [ganache('makes 4', 4)], moreNotRead: false }, { materials: mats, menu: onMenu, fromPhotos: false });
+    const g = d.recipes[0];
+    chooseUse(g, 'kept', onMenu);
+    setMakesUnit(g, 'pcs', onMenu);
+    expect(recipeUnit(g, onMenu)).toBe('kg');
+    setMakesUnit(g, 'g', onMenu);
+    expect(makesUnitOf(g, onMenu)).toBe('g');
   });
 
   it('suggests the batch size from what the ingredients weigh', () => {
     const d = draft(ganache());
     const g = d.recipes[1];
     chooseUse(g, 'kept');
-    setKeptUnit(g, 'kg');
+    setMakesUnit(g, 'kg', menu);
     expect(batchWeight(d, g, mats)).toBe(0.8);
   });
 

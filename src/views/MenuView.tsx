@@ -707,30 +707,6 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                         </button>
                       </div>
 
-                      {made && (
-                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-ink">Counted in</p>
-                            <p className="text-xs text-muted">
-                              {unit === 'pcs'
-                                ? 'Pieces, such as sponge bases. A ganache, custard or whipped cream is easier by weight.'
-                                : `The recipe below is for 1 ${unit === 'kg' ? 'kg' : 'litre'}, and its stock and batches are in ${unit === 'kg' ? 'kg' : 'litres'}. Other items use it in ${unit === 'kg' ? 'grams' : 'ml'}.`}
-                            </p>
-                          </div>
-                          <div role="radiogroup" aria-label="Counted in" className="flex rounded-lg bg-stone-100 p-0.5 text-xs">
-                            {([['pcs', 'Pieces'], ['kg', 'kg'], ['l', 'Litres']] as const).map(([u, label]) => (
-                              <button
-                                key={u} type="button" role="radio" aria-checked={unit === u}
-                                onClick={() => setCountedIn(item.id, u === 'pcs' ? null : u)}
-                                className={`px-3 py-1.5 rounded-md font-semibold transition-colors ${unit === u ? 'bg-white text-ink shadow-sm' : 'text-muted hover:text-ink'}`}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
                       {!made && (
                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
                           <div className="min-w-0">
@@ -753,7 +729,9 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
 
                       {!item.madeToOrder && (
                         <BatchSizeEditor item={item} runs={productionRuns} unitCost={cost} currencySymbol={currency.symbol}
-                          onSet={(makes, scale) => setBatchSize(item.id, makes, scale)} />
+                          onSet={(makes, scale) => setBatchSize(item.id, makes, scale)}
+                          // Made for other items: the unit beside the batch is also what it is counted in (pieces, kg, litres).
+                          onUnit={made ? next => setCountedIn(item.id, next) : undefined} />
                       )}
 
                       <ItemPartsEditor item={item} menu={menu} costed={costed} materials={materials} currencySymbol={currency.symbol}

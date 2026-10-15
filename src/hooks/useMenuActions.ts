@@ -355,25 +355,25 @@ export function useMenuActions(
    * goes back to being for the whole batch and the size is cleared, so setting the new size offers to divide it again.
    * Items sold on the menu stay in pieces for now.
    */
-  const setCountedIn = async (itemId: string, unit: ItemUnitByMeasure | null) => {
-    if (!auth.currentUser) return;
+  const setCountedIn = async (itemId: string, unit: ItemUnitByMeasure | null): Promise<boolean> => {
+    if (!auth.currentUser) return false;
     const userId = auth.currentUser.uid;
     const item = menu.find(m => m.id === itemId);
-    if (!item) return;
+    if (!item) return false;
     const from = itemUnit(item);
-    if ((unit ?? 'pcs') === from) return;
+    if ((unit ?? 'pcs') === from) return true;
     if (unit && !item.notForSale) {
       showAlert('Not yet', 'Only items made for other items (a ganache, a custard) can be counted by weight for now. Turn off "Sold on the menu" first.');
-      return;
+      return false;
     }
     const users = itemsUsing(menu, itemId);
     if (users.length > 0) {
       showAlert('Used in other items', `${users.map(u => u.name).join(', ')} ${users.length === 1 ? 'uses' : 'use'} ${item.name}, in ${unitWord(from)}. Remove it from ${users.length === 1 ? 'that item' : 'them'} first, change how it is counted, then add it back with the new amount.`);
-      return;
+      return false;
     }
     const inStock = Math.round((item.finishedGoodsStock ?? 0) * 1000) / 1000;
     const stockText = from === 'pcs' ? `${inStock} ${unitWord('pcs', inStock)}` : formatItemQuantity(from, inStock);
-    if (inStock !== 0 && !window.confirm(`${item.name} has ${stockText} in stock, counted in ${unitWord(from)}. That cannot carry over: clear it and count it in ${unitWord(unit ?? 'pcs')} from now on?\n\nLog what you have again afterwards.`)) return;
+    if (inStock !== 0 && !window.confirm(`${item.name} has ${stockText} in stock, counted in ${unitWord(from)}. That cannot carry over: clear it and count it in ${unitWord(unit ?? 'pcs')} from now on?\n\nLog what you have again afterwards.`)) return false;
     const wholeBatch = item.batchMakes && item.batchMakes > 0 && item.batchMakes !== 1 ? rescaleForBatchSize(item, 1) : null;
     try {
       await setDoc(doc(db, 'users', userId, 'menu', itemId), {
@@ -382,8 +382,10 @@ export function useMenuActions(
         ...(wholeBatch && { recipe: wholeBatch.recipe, ...(wholeBatch.parts && { parts: wholeBatch.parts }) }),
         ...(item.batchMakes !== undefined && { batchMakes: deleteField() }),
       }, { merge: true });
+      return true;
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/menu/${itemId}`);
+      return false;
     }
   };
 
