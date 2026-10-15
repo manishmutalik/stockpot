@@ -1,5 +1,19 @@
 # Changelog
 
+## Email verification, and saying why AI is not available
+
+- Signing up with an email and password now sends a verification email. Until the address is verified, **Settings › User
+  Account** shows **Your email isn't verified** with **Send verification email** and **I've verified it** (which refreshes
+  the sign-in, so AI access follows straight away). Google accounts come verified; the demo kitchen is never asked.
+- Where AI is not available but the owner can do something about it, the web app says why instead of hiding the feature:
+  **Read a recipe** shows the reason, and the Add Order and Log Production forms show it where the message box would be.
+  An unverified account is told to verify its email; an account without a plan is told to take one; the demo is told to
+  sign up. Ask your business and the briefing still stay hidden.
+
+Why: the AI allow-list counts an email only once it is verified, and the app never sent the verification email, so
+allow-listed email-and-password accounts were turned away with nothing on screen to say so. Web only; nothing to redeploy
+on the server and no new APK.
+
 ## Recipe reader: bases made ahead and kept
 
 When the recipe reader finds a component (a sponge base, a ganache, whipped cream), there are now three choices, on the

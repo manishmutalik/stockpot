@@ -124,6 +124,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   updateProfile,
+  sendEmailVerification,
   collection, 
   doc, 
   setDoc, 
@@ -329,6 +330,9 @@ import { AskBusiness } from './components/AskBusiness';
 import { useOrderParser } from './hooks/useOrderParser';
 import { useProductionParser } from './hooks/useProductionParser';
 import { useRecipeReader } from './hooks/useRecipeReader';
+import { useAiBlocked } from './hooks/useAiBlocked';
+import { needsEmailVerification } from './utils/aiAccess';
+import type { VerificationSent } from './components/EmailVerificationNotice';
 import { RecipeReaderModal } from './components/RecipeReaderModal';
 import { planImportRecipes } from './utils/plans/planRecipes';
 import { addWritesToBatch } from './utils/plans/clientCommit';
@@ -583,7 +587,9 @@ function BakeryApp() {
       if (firebaseUser) {
         setUser({
           email: firebaseUser.email || '',
-          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Owner'
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Owner',
+          emailVerified: firebaseUser.emailVerified,
+          usesPassword: (firebaseUser.providerData ?? []).some(p => p.providerId === 'password'),
         });
       } else {
         setUser(null);
@@ -628,6 +634,9 @@ function BakeryApp() {
         if (displayName) {
           await updateProfile(userCredential.user, { displayName });
         }
+        // The address must be verified before it counts for anything that checks it (AI access). Not sending it
+        // must not stop the sign-up: it can be sent again from Settings › User Account.
+        await sendEmailVerification(userCredential.user).catch(err => console.error('Verification email not sent', err));
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
@@ -690,6 +699,37 @@ function BakeryApp() {
     } finally {
       setIsDemoLoading(false);
     }
+  };
+
+  /** Sends (again) the email that verifies the signed-in account's address. */
+  const sendVerificationEmail = async (): Promise<VerificationSent> => {
+    if (!auth.currentUser) return { ok: false, message: 'You are signed out. Sign in again and retry.' };
+    try {
+      await sendEmailVerification(auth.currentUser);
+      return { ok: true };
+    } catch (error) {
+      console.error('Verification email not sent', error);
+      return {
+        ok: false,
+        message: (error as { code?: string } | null)?.code === 'auth/too-many-requests'
+          ? 'An email was sent a moment ago. Check your inbox and spam, or try again in a few minutes.'
+          : 'The email could not be sent. Check your connection and try again.',
+      };
+    }
+  };
+
+  /**
+   * Whether the address has been verified since sign-in. When it has, the sign-in is refreshed so the server sees it
+   * (it reads the verified flag from the sign-in token), and the app reloads so every feature asks again.
+   */
+  const checkEmailVerified = async (): Promise<boolean> => {
+    const current = auth.currentUser;
+    if (!current) return false;
+    await current.reload();
+    if (!current.emailVerified) return false;
+    await current.getIdToken(true);
+    window.location.reload();
+    return true;
   };
 
   /**
@@ -862,7 +902,11 @@ function BakeryApp() {
   // Reading recipes from photos or text into menu items (offered only where AI is available).
   const recipeReader = useRecipeReader({ signedIn: !!user, dataReady });
   const [recipeReaderFor, setRecipeReaderFor] = useState<{ menuItemId?: string } | null>(null);
-  const openRecipeReader = recipeReader ? (menuItemId?: string) => setRecipeReaderFor({ menuItemId }) : undefined;
+  // Where AI is not available but the owner can do something about it, the AI features stay in view and say why.
+  const aiBlocked = useAiBlocked({ signedIn: !!user, dataReady, unverified: needsEmailVerification(user) });
+  const openRecipeReader = recipeReader
+    ? (menuItemId?: string) => setRecipeReaderFor({ menuItemId })
+    : aiBlocked ? () => showAlert('Read a recipe', aiBlocked) : undefined;
   /** Saves what the recipe check screen settled: new materials and menu items in one batch, all or nothing. */
   const saveImportedRecipes = async (data: DraftImport): Promise<{ ok: true; count: number } | { ok: false; message: string }> => {
     if (!auth.currentUser) return { ok: false, message: 'You are signed out. Sign in again and retry.' };
@@ -1289,6 +1333,7 @@ function BakeryApp() {
     setActiveSettingsTab, currency, setCurrency, summaryRange, setSummaryRange, summaryDateStart,
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
+    sendVerificationEmail, checkEmailVerified,
     openAddOrderModalFor, openUpcomingOrders, ordersFilterOnOpen, openRepricing, menuFilterOnOpen, openRecipeReader,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
@@ -1632,6 +1677,7 @@ function BakeryApp() {
           onSave={logProductionRunSession}
           currency={currency}
           productionParser={productionParser}
+          aiBlocked={aiBlocked}
         />
         <AddOrderModal
           isOpen={isAddOrderModalOpen}
@@ -1641,6 +1687,7 @@ function BakeryApp() {
           currency={currency}
           presetMenuItemId={addOrderPresetItemId}
           orderParser={orderParser}
+          aiBlocked={aiBlocked}
           customers={customerDirectory}
           today={todayInZone(settings.timezone)}
           gst={settings}

@@ -11,7 +11,7 @@ export function createFakeFirebase() {
   const listeners = new Set<Listener>();
   const authListeners = new Set<(u: any) => void>();
   const auth: { currentUser: any } = { currentUser: null };
-  const calls = { failNextCreateUser: null as null | Error };
+  const calls = { failNextCreateUser: null as null | Error, verificationSentTo: [] as string[] };
 
   const ref = (path: string) => ({ path, id: path.split('/').pop()! });
   const join = (parts: any[]) => parts.filter(p => typeof p === 'string').join('/');
@@ -38,7 +38,7 @@ export function createFakeFirebase() {
 
   return {
     store, auth, calls,
-    reset: () => { store.clear(); listeners.clear(); authListeners.clear(); auth.currentUser = null; calls.failNextCreateUser = null; },
+    reset: () => { store.clear(); listeners.clear(); authListeners.clear(); auth.currentUser = null; calls.failNextCreateUser = null; calls.verificationSentTo = []; },
     module: {
       auth,
       db: {},
@@ -52,12 +52,16 @@ export function createFakeFirebase() {
       },
       createUserWithEmailAndPassword: async (_a: any, email: string) => {
         if (calls.failNextCreateUser) { const e = calls.failNextCreateUser; calls.failNextCreateUser = null; throw e; }
-        const user = { uid: `uid_${store.size}_${Date.now()}`, email, displayName: null, getIdToken: async () => 'test-token' };
+        const user = {
+          uid: `uid_${store.size}_${Date.now()}`, email, displayName: null, emailVerified: false, providerData: [{ providerId: 'password' }],
+          getIdToken: async () => 'test-token', reload: async () => {},
+        };
         auth.currentUser = user;
         authListeners.forEach(cb => cb(user));
         return { user };
       },
       signInWithEmailAndPassword: async () => { throw Object.assign(new Error('nope'), { code: 'auth/invalid-credential' }); },
+      sendEmailVerification: async (user: { email: string }) => { calls.verificationSentTo.push(user.email); },
       updateProfile: async (user: any, patch: Data) => { Object.assign(user, patch); authListeners.forEach(cb => cb(user)); },
       collection: (_db: any, ...parts: string[]) => ({ ...ref(join(parts)), type: 'collection' }),
       doc: (_db: any, ...parts: string[]) => ({ ...ref(join(parts)), type: 'document' }),

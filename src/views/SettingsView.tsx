@@ -9,6 +9,8 @@ import { COMMON_TIME_ZONES, resolveTimeZone } from '../utils/localDate';
 import { FIELD, LABEL, Pill, Section } from '../components/settingsParts';
 import { OnlinePaymentsCard } from '../components/OnlinePaymentsCard';
 import { BrandColourPicker } from '../components/BrandColourPicker';
+import { EmailVerificationNotice } from '../components/EmailVerificationNotice';
+import { needsEmailVerification } from '../utils/aiAccess';
 
 type SettingsTab = 'bakery' | 'integrations' | 'customisation' | 'account' | 'categories';
 
@@ -33,7 +35,8 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
     odooStatus, odooUrlInput, setOdooUrlInput, odooDbInput, setOdooDbInput, odooUsernameInput,
     setOdooUsernameInput, odooPasswordInput, setOdooPasswordInput, isConnectingOdoo, connectOdoo, disconnectOdoo,
     updateSettingsField, categories, addCategory, deleteCategory, activeSettingsTab, setActiveSettingsTab,
-    settings, user, saveSettings, showSaveFeedback, handleLogout, billing, cancelSubscription, isCancelling, startCheckout, isStartingCheckout, currency
+    settings, user, saveSettings, showSaveFeedback, handleLogout, billing, cancelSubscription, isCancelling, startCheckout, isStartingCheckout, currency,
+    sendVerificationEmail, checkEmailVerified
   } = props;
 
   const [newCategory, setNewCategory] = useState('');
@@ -676,6 +679,9 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
                 <Pill tone="slate">Business Owner</Pill>
 
                 <div className="w-full max-w-md pt-5 border-t border-stone-100 space-y-4">
+                  {needsEmailVerification(user) && sendVerificationEmail && checkEmailVerified && (
+                    <EmailVerificationNotice email={user!.email} onSend={sendVerificationEmail} onCheck={checkEmailVerified} />
+                  )}
                   <div className="bg-stone-50 rounded-xl px-4 py-3 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-left">
