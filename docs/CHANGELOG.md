@@ -1,5 +1,17 @@
 # Changelog
 
+## Made by weight: batch size in grams
+
+- For an item counted in kg (litres), **One batch makes** is typed in grams (ml), as recipes say it: 400 for a ganache
+  that makes 400 g, kept as 0.4 kg. Typing 400 into a box in kg made the batch 400 kg and divided the recipe by 400
+  (0.375 g of chocolate per kg). With the batch set, **Yes, make it for 1 kg** turns a recipe written for the batch into
+  one per kg (150 g chocolate in a 400 g batch becomes 375 g).
+- Switching an item to kg (or back) turns its recipe back into the whole batch and clears the batch size, which cannot
+  carry over (4 bases are not 4 kg).
+- Read a recipe: a recipe whose yield is a weight always asks what it is for (it used to be taken as sold, in pieces,
+  when the reader did not see it as a component), and **One batch makes** is in grams for one made by weight (web and
+  phone). Its number boxes now keep a decimal point while it is typed ("4.5" could not be typed a key at a time).
+
 ## Things made by weight: ganache, custard, whipped cream
 
 An item made for other items can now be **Counted in** pieces, **kg** or **Litres** (Recipes & Menus, in its recipe).

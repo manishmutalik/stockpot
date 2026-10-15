@@ -114,6 +114,10 @@ export function measuredYield(asWritten: string | undefined): { unit: ItemUnitBy
   return total > 0 ? { unit: unit.unit, amount: total } : null;
 }
 
+/** Whether the check screen asks what the recipe is for (sold, mixed in, made ahead): a component, or a yield by weight. */
+export const asksWhatItIs = (recipe: DraftRecipe): boolean =>
+  recipe.looksLikeComponent || !!recipe.measuredYield || recipe.use.kind !== 'sell';
+
 /** The unit a recipe's item is counted in: an existing item's own, else what the owner chose for one made ahead. */
 export function recipeUnit(recipe: DraftRecipe, menu: DraftMenuItem[]): ItemUnit {
   if (recipe.target.kind === 'existing') {
@@ -197,7 +201,9 @@ export function buildDraft(parsed: ParsedRecipes, input: { materials: DraftMater
       looksLikeComponent: r.looksLikeComponent,
       looksCutOff: r.looksCutOff,
       ...(r.notes && { notes: r.notes }),
-      use: r.looksLikeComponent && !existing ? { kind: 'undecided' } : { kind: 'sell' },
+      // A yield written as a weight (a ganache that makes 400 g) is asked about like a component: it is usually kept and
+      // used by weight in other items, and is never 400 pieces.
+      use: (r.looksLikeComponent || weighed) && !existing ? { kind: 'undecided' } : { kind: 'sell' },
       target: existing ? { kind: 'existing', menuItemId: existing.id, mode: 'replace' } : { kind: 'new' },
       sellingPrice: null,
       lines: r.ingredients.map((ingredient, li): DraftLine => {

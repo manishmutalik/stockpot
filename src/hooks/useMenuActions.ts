@@ -351,7 +351,9 @@ export function useMenuActions(
   /**
    * Counts an item made for other items in pieces, kilograms or litres (utils/itemUnits). Its recipe, stock, batch size and
    * cost then mean that unit, so the change is refused while other items use it (their amounts would change meaning), and
-   * stock already made is cleared once the owner agrees. Items sold on the menu stay in pieces for now.
+   * stock already made is cleared once the owner agrees. A batch size cannot carry over (4 bases are not 4 kg): the recipe
+   * goes back to being for the whole batch and the size is cleared, so setting the new size offers to divide it again.
+   * Items sold on the menu stay in pieces for now.
    */
   const setCountedIn = async (itemId: string, unit: ItemUnitByMeasure | null) => {
     if (!auth.currentUser) return;
@@ -372,8 +374,14 @@ export function useMenuActions(
     const inStock = Math.round((item.finishedGoodsStock ?? 0) * 1000) / 1000;
     const stockText = from === 'pcs' ? `${inStock} ${unitWord('pcs', inStock)}` : formatItemQuantity(from, inStock);
     if (inStock !== 0 && !window.confirm(`${item.name} has ${stockText} in stock, counted in ${unitWord(from)}. That cannot carry over: clear it and count it in ${unitWord(unit ?? 'pcs')} from now on?\n\nLog what you have again afterwards.`)) return;
+    const wholeBatch = item.batchMakes && item.batchMakes > 0 && item.batchMakes !== 1 ? rescaleForBatchSize(item, 1) : null;
     try {
-      await setDoc(doc(db, 'users', userId, 'menu', itemId), { countedIn: unit ?? deleteField(), ...(inStock !== 0 && { finishedGoodsStock: 0 }) }, { merge: true });
+      await setDoc(doc(db, 'users', userId, 'menu', itemId), {
+        countedIn: unit ?? deleteField(),
+        ...(inStock !== 0 && { finishedGoodsStock: 0 }),
+        ...(wholeBatch && { recipe: wholeBatch.recipe, ...(wholeBatch.parts && { parts: wholeBatch.parts }) }),
+        ...(item.batchMakes !== undefined && { batchMakes: deleteField() }),
+      }, { merge: true });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/menu/${itemId}`);
     }

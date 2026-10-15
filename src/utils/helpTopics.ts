@@ -256,7 +256,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         'A base that is used in other items cannot be deleted until you take it out of them.',
         'On the phone, say "Made 9 vanilla bases" or "Made 3 pineapple cakes" as for anything else.',
       ),
-      text('**Made by weight** (a ganache, a custard, whipped cream): open its recipe and set **Counted in** to **kg** (or **Litres**). Its recipe is then for 1 kg, its stock and batches are in kg ("One batch makes 0.8"), and its cost is per kg. In each cake, add it with **Add a made item** and give the grams that go into one (150). Logging cakes takes those grams from its stock. Set this before it is used in other items or has stock; it cannot be sold on the menu for now.'),
+      text('**Made by weight** (a ganache, a custard, whipped cream): open its recipe and set **Counted in** to **kg** (or **Litres**). Its recipe is then for 1 kg and its cost is per kg. Type **One batch makes** in grams, as the recipe says it (400 for a ganache that makes 400 g); if the recipe below is for that whole batch, press **Yes, make it for 1 kg**. In each cake, add it with **Add a made item** and give the grams that go into one (150). Logging cakes takes those grams from its stock. Set this before it is used in other items or has stock; it cannot be sold on the menu for now.'),
     ],
   },
   {
@@ -297,7 +297,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       points(
         'Written "makes 12"? Every amount is divided by 12, because recipes in Stockpot are for one item.',
         '**Made ahead and kept** (a sponge base, a dough): it is saved as its own item, not sold on the menu, with **One batch makes** set. Choose what it is **Used in** and how many go into one, and the cake gets it as a part, with its cost shown on the cake.',
-        'A ganache or custard made by weight? Under **Made ahead and kept**, choose **Counted in: kg**. "Makes 800 g" in the recipe fills **One batch makes** with 0.8; if the recipe does not say, Stockpot adds up the ingredients and offers that. Then give the grams that go into each cake.',
+        'A ganache or custard made by weight? Under **Made ahead and kept**, choose **Counted in: kg**. "Makes 800 g" in the recipe fills **One batch makes** with 800 g, and the recipe is saved for 1 kg; if the recipe does not say, Stockpot adds up the ingredients and offers that. Then give the grams that go into each cake. A recipe whose yield is a weight always asks what it is for.',
         'Tick **Made when ordered** for a cake you assemble when someone orders it: each sale then takes its ingredients and base by itself.',
         'You can read 15 recipes a day and 75 a month. A page with three recipes counts as three.',
         'Photos are read and then dropped, never kept.',
