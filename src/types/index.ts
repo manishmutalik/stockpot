@@ -480,6 +480,10 @@ export interface BakerySettings {
 export interface AppUser {
   email: string;
   name: string;
+  /** Whether Firebase has verified the email (always true for Google sign-in). */
+  emailVerified?: boolean;
+  /** Signed in with an email and password (rather than Google). */
+  usesPassword?: boolean;
 }
 
 
@@ -649,6 +653,10 @@ export interface AppViewProps {
   saveDay: () => void;
   updateCurrency: (c: any) => void;
   handleLogout: () => void;
+  /** Sends the email that verifies an email-and-password account's address (Settings › User Account). */
+  sendVerificationEmail?: () => Promise<{ ok: true } | { ok: false; message: string }>;
+  /** Whether the address is verified now; when it is, the app refreshes the sign-in and reloads. */
+  checkEmailVerified?: () => Promise<boolean>;
 
   billing: { status: string; currentPeriodEnd: number | null; trialUsed: boolean; cancelScheduled: boolean; paywall: boolean };
   cancelSubscription: () => void;

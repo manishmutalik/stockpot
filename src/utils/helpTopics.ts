@@ -622,11 +622,12 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: 'q-ai-unavailable', section: 'questions', apps: ['web', 'phone'],
     title: 'An AI feature is missing or says it is not available',
     summary: 'Voice reading, recipe reading, the briefing and Ask your business.',
-    keywords: ['ai', 'not available', 'missing', 'limit', 'voice', 'read recipe', 'briefing'],
+    keywords: ['ai', 'not available', 'missing', 'limit', 'voice', 'read recipe', 'briefing', 'verify', 'verification', 'email'],
     body: [
       points(
         'They are not available in the demo kitchen.',
         'They need an active plan or trial.',
+        'If you signed up with an email and password, verify your email first: on the website, go to **Settings › User Account**, press **Send verification email**, open the link in it (check spam too), then press **I\'ve verified it**.',
         'Each has a daily limit (recipes: 15 a day and 75 a month). The limit resets the next day.',
         'If a reading comes back wrong, change it before saving: nothing is saved until you check it.',
       ),
