@@ -2,22 +2,26 @@ import React, { useState } from 'react';
 import { CookingPot } from 'lucide-react';
 import type { MenuItem, ProductionRun } from '../types';
 import { batchYield } from '../utils/batches';
+import { formatItemQuantity, itemUnit, unitWord } from '../utils/itemUnits';
 
 /**
- * In the recipe editor: how many one batch makes (4.5 sponge bases from one mix), for items made in batches. The recipe
- * stays per one piece; logging production in batches works out the pieces (utils/batches). Once batches are logged with
+ * In the recipe editor: how many one batch makes (4.5 sponge bases from one mix, or 0.8 kg of ganache), for items made in
+ * batches, in the item's own unit (utils/itemUnits). The recipe stays per one piece (per kg); logging production in
+ * batches works out the pieces (utils/batches). Once batches are logged with
  * what actually came out, the average is shown against the size set, with a button to use it: one batch keeps the same
  * ingredients, so each piece then carries a little more of them.
  */
 export const BatchSizeEditor: React.FC<{
   item: MenuItem;
   runs: Pick<ProductionRun, 'recipeId' | 'batches' | 'quantityProduced' | 'quantityYield' | 'date' | 'createdAt'>[];
-  /** What one piece costs in ingredients, its parts counted. */
+  /** What one piece (one kg, one litre) costs in ingredients, its parts counted. */
   unitCost: number;
   currencySymbol: string;
   onSet: (makes: number | null, scale?: 'keep-batch' | 'from-whole-batch') => void;
 }> = ({ item, runs, unitCost, currencySymbol, onSet }) => {
   const makes = item.batchMakes && item.batchMakes > 0 ? item.batchMakes : null;
+  const unit = itemUnit(item);
+  const say = (n: number) => (unit === 'pcs' ? fmt(n) : formatItemQuantity(unit, n));
   // Offered once, right after a batch size is first set: the recipe may have been typed in for the whole batch.
   const [offerDivide, setOfferDivide] = useState(false);
   const report = batchYield(item, runs);
@@ -40,7 +44,7 @@ export const BatchSizeEditor: React.FC<{
         <label className="flex items-center gap-2 text-sm font-semibold text-ink">
           One batch makes
           <BatchInput value={makes} onCommit={commit} />
-          <span className="font-normal text-muted">pieces</span>
+          <span className="font-normal text-muted">{unitWord(unit)}</span>
         </label>
         {makes !== null && unitCost > 0 && (
           <span className="text-xs text-muted">One batch costs <span className="font-mono font-semibold text-ink">{money(unitCost * makes)}</span></span>
@@ -48,8 +52,12 @@ export const BatchSizeEditor: React.FC<{
       </div>
       <p className="text-xs text-muted">
         {makes === null
-          ? 'For things made in batches, such as 4.5 sponge bases from one mix. Leave it empty if you make them one at a time.'
-          : `The recipe below is for one piece; a batch uses it ${fmt(makes)} times. Log production in batches, with what actually came out.`}
+          ? unit === 'pcs'
+            ? 'For things made in batches, such as 4.5 sponge bases from one mix. Leave it empty if you make them one at a time.'
+            : `For things made in batches, such as 0.8 ${unit} of ganache from one mix.`
+          : unit === 'pcs'
+            ? `The recipe below is for one piece; a batch uses it ${fmt(makes)} times. Log production in batches, with what actually came out.`
+            : `The recipe below is for 1 ${unitWord(unit, 1)}; a batch makes ${say(makes)}. Log production in batches, with what actually came out.`}
       </p>
 
       {offerDivide && makes !== null && (
@@ -65,16 +73,16 @@ export const BatchSizeEditor: React.FC<{
       {report && (
         <div className={`flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-xs ${differs ? 'bg-amber-50 text-amber-800' : 'bg-stone-50 text-muted'}`}>
           <span>
-            {report.runs === 1 ? 'Your last run in batches' : `Your last ${report.runs} runs in batches`} made <span className="font-mono font-semibold">{fmt(report.averagePerBatch)}</span> per batch
-            {differs ? ` (you set ${fmt(report.expected)}).` : ', as set.'}
+            {report.runs === 1 ? 'Your last run in batches' : `Your last ${report.runs} runs in batches`} made <span className="font-mono font-semibold">{say(report.averagePerBatch)}</span> per batch
+            {differs ? ` (you set ${say(report.expected)}).` : ', as set.'}
           </span>
           {differs && report.averagePerBatch > 0 && (
             <button
               type="button" onClick={() => onSet(report.averagePerBatch, 'keep-batch')}
-              title="One batch keeps the same ingredients, so each piece's cost changes to match"
+              title={`One batch keeps the same ingredients, so the cost ${unit === 'pcs' ? 'of each piece' : `per ${unitWord(unit, 1)}`} changes to match`}
               className="font-semibold text-primary hover:text-primary-dark underline"
             >
-              Use {fmt(report.averagePerBatch)}
+              Use {say(report.averagePerBatch)}
             </button>
           )}
         </div>

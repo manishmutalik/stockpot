@@ -215,7 +215,8 @@ export interface RestockPreview {
 
 export interface ProductionPreview {
   date: string;
-  rows: { recipeId: string; name: string; quantityProduced: number; quantityYield: number; costTotal: number; costPerUnit: number; stockAfter: number }[];
+  /** `countedIn` for an item counted by weight or volume: its quantities and cost are then per kg (litre). */
+  rows: { recipeId: string; name: string; countedIn?: 'kg' | 'l'; quantityProduced: number; quantityYield: number; costTotal: number; costPerUnit: number; stockAfter: number }[];
   /** Ingredients this would take below nothing, as the web would let it. The app asks "Produce anyway?". */
   shortages: { materialId: string; name: string; unit: string; short: number }[];
   total: number;
@@ -403,7 +404,8 @@ export interface RecipeMaterialView {
 /** GET /api/mobile/recipes/setup: what reading a recipe on the phone starts from. */
 export interface RecipeSetupView {
   materials: RecipeMaterialView[];
-  menu: { id: string; name: string }[];
+  /** `countedIn` for an item counted by weight or volume (utils/itemUnits). */
+  menu: { id: string; name: string; countedIn?: 'kg' | 'l' }[];
   currency: Currency;
 }
 

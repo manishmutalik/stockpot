@@ -49,3 +49,24 @@ describe('BatchSizeEditor', () => {
     expect(screen.queryByRole('button', { name: /^Use / })).toBeNull();
   });
 });
+
+describe('BatchSizeEditor, for an item counted by weight', () => {
+  const ganache: MenuItem = { id: 'g', name: 'Ganache', sellingPrice: 0, notForSale: true, countedIn: 'kg', recipe: [{ materialId: 'cream', amount: 500, unit: 'ml' }] };
+
+  it('takes the batch in kg and says it in grams and kilos', () => {
+    const onSet = vi.fn();
+    const view = render(<BatchSizeEditor item={ganache} runs={[]} unitCost={400} currencySymbol="₹" onSet={onSet} />);
+    expect(screen.getByText('kg')).toBeTruthy();
+    expect(screen.getByText(/0.8 kg of ganache from one mix/)).toBeTruthy();
+    view.rerender(<BatchSizeEditor item={{ ...ganache, batchMakes: 0.8 }} runs={[]} unitCost={400} currencySymbol="₹" onSet={onSet} />);
+    expect(screen.getByText(/The recipe below is for 1 kg; a batch makes 800 g/)).toBeTruthy();
+    expect(screen.getByText('₹320.00')).toBeTruthy(); // 0.8 kg × ₹400 a kg
+  });
+
+  it('reports what batches actually made in grams', () => {
+    const runs = [{ recipeId: 'g', date: '2026-10-10', createdAt: 0, quantityProduced: 0.75, batches: 1 }] as unknown as ProductionRun[];
+    render(<BatchSizeEditor item={{ ...ganache, batchMakes: 0.8 }} runs={runs} unitCost={400} currencySymbol="₹" onSet={vi.fn()} />);
+    expect(screen.getByText('750 g')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Use 750 g' })).toBeTruthy();
+  });
+});

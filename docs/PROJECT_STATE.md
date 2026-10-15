@@ -268,6 +268,10 @@ Nothing is queued. The AI list in the handoff is complete.
 
 ## Open items for the user (none blocking)
 
+- **Things made by weight: built.** `MenuItem.countedIn` ('kg' | 'l') for items made for other items: recipe per kg,
+  stock/batches/production in kg, parts typed in grams (`src/utils/itemUnits.ts`, guide 4.10a). Read a recipe reads
+  "makes 800 g" as 0.8 kg and suggests the batch from the ingredients' weight. Next, agreed: selling by weight (paneer by
+  the kg): decimal order quantities, price per kg on bills, the order reader understanding "half kilo".
 - **Email verification: built.** Email-and-password sign-ups get a verification email; Settings › User Account shows a
   notice with Send verification email / I've verified it while unverified. The AI allow-list (`AI_ALLOWED_EMAILS`) only
   counts verified emails, so this is what lets an allow-listed email account in (`AI_ALLOWED_UIDS` works without it). Where

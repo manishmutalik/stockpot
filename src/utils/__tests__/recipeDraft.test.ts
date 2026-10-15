@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDraft, chooseLineMaterial, draftIssues, draftToImport, keptPartsOf, keptPieceCost, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
+import { batchWeight, buildDraft, chooseLineMaterial, chooseUse, measuredYield, recipeUnit, setKeptUnit, draftIssues, draftToImport, keptPartsOf, keptPieceCost, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
 import type { ParsedIngredient, ParsedRecipe, ParsedRecipes } from '../recipeParse';
 import type { MenuItem, RawMaterial } from '../../types';
 import { planImportRecipes } from '../plans/planRecipes';
@@ -200,7 +200,7 @@ describe('a base made ahead and kept', () => {
     const d = kept();
     // 900 g maida (₹40.50) and 9 eggs (₹63) for 4.5: ₹23 a base.
     expect(keptPieceCost(d, d.recipes[1], materials)).toBe(23);
-    expect(keptPartsOf(d, d.recipes[0], materials)).toEqual([{ key: 'r2', name: 'Sponge base', perItem: 1, cost: 23 }]);
+    expect(keptPartsOf(d, d.recipes[0], materials)).toEqual([{ key: 'r2', name: 'Sponge base', perItem: 1, unit: 'pcs', cost: 23 }]);
   });
 
   it('is saved as its own item, not sold, with its batch size, and linked into the cake (made when ordered)', () => {
@@ -234,5 +234,100 @@ describe('a base made ahead and kept', () => {
     const out = draftToImport(d, materials, menu)!;
     expect(out.items[0]).not.toHaveProperty('notForSale');
     expect(out.items[1].parts).toEqual([{ item: { existingId: 'menu_cake' }, quantity: 1 }]);
+  });
+});
+
+describe('a ganache made ahead and kept by weight', () => {
+  const chocolate = mat('m_choc', 'Dark chocolate', 'kg', 800);
+  const creamMat = mat('m_cream', 'Whipping cream', 'l', 400);
+  const mats = [...materials, chocolate, creamMat];
+  const cake: ParsedRecipe = { name: 'Truffle Cake', makesAsWritten: 'one cake', makes: 1, looksLikeComponent: false, looksCutOff: false, ingredients: [ing('sugar', '100', 'g', { materialId: 'm_sugar' })] };
+  const ganache = (makesAsWritten?: string, makes?: number): ParsedRecipe => ({
+    name: 'Chocolate ganache', ...(makesAsWritten && { makesAsWritten }), ...(makes && { makes }), looksLikeComponent: true, looksCutOff: false,
+    ingredients: [ing('dark chocolate', '400', 'g', { materialId: 'm_choc' }), ing('cream', '400', 'ml', { materialId: 'm_cream' })],
+  });
+  const draft = (g: ParsedRecipe) => buildDraft({ recipes: [cake, g], moreNotRead: false }, { materials: mats, menu, fromPhotos: false });
+
+  it('reads a yield written as a weight or volume', () => {
+    expect(measuredYield('makes 800 g')).toEqual({ unit: 'kg', amount: 0.8 });
+    expect(measuredYield('about 1.5 kg')).toEqual({ unit: 'kg', amount: 1.5 });
+    expect(measuredYield('1/2 kg')).toEqual({ unit: 'kg', amount: 0.5 });
+    expect(measuredYield('750ml')).toEqual({ unit: 'l', amount: 0.75 });
+    expect(measuredYield('2 litres')).toEqual({ unit: 'l', amount: 2 });
+    expect(measuredYield('makes 12')).toBeNull();
+    expect(measuredYield('one 8 inch cake')).toBeNull();
+    expect(measuredYield(undefined)).toBeNull();
+  });
+
+  it('never takes "makes 800 g" as 800 pieces, and counts it in kg once it is made ahead and kept', () => {
+    const d = draft(ganache('makes 800 g', 800));
+    const g = d.recipes[1];
+    expect(g.makes).toBeNull();
+    expect(g.measuredYield).toEqual({ unit: 'kg', amount: 0.8 });
+    chooseUse(g, 'kept');
+    expect(g).toMatchObject({ countedIn: 'kg', makes: 0.8, use: { kind: 'kept', of: null, perItem: null } });
+    expect(recipeUnit(g, menu)).toBe('kg');
+    chooseUse(g, 'part');
+    expect(g.countedIn).toBeUndefined();
+    expect(g.makes).toBeNull();
+  });
+
+  it('can be switched between pieces and kg, starting its sizes again', () => {
+    const d = draft(ganache('makes 4', 4));
+    const g = d.recipes[1];
+    chooseUse(g, 'kept');
+    expect(g).toMatchObject({ makes: 4, use: { perItem: 1 } });
+    setKeptUnit(g, 'kg');
+    expect(g).toMatchObject({ countedIn: 'kg', makes: null, use: { perItem: null } });
+    setKeptUnit(g, null);
+    expect(g).toMatchObject({ makes: 4, use: { perItem: 1 } });
+    expect(g.countedIn).toBeUndefined();
+  });
+
+  it('suggests the batch size from what the ingredients weigh', () => {
+    const d = draft(ganache());
+    const g = d.recipes[1];
+    chooseUse(g, 'kept');
+    setKeptUnit(g, 'kg');
+    expect(batchWeight(d, g, mats)).toBe(0.8);
+  });
+
+  it('costs a kg, asks how much goes into the cake, and saves it counted in kg, linked in kg', () => {
+    const d = draft(ganache('makes 800 g'));
+    const g = d.recipes[1];
+    chooseUse(g, 'kept');
+    g.use = { kind: 'kept', of: 'recipe:r1', perItem: null };
+    expect(draftIssues(d, mats, menu).map(i => i.message)).toContain('Chocolate ganache: how much goes into one Truffle Cake?');
+    g.use.perItem = 0.15;
+    // 400 g chocolate (₹320) and 400 ml cream (₹160) make 0.8 kg: ₹600 a kg; 150 g of it in a cake is ₹90.
+    expect(keptPieceCost(d, g, mats)).toBe(600);
+    expect(keptPartsOf(d, d.recipes[0], mats)).toEqual([{ key: 'r2', name: 'Chocolate ganache', perItem: 0.15, unit: 'kg', cost: 600 }]);
+    const out = draftToImport(d, mats, menu)!;
+    expect(out.items[0]).toMatchObject({ notForSale: true, countedIn: 'kg', batchMakes: 0.8 });
+    // The recipe is per kg: 500 g chocolate and 500 ml cream.
+    expect(out.items[0].lines.map(l => [l.amount, l.unit])).toEqual([[500, 'g'], [500, 'ml']]);
+    expect(out.items[1].parts).toEqual([{ item: { newKey: 'recipe:r2' }, quantity: 0.15 }]);
+
+    let n = 0;
+    const plan = planImportRecipes({ ...out, materials: mats, menu, today: '2026-10-15', ctx: { newId: () => `id${++n}`, now: () => 0 } });
+    expect(plan.ok).toBe(true);
+    if (plan.ok !== true) return;
+    const [ganacheDoc, cakeDoc] = plan.writes.map(w => w.data);
+    expect(ganacheDoc).toMatchObject({ name: 'Chocolate ganache', notForSale: true, countedIn: 'kg', batchMakes: 0.8 });
+    expect(cakeDoc).toMatchObject({ parts: [{ itemId: 'id1', quantity: 0.15 }] });
+  });
+
+  it('follows the unit of an item already on the menu', () => {
+    const d = buildDraft({ recipes: [ganache('makes 800 g')], moreNotRead: false }, { materials: mats, menu: [{ id: 'g1', name: 'Chocolate ganache', countedIn: 'kg' }], fromPhotos: false });
+    const g = d.recipes[0];
+    chooseUse(g, 'kept', [{ id: 'g1', name: 'Chocolate ganache', countedIn: 'kg' }]);
+    expect(g.target).toEqual({ kind: 'existing', menuItemId: 'g1', mode: 'replace' });
+    expect(g).toMatchObject({ countedIn: 'kg', makes: 0.8 });
+    expect(recipeUnit(g, [{ id: 'g1', name: 'Chocolate ganache', countedIn: 'kg' }])).toBe('kg');
+    expect(recipeUnit(g, [{ id: 'g1', name: 'Chocolate ganache' }])).toBe('pcs');
+    // Kept in pieces on the menu: so it is here, whatever the recipe says.
+    chooseUse(g, 'kept', [{ id: 'g1', name: 'Chocolate ganache' }]);
+    expect(g.countedIn).toBeUndefined();
+    expect(g.use).toEqual({ kind: 'kept', of: null, perItem: 1 });
   });
 });

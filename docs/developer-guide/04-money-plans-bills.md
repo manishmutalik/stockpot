@@ -214,6 +214,19 @@ production plan refuses a made-to-order item (`made_to_order`), and the producti
 Profit is untouched (orders are stamped as before). `madeToOrderSpend` (the `taken.cost` of sales in a range) is shown
 beside production spend, and `madeToOrderUse` feeds `reorderSuggestions`.
 
+## 4.10a Items counted by weight: `src/utils/itemUnits.ts`
+
+`MenuItem.countedIn` ('kg' or 'l', absent for pieces) puts everything about an item in that unit: its recipe is for 1 kg,
+and `finishedGoodsStock`, `batchMakes`, a run's `quantityProduced`/`quantityYield` and its cost per unit are in kg. A
+part's `quantity` is always in the part item's own unit (0.15 for 150 g of a ganache counted in kg), so `itemParts`,
+`batches` and the production plan work unchanged; only what is shown and typed differs (`formatItemQuantity`: 150 g,
+1.2 kg; `toEntry`/`fromEntry`: parts are typed in grams). Only items made for other items can be counted by weight for
+now (`useMenuActions.setCountedIn` refuses a sold item, and refuses the change while another item uses it, clearing stock
+counted the old way once the owner agrees); selling by weight comes later. Production headline units count pieces only
+(`summarizeProduction`'s `inPieces`). The production reader takes batches of a weighed item but never a count of pieces
+of it (`ProductionFormFill.byWeight`). The recipe reader reads a weight yield from `makesAsWritten`
+(`recipeDraft.measuredYield`) and can suggest a batch from what the ingredients weigh (`batchWeight`).
+
 ## 4.11 Rules of thumb when changing money code
 
 - Add the figure to `profit.ts`/`pricing.ts`/`billing.ts` with a test; do not compute it in a component or route.

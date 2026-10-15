@@ -123,6 +123,27 @@ describe('MenuView', () => {
       expect(props.addIngredientToRecipe).toHaveBeenCalledWith('cake', 'Packaging Materials');
     });
 
+    it('counts an item made for other items in pieces or by weight, and shows its cost and stock that way', () => {
+      const ganache = { id: 'ganache', name: 'Ganache', sellingPrice: 0, notForSale: true, countedIn: 'kg', finishedGoodsStock: 0.75, recipe: [{ materialId: 'flour', amount: 500, unit: 'g' }] };
+      const props = open({ menu: [...menu, ganache], expandedRecipeId: 'ganache', setCountedIn: vi.fn() });
+      render(<MenuView {...props} />);
+      const g = card('Ganache');
+      expect(within(g).getByText(/^Cost: .* per kg$/)).toBeTruthy();
+      expect(within(g).getByText('750 g')).toBeTruthy();
+      expect(within(g).getByText('Cost per kg')).toBeTruthy();
+      const choice = within(g).getByRole('radiogroup', { name: 'Counted in' });
+      expect(within(choice).getByRole('radio', { name: 'kg' }).getAttribute('aria-checked')).toBe('true');
+      fireEvent.click(within(choice).getByRole('radio', { name: 'Pieces' }));
+      expect(props.setCountedIn).toHaveBeenCalledWith('ganache', null);
+      fireEvent.click(within(choice).getByRole('radio', { name: 'Litres' }));
+      expect(props.setCountedIn).toHaveBeenCalledWith('ganache', 'l');
+    });
+
+    it('offers no Counted in choice for an item sold on the menu', () => {
+      render(<MenuView {...open()} />);
+      expect(screen.queryByRole('radiogroup', { name: 'Counted in' })).toBeNull();
+    });
+
     it('prompts for servings before estimating nutrition', () => {
       render(<MenuView {...open({ expandedRecipeId: 'bread' })} />);
       expect(screen.getByText('Set servings above to estimate')).toBeTruthy();

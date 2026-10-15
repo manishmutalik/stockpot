@@ -12,11 +12,12 @@
  */
 import { auth, db, doc, setDoc, deleteDoc, deleteField } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { MenuItem, RawMaterial, Order, IngredientRequirement, ItemPart, QuickIngredient, getDefaultRecipeUnit } from '../types';
+import { MenuItem, RawMaterial, Order, IngredientRequirement, ItemPart, ItemUnitByMeasure, QuickIngredient, getDefaultRecipeUnit } from '../types';
 import { needsBaselineStamp, pricingStamp } from '../utils/pricing';
 import { DEFAULT_TIME_ZONE, todayInZone } from '../utils/localDate';
 import { costView, itemsUsing, partsOf, wouldLoop } from '../utils/itemParts';
 import { rescaleForBatchSize } from '../utils/batches';
+import { formatItemQuantity, itemUnit, unitWord } from '../utils/itemUnits';
 
 export function useMenuActions(
   menu: MenuItem[],
@@ -83,6 +84,11 @@ export function useMenuActions(
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const item = menu.find(m => m.id === id);
+    // Selling by weight comes later: an item counted by weight stays made for other items.
+    if (item && field === 'notForSale' && value === false && itemUnit(item) !== 'pcs') {
+      showAlert('Not yet', `${item.name} is counted in ${unitWord(itemUnit(item))}. Only items counted in pieces can be sold on the menu for now: count it in pieces first.`);
+      return;
+    }
     try {
       if (item) {
         const stamp = field === 'sellingPrice' && Number(value) > 0 ? { ...pricingStamp(costView(item, menu), materials, today()), pricingIsBaseline: false } : {};
@@ -342,8 +348,40 @@ export function useMenuActions(
     }
   };
 
+  /**
+   * Counts an item made for other items in pieces, kilograms or litres (utils/itemUnits). Its recipe, stock, batch size and
+   * cost then mean that unit, so the change is refused while other items use it (their amounts would change meaning), and
+   * stock already made is cleared once the owner agrees. Items sold on the menu stay in pieces for now.
+   */
+  const setCountedIn = async (itemId: string, unit: ItemUnitByMeasure | null) => {
+    if (!auth.currentUser) return;
+    const userId = auth.currentUser.uid;
+    const item = menu.find(m => m.id === itemId);
+    if (!item) return;
+    const from = itemUnit(item);
+    if ((unit ?? 'pcs') === from) return;
+    if (unit && !item.notForSale) {
+      showAlert('Not yet', 'Only items made for other items (a ganache, a custard) can be counted by weight for now. Turn off "Sold on the menu" first.');
+      return;
+    }
+    const users = itemsUsing(menu, itemId);
+    if (users.length > 0) {
+      showAlert('Used in other items', `${users.map(u => u.name).join(', ')} ${users.length === 1 ? 'uses' : 'use'} ${item.name}, in ${unitWord(from)}. Remove it from ${users.length === 1 ? 'that item' : 'them'} first, change how it is counted, then add it back with the new amount.`);
+      return;
+    }
+    const inStock = Math.round((item.finishedGoodsStock ?? 0) * 1000) / 1000;
+    const stockText = from === 'pcs' ? `${inStock} ${unitWord('pcs', inStock)}` : formatItemQuantity(from, inStock);
+    if (inStock !== 0 && !window.confirm(`${item.name} has ${stockText} in stock, counted in ${unitWord(from)}. That cannot carry over: clear it and count it in ${unitWord(unit ?? 'pcs')} from now on?\n\nLog what you have again afterwards.`)) return;
+    try {
+      await setDoc(doc(db, 'users', userId, 'menu', itemId), { countedIn: unit ?? deleteField(), ...(inStock !== 0 && { finishedGoodsStock: 0 }) }, { merge: true });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/menu/${itemId}`);
+    }
+  };
+
   return {
     addMenuItem,
+    setCountedIn,
     setItemParts,
     setMadeToOrder,
     setBatchSize,

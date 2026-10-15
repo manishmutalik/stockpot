@@ -218,9 +218,18 @@ export interface MenuItem {
    * no production runs. Absent: sold from finished stock.
    */
   madeToOrder?: boolean;
+  /**
+   * Counted by weight or volume (a ganache, a custard, whipped cream): 'kg' or 'l'. Everything about the item is then in
+   * that unit: its recipe is for 1 kg, its stock, batch size and production are in kg, its cost is per kg, and another
+   * item using it gives the kg that go into one (0.15 for 150 g) (utils/itemUnits). Absent: counted in pieces.
+   */
+  countedIn?: ItemUnitByMeasure;
 }
 
-/** One other item used in a recipe: how many of it go into one of this item. */
+/** The units an item can be counted in besides pieces. */
+export type ItemUnitByMeasure = 'kg' | 'l';
+
+/** One other item used in a recipe: how many of it go into one of this item (in its own unit: pieces, kg or litres). */
 export interface ItemPart {
   itemId: string;
   quantity: number;
@@ -598,6 +607,8 @@ export interface AppViewProps {
   setItemParts: (itemId: string, parts: ItemPart[]) => void;
   /** Made when it is ordered, or kept on the shelf (utils/madeToOrder). */
   setMadeToOrder: (itemId: string, on: boolean) => void;
+  /** Counts an item made for other items in kg or litres, or (null) in pieces (utils/itemUnits). */
+  setCountedIn: (itemId: string, unit: ItemUnitByMeasure | null) => void;
   /** Sets how many one batch makes, optionally rescaling the recipe (utils/batches). */
   setBatchSize: (itemId: string, makes: number | null, scale?: 'keep-batch' | 'from-whole-batch') => void;
   clearFinishedGoodsStock: (id: string) => void;

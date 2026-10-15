@@ -789,7 +789,7 @@ function BakeryApp() {
   // ── Menu / Recipe Actions ────────────────────────────────────────────────────
   // Extracted to src/hooks/useMenuActions.ts as part of the Phase 4 breakup.
   const {
-    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder,
+    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder, setCountedIn,
     copyMenuItem, addIngredientToRecipe, addQuickIngredientsToRecipe,
     updateRecipeIngredient, removeIngredientFromRecipe,
   } = useMenuActions(menu, materials, orders, showAlert, { today: () => todayInZone(settings.timezone) });
@@ -1342,7 +1342,7 @@ function BakeryApp() {
     inventoryUsage, summaryInventoryUsage, remainingInventory, sortedRemainingInventory, lowStockItems,
     summaryFinancials, activeOrdersCount, averageOrderValue, financials, chartData, handleRangeChange,
     refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
-    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder,
+    addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder, setCountedIn,
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,

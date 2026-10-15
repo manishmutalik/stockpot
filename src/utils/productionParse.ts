@@ -237,16 +237,21 @@ export interface ProductionFormFill {
   unplacedBatches: { name: string; batches: number }[];
   /** Items made when they are ordered: never logged as production (utils/madeToOrder), so left out and named. */
   madeToOrder: string[];
+  /**
+   * Items counted by weight (a ganache: utils/itemUnits) the note gave in pieces: the reader counts pieces, so these are
+   * left out and named, to be entered in kg. Batches of them are taken as usual.
+   */
+  byWeight: string[];
 }
 
 /**
  * Turns the checked reading into form values. The same item written twice is one row with the quantities added.
  * Batches become pieces from the item's batch size. What came out is the number written ("got 9"), or the quantity less
- * the waste written.
+ * the waste written. An item counted by weight takes only batches (what came out is then entered in kg).
  */
-export function buildProductionForm(input: { parsed: ParsedProduction; menu: { id: string; name: string; batchMakes?: number; madeToOrder?: boolean }[]; today: string; askAboutVariants?: boolean }): ProductionFormFill {
+export function buildProductionForm(input: { parsed: ParsedProduction; menu: { id: string; name: string; batchMakes?: number; madeToOrder?: boolean; countedIn?: 'kg' | 'l' }[]; today: string; askAboutVariants?: boolean }): ProductionFormFill {
   const { parsed, menu, today } = input;
-  const fill: ProductionFormFill = { rows: [], notFound: [], unplacedWaste: [], unplacedBatches: [], madeToOrder: [] };
+  const fill: ProductionFormFill = { rows: [], notFound: [], unplacedWaste: [], unplacedBatches: [], madeToOrder: [], byWeight: [] };
 
   const rows = new Map<string, { quantity: number; batches: number; waste: number; made?: number }>();
   for (const li of parsed.lineItems) {
@@ -255,6 +260,11 @@ export function buildProductionForm(input: { parsed: ParsedProduction; menu: { i
     const matchedItem = matched ? menu.find(m => m.id === matched) : undefined;
     if (matchedItem?.madeToOrder) {
       if (!fill.madeToOrder.includes(matchedItem.name)) fill.madeToOrder.push(matchedItem.name);
+      continue;
+    }
+    const weighed = !!matchedItem?.countedIn;
+    if (weighed && !li.inBatches) {
+      if (!fill.byWeight.includes(matchedItem!.name)) fill.byWeight.push(matchedItem!.name);
       continue;
     }
     const batchMakes = matchedItem?.batchMakes;
@@ -266,8 +276,11 @@ export function buildProductionForm(input: { parsed: ParsedProduction; menu: { i
       const row = rows.get(matched) ?? { quantity: 0, batches: 0, waste: 0 };
       row.quantity += li.inBatches ? expectedUnits(li.quantity, batchMakes!) : li.quantity;
       if (li.inBatches) row.batches += li.quantity;
-      row.waste += li.wasteUnits ?? 0;
-      if (li.madeUnits !== undefined) row.made = (row.made ?? 0) + li.madeUnits;
+      // Waste and what came out are read in pieces: for an item counted by weight they are entered in kg instead.
+      if (!weighed) {
+        row.waste += li.wasteUnits ?? 0;
+        if (li.madeUnits !== undefined) row.made = (row.made ?? 0) + li.madeUnits;
+      }
       rows.set(matched, row);
     } else {
       fill.notFound.push({

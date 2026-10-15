@@ -5,9 +5,11 @@ import type { RecipeSetupView } from '../../../../src/utils/quickApiTypes';
 import { perItem } from '../../../../src/utils/kitchenMeasures';
 import { squash } from '../../../../src/utils/orderParse';
 import {
-  BUY_UNIT, batchShare, chooseLineMaterial, keptPartsOf, lineCostPerItem, lineMaterial, questionPrompt, resolveDraftLine, usedNewMaterials,
+  BUY_UNIT, batchShare, batchWeight, chooseLineMaterial, chooseUse, keptPartsOf, lineCostPerItem, lineMaterial, questionPrompt, recipeUnit, resolveDraftLine,
+  setKeptUnit, usedNewMaterials,
   type DraftLine, type DraftRecipe, type LineChoice, type RecipeDraft,
 } from '../../../../src/utils/recipeDraft';
+import { formatItemQuantity, fromEntry, perUnit as perItemUnit, toEntry } from '../../../../src/utils/itemUnits';
 import { fmtAmount, perUnit } from '../../lib/recipeReader';
 import { noOutline } from '../../lib/webInput';
 import { colors, fonts, radius } from '../../theme';
@@ -29,6 +31,8 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
 }) {
   const { materials, menu, symbol } = setup;
   const [partSheet, setPartSheet] = useState(false);
+  // Remounts the batch size box when its value is set from outside (a new unit, the suggested weight).
+  const [makesNonce, setMakesNonce] = useState(0);
   const set = (fn: (r: DraftRecipe) => void) => update(d => { const r = d.recipes.find(x => x.key === recipe.key); if (r) fn(r); });
   const sameName = recipe.name.trim() ? menu.find(m => squash(m.name) === squash(recipe.name)) : undefined;
   const existingId = recipe.target.kind === 'existing' ? recipe.target.menuItemId : sameName?.id;
@@ -43,6 +47,9 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
   const keptParts = recipe.use.kind === 'sell' ? keptPartsOf(draft, recipe, materials) : [];
   const total = costs.reduce((a: number, c) => a + (c ?? 0), 0) + keptParts.reduce((a, k) => a + (k.cost ?? 0) * k.perItem, 0);
   const label = recipe.name.trim() || 'This recipe';
+  // What a recipe made ahead and kept is counted in: an existing item's own unit, else the owner's choice (utils/itemUnits).
+  const unit = recipeUnit(recipe, menu);
+  const weight = recipe.use.kind === 'kept' && unit !== 'pcs' ? batchWeight(draft, recipe, materials) : null;
   const partOptions: SheetOption[] = [
     ...draft.recipes.filter(x => x.key !== recipe.key && x.include && x.use.kind === 'sell').map(x => ({ value: `recipe:${x.key}`, label: x.name || 'Unnamed recipe', hint: 'Read from this page' })),
     ...menu.map(m => ({ value: `menu:${m.id}`, label: m.name, hint: 'On your menu' })),
@@ -56,7 +63,14 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
         label="On your menu"
         value={recipe.target.kind === 'existing' ? recipe.target.mode : 'new'}
         options={[{ value: 'replace', label: 'Replace its recipe' }, { value: 'add', label: 'Add to its recipe' }, { value: 'new', label: 'Save as new item' }]}
-        onChange={v => set(r => { r.target = v === 'new' ? { kind: 'new' } : { kind: 'existing', menuItemId: existing.id, mode: v }; })}
+        onChange={v => {
+          set(r => {
+            r.target = v === 'new' ? { kind: 'new' } : { kind: 'existing', menuItemId: existing.id, mode: v };
+            // Kept in the unit of the item on the menu it goes to.
+            if (r.target.kind === 'existing' && r.use.kind === 'kept') setKeptUnit(r, existing.countedIn ?? null);
+          });
+          setMakesNonce(n => n + 1);
+        }}
       />
     </View>
   );
@@ -86,11 +100,11 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
               <Choices
                 label="What it is for" value={recipe.use.kind === 'undecided' ? null : recipe.use.kind}
                 options={[{ value: 'sell', label: 'I sell it' }, { value: 'part', label: 'Mixed into another item' }, { value: 'kept', label: 'Made ahead and kept' }]}
-                onChange={v => set(r => { r.use = v === 'sell' ? { kind: 'sell' } : v === 'part' ? { kind: 'part', of: null, covers: null } : { kind: 'kept', of: null, perItem: 1 }; })}
+                onChange={v => { set(r => chooseUse(r, v, menu)); setMakesNonce(n => n + 1); }}
               />
               <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.grey }}>
                 {recipe.use.kind === 'kept'
-                  ? 'Saved as its own item, not sold (a sponge base, a dough). The items it goes into take it from its stock.'
+                  ? 'Saved as its own item, not sold (a sponge base, a ganache). The items it goes into take it from its stock.'
                   : recipe.use.kind === 'part'
                     ? 'Its ingredients are added to the other item\'s recipe (frosting, whipped cream made fresh).'
                     : 'A base or filling you keep: "Made ahead and kept". One you make fresh each time: "Mixed into".'}
@@ -107,16 +121,39 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
               )}
               {recipe.use.kind === 'kept' && (
                 <View style={{ gap: 10 }}>
-                  <NumberField key={`${recipe.key}-kept-makes`} label="One batch makes" value={recipe.makes} placeholder="e.g. 4.5" flagged={!recipe.makes}
+                  {recipe.target.kind === 'new' && (
+                    <View style={{ gap: 4 }}>
+                      <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.grey }}>Counted in</Text>
+                      <Choices
+                        label={`${label} counted in`} value={unit}
+                        options={[{ value: 'pcs', label: 'Pieces' }, { value: 'kg', label: 'kg' }, { value: 'l', label: 'Litres' }]}
+                        onChange={v => { set(r => setKeptUnit(r, v === 'pcs' ? null : v)); setMakesNonce(n => n + 1); }}
+                      />
+                    </View>
+                  )}
+                  <NumberField key={`${recipe.key}-kept-makes-${makesNonce}`} label={unit === 'pcs' ? 'One batch makes' : `One batch makes (${unit === 'kg' ? 'kg' : 'litres'})`}
+                    value={recipe.makes} placeholder={unit === 'pcs' ? 'e.g. 4.5' : 'e.g. 0.8'} flagged={!recipe.makes}
                     onChange={n => set(r => { r.makes = n; })} />
                   {recipe.makesAsWritten ? <Text style={{ fontFamily: fonts.regular, fontSize: 12, color: colors.grey }}>Written: “{recipe.makesAsWritten}”</Text> : null}
+                  {weight !== null && Math.abs((recipe.makes ?? 0) - weight) > 0.0005 && (
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Use ${formatItemQuantity(unit, weight)}`} onPress={() => { set(r => { r.makes = weight; }); setMakesNonce(n => n + 1); }}>
+                      <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.grey }}>
+                        The ingredients add up to {formatItemQuantity(unit, weight)} (less if some cooks off). <Text style={{ fontFamily: fonts.semibold, color: colors.primary }}>Use {formatItemQuantity(unit, weight)}</Text>
+                      </Text>
+                    </Pressable>
+                  )}
                   <View style={{ gap: 4 }}>
                     <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.grey }}>Used in (optional)</Text>
                     <PickerButton label="Used in" text={usedIn?.label ?? 'Not yet: just save it'} muted={!usedIn} onPress={() => setPartSheet(true)} />
                   </View>
-                  {usedIn && (
-                    <NumberField key={`${recipe.key}-per`} label="How many go into one?" value={recipe.use.perItem} placeholder="e.g. 1" flagged={!recipe.use.perItem}
+                  {usedIn && unit === 'pcs' && (
+                    <NumberField key={`${recipe.key}-per-${makesNonce}`} label="How many go into one?" value={recipe.use.perItem} placeholder="e.g. 1" flagged={!recipe.use.perItem}
                       onChange={n => set(r => { if (r.use.kind === 'kept') r.use.perItem = n; })} />
+                  )}
+                  {usedIn && unit !== 'pcs' && (
+                    <NumberField key={`${recipe.key}-per-${unit}-${makesNonce}`} label="How much goes into one?" suffix={unit === 'kg' ? 'g' : 'ml'}
+                      value={recipe.use.perItem ? toEntry(unit, recipe.use.perItem) : null} placeholder="e.g. 150" flagged={!recipe.use.perItem}
+                      onChange={n => set(r => { if (r.use.kind === 'kept') r.use.perItem = n === null ? null : fromEntry(unit, n); })} />
                   )}
                   {targetChoices}
                 </View>
@@ -155,7 +192,7 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
 
           <View style={{ gap: 2 }}>
             <Text style={{ fontFamily: fonts.semibold, fontSize: 12, color: colors.grey }}>
-              {share ? (recipe.use.kind === 'part' ? 'Ingredients, for each item it is part of' : recipe.use.kind === 'kept' ? 'Ingredients, for one piece' : 'Ingredients, for one item') : 'Ingredients'}
+              {share ? (recipe.use.kind === 'part' ? 'Ingredients, for each item it is part of' : recipe.use.kind === 'kept' ? (unit === 'pcs' ? 'Ingredients, for one piece' : `Ingredients, ${perItemUnit(unit)}`) : 'Ingredients, for one item') : 'Ingredients'}
             </Text>
             {recipe.lines.map((line, i) => (
               <IngredientRow key={line.key} draft={draft} recipe={recipe} line={line} setup={setup} cost={costs[i]} share={share} flagged={issueLines.has(line.key)} update={update} />
@@ -163,12 +200,12 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
           </View>
           {keptParts.map(k => (
             <View key={k.key} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-              <Text style={{ fontFamily: fonts.regular, fontSize: 14, color: colors.ink, flex: 1 }}>+ {fmtAmount(k.perItem)} {k.name} (made ahead)</Text>
+              <Text style={{ fontFamily: fonts.regular, fontSize: 14, color: colors.ink, flex: 1 }}>+ {k.unit === 'pcs' ? fmtAmount(k.perItem) : formatItemQuantity(k.unit, k.perItem)} {k.name} (made ahead)</Text>
               <Text style={{ fontFamily: fonts.mono, fontSize: 14, color: k.cost === null ? colors.amber : colors.ink }}>{k.cost === null ? 'no price yet' : money(symbol, k.cost * k.perItem)}</Text>
             </View>
           ))}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', borderTopWidth: 1, borderColor: `${colors.outline}66`, paddingTop: 10 }}>
-            <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.grey }}>{recipe.use.kind === 'part' ? 'Adds to each item' : recipe.use.kind === 'kept' ? 'Cost of one piece' : 'Cost of one item'}</Text>
+            <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.grey }}>{recipe.use.kind === 'part' ? 'Adds to each item' : recipe.use.kind === 'kept' ? (unit === 'pcs' ? 'Cost of one piece' : `Cost ${perItemUnit(unit)}`) : 'Cost of one item'}</Text>
             <View style={{ alignItems: 'flex-end' }}>
               <Text style={{ fontFamily: fonts.mono, fontSize: 16, color: colors.ink }}>{share ? money(symbol, total) : '—'}</Text>
               {incomplete && <Text style={{ fontFamily: fonts.semibold, fontSize: 11, color: colors.amber }}>cost incomplete</Text>}

@@ -199,6 +199,18 @@ describe('buildProductionForm', () => {
     expect(f.madeToOrder).toEqual(['Chocolate Muffin']);
   });
 
+  it('takes batches of an item counted by weight, but never a count of pieces of it', () => {
+    const weighed = [...menu, { id: 'ganache', name: 'Ganache', countedIn: 'kg' as const, batchMakes: 0.8 }];
+    const f = buildProductionForm({ parsed: parsed({ lineItems: [
+      { nameAsWritten: 'ganache', menuItemId: 'ganache', quantity: 2, inBatches: true, madeUnits: 2, wasteUnits: 1 },
+      { nameAsWritten: 'ganache', menuItemId: 'ganache', quantity: 800 },
+      { nameAsWritten: 'croissants', menuItemId: 'croissant', quantity: 4 },
+    ] }), menu: weighed, today: TODAY });
+    // 2 batches of 0.8 kg; what came out is entered in kg, not read as pieces.
+    expect(f.rows).toEqual([{ recipeId: 'ganache', quantity: 1.6, batches: 2 }, { recipeId: 'croissant', quantity: 4 }]);
+    expect(f.byWeight).toEqual(['Ganache']);
+  });
+
   it('cannot turn batches into pieces without a batch size, so it says so by name', () => {
     const f = build(parsed({ lineItems: [{ nameAsWritten: 'muffins', menuItemId: 'muffin', quantity: 2, inBatches: true }, { nameAsWritten: 'cake', menuItemId: null, quantity: 1, inBatches: true }] }));
     expect(f.rows).toEqual([]);

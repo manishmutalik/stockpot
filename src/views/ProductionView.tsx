@@ -10,6 +10,7 @@ import { MetricCard } from '../components/MetricCard';
 import { clusterProductionRunsBySession } from '../utils/productionRunClustering';
 import { effectiveRecipe } from '../utils/itemParts';
 import { actualCostPerUnit } from '../utils/batches';
+import { formatItemQuantity, itemUnit, unitWord } from '../utils/itemUnits';
 import { daysBetween, getWorstUrgencyForItem } from '../utils/stockAging';
 import { getOldestBatchDate, getRunStatus, getYieldInfo, sellableOf, summarizeProduction } from '../utils/productionStats';
 
@@ -59,7 +60,8 @@ const ProductionRunRow: React.FC<{
   const { percent, waste } = getYieldInfo(run);
   const extra = Math.max(0, sellable - (run.quantityProduced || 0));
   const perPiece = actualCostPerUnit(run);
-  const fmt = (n: number) => String(Math.round(n * 100) / 100);
+  const unit = itemUnit(recipe);
+  const fmt = (n: number) => (unit === 'pcs' ? String(Math.round(n * 100) / 100) : formatItemQuantity(unit, n));
   const status = getRunStatus(run, today);
   const remaining = run.remainingQuantity ?? 0;
   // A due/expired date only matters while there is still stock from the batch.
@@ -91,7 +93,7 @@ const ProductionRunRow: React.FC<{
       )}
       <td className="px-4 py-3 text-right font-mono text-sm font-semibold text-ink whitespace-nowrap">
         {fmt(run.quantityProduced)}
-        {run.batches ? <div className="font-mono text-[11px] font-normal text-muted">{fmt(run.batches)} {run.batches === 1 ? 'batch' : 'batches'}</div> : null}
+        {run.batches ? <div className="font-mono text-[11px] font-normal text-muted">{Math.round(run.batches * 100) / 100} {run.batches === 1 ? 'batch' : 'batches'}</div> : null}
       </td>
       <td className="px-4 py-3 text-right whitespace-nowrap">
         <span
@@ -105,7 +107,7 @@ const ProductionRunRow: React.FC<{
       </td>
       <td className="px-4 py-3 text-right font-mono text-sm font-semibold text-ink whitespace-nowrap">
         {money(run.costTotal || 0)}
-        {perPiece !== null && (waste > 0 || extra > 0 || run.batches) ? <div className="font-mono text-[11px] font-normal text-muted">{money(perPiece)} / piece</div> : null}
+        {perPiece !== null && (waste > 0 || extra > 0 || run.batches) ? <div className="font-mono text-[11px] font-normal text-muted">{money(perPiece)} / {unit === 'pcs' ? 'piece' : unitWord(unit, 1)}</div> : null}
       </td>
       <td className={`px-4 py-3 font-mono text-xs whitespace-nowrap ${expiryTone}`}>
         {run.expiryDate ? new Date(run.expiryDate + 'T00:00:00').toLocaleDateString() : '—'}
@@ -157,10 +159,15 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
   // changing any filter falls back to page 1 without an effect.
   const [pageState, setPageState] = useState({ key: '', page: 1 });
 
-  const summary = useMemo(() => summarizeProduction(productionRuns, today), [productionRuns, today]);
+  // Units count pieces; a kilo of ganache is not a unit (utils/itemUnits).
+  const summary = useMemo(() => {
+    const unitOf = new Map(menu.map(m => [m.id, itemUnit(m)]));
+    return summarizeProduction(productionRuns, today, r => (unitOf.get(r.recipeId) ?? 'pcs') === 'pcs');
+  }, [productionRuns, today, menu]);
 
   const stockedItems = menu.filter(m => (m.finishedGoodsStock ?? 0) > 0);
-  const unitsOnShelf = stockedItems.reduce((s, m) => s + (m.finishedGoodsStock ?? 0), 0);
+  const unitsOnShelf = stockedItems.filter(m => itemUnit(m) === 'pcs').reduce((s, m) => s + (m.finishedGoodsStock ?? 0), 0);
+  const weighedOnShelf = stockedItems.filter(m => itemUnit(m) !== 'pcs').length;
   const freshnessAlerts = stockedItems.filter(m => getWorstUrgencyForItem(m.id, productionRuns, today) !== 'fresh').length;
 
   const filtered = useMemo(
@@ -246,7 +253,7 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
           value={String(stockedItems.length)}
           icon={Package}
           tone={freshnessAlerts > 0 ? 'coral' : 'teal'}
-          footLeft={`${unitsOnShelf} unit${unitsOnShelf === 1 ? '' : 's'} on shelf`}
+          footLeft={`${unitsOnShelf} unit${unitsOnShelf === 1 ? '' : 's'} on shelf${weighedOnShelf > 0 ? `, ${weighedOnShelf} by weight` : ''}`}
           footRight={freshnessAlerts > 0 ? `${freshnessAlerts} freshness alert${freshnessAlerts === 1 ? '' : 's'}` : null}
         />
       </div>
@@ -266,7 +273,8 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
           <div className="px-4 sm:px-6 py-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {stockedItems.map(item => {
               const stock = item.finishedGoodsStock ?? 0;
-              const baseTarget = { id: item.id, name: item.name, type: 'recipe' as const, maxQty: stock, unit: 'pcs', costPerUnit: costPerUnitFor(item) };
+              const unit = itemUnit(item);
+              const baseTarget = { id: item.id, name: item.name, type: 'recipe' as const, maxQty: stock, unit, costPerUnit: costPerUnitFor(item) };
               const urgency = getWorstUrgencyForItem(item.id, productionRuns, today);
               const oldest = getOldestBatchDate(item.id, productionRuns);
               const age = oldest ? daysBetween(oldest, today) : null;
@@ -275,8 +283,8 @@ export const ProductionView: React.FC<AppViewProps> = (props) => {
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-ink truncate">{item.name}</div>
                     <div className="flex items-center flex-wrap gap-1.5 mt-1">
-                      <span className={`font-mono text-[11px] font-semibold px-2 py-0.5 rounded-full ${stock <= 5 ? 'bg-amber-100 text-amber-700' : 'bg-margin/10 text-[#006143]'}`}>
-                        {stock} unit{stock === 1 ? '' : 's'}
+                      <span className={`font-mono text-[11px] font-semibold px-2 py-0.5 rounded-full ${unit === 'pcs' && stock <= 5 ? 'bg-amber-100 text-amber-700' : 'bg-margin/10 text-[#006143]'}`}>
+                        {unit === 'pcs' ? `${stock} unit${stock === 1 ? '' : 's'}` : formatItemQuantity(unit, stock)}
                       </span>
                       {urgency === 'fresh' ? (
                         <span className="inline-flex items-center gap-1 font-mono text-[10px] font-semibold px-2 py-0.5 rounded-full bg-margin/10 text-[#006143]">
