@@ -329,3 +329,26 @@ describe('SettingsView', () => {
     });
   });
 });
+
+describe('User Account: email verification', () => {
+  const account = (user: Record<string, unknown>) => makeProps({
+    activeSettingsTab: 'account', user,
+    sendVerificationEmail: vi.fn(async () => ({ ok: true })), checkEmailVerified: vi.fn(async () => false),
+  });
+
+  it('asks an unverified email-and-password account to verify', async () => {
+    const props = account({ name: 'Asha', email: 'asha@example.com', usesPassword: true, emailVerified: false });
+    render(<SettingsView {...props} />);
+    expect(screen.getByRole('region', { name: 'Email verification' }).textContent).toContain("Your email isn't verified");
+    fireEvent.click(screen.getByRole('button', { name: 'Send verification email' }));
+    expect(props.sendVerificationEmail).toHaveBeenCalled();
+  });
+
+  it('says nothing to a verified account or a Google one', () => {
+    const { unmount } = render(<SettingsView {...account({ name: 'Asha', email: 'asha@example.com', usesPassword: true, emailVerified: true })} />);
+    expect(screen.queryByRole('region', { name: 'Email verification' })).toBeNull();
+    unmount();
+    render(<SettingsView {...account({ name: 'Asha', email: 'asha@example.com', usesPassword: false, emailVerified: true })} />);
+    expect(screen.queryByRole('region', { name: 'Email verification' })).toBeNull();
+  });
+});

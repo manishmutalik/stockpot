@@ -191,3 +191,14 @@ describe('filling the form from a message', () => {
     expect(screen.queryByText(/Filled from your message/)).toBeNull();
   });
 });
+
+describe('when AI is not available but could be', () => {
+  it('says why in place of the message box, and not when the box is there', () => {
+    const { unmount } = render(<AddOrderModal isOpen onClose={vi.fn()} menu={menu as never} onSave={vi.fn()} currency={currency} orderParser={null} aiBlocked="Verify your email to use AI features." today="2026-10-01" />);
+    expect(screen.getByRole('note').textContent).toContain('Verify your email to use AI features.');
+    expect(screen.queryByRole('button', { name: 'Fill the form' })).toBeNull();
+    unmount();
+    render(<AddOrderModal isOpen onClose={vi.fn()} menu={menu as never} onSave={vi.fn()} currency={currency} orderParser={{ parse: vi.fn() }} aiBlocked="Verify your email to use AI features." today="2026-10-01" />);
+    expect(screen.queryByRole('note')).toBeNull();
+  });
+});
