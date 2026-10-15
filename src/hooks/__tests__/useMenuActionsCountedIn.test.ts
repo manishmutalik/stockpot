@@ -57,6 +57,13 @@ describe('counting an item by weight', () => {
     expect(showAlert).toHaveBeenCalledWith('Used in other items', expect.stringMatching(/^Truffle cake uses Chocolate ganache, in pieces/));
   });
 
+  it('turns a recipe per piece back into the whole batch, and clears a batch size that cannot carry over', async () => {
+    // Made as 4 pieces a batch, 50 g of cream each: the whole batch is 200 g of cream.
+    const { h } = setup([{ ...ganache, batchMakes: 4, recipe: [{ materialId: 'cream', amount: 50, unit: 'g' }] }]);
+    await h.setCountedIn('ganache', 'kg');
+    expect(setDoc).toHaveBeenCalledWith({ path: 'users/user1/menu/ganache' }, { countedIn: 'kg', recipe: [{ materialId: 'cream', amount: 200, unit: 'g' }], batchMakes: 'DELETE' }, { merge: true });
+  });
+
   it('clears stock counted the old way once the owner agrees', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
     const { h } = setup([{ ...ganache, finishedGoodsStock: 3 }]);

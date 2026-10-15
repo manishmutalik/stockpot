@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { CookingPot } from 'lucide-react';
 import type { MenuItem, ProductionRun } from '../types';
 import { batchYield } from '../utils/batches';
-import { formatItemQuantity, itemUnit, unitWord } from '../utils/itemUnits';
+import { formatItemQuantity, fromEntry, itemUnit, smallUnit, toEntry, unitWord } from '../utils/itemUnits';
 
 /**
  * In the recipe editor: how many one batch makes (4.5 sponge bases from one mix, or 0.8 kg of ganache), for items made in
@@ -21,6 +21,8 @@ export const BatchSizeEditor: React.FC<{
 }> = ({ item, runs, unitCost, currencySymbol, onSet }) => {
   const makes = item.batchMakes && item.batchMakes > 0 ? item.batchMakes : null;
   const unit = itemUnit(item);
+  // By weight, the batch is typed as recipes say it: grams (millilitres), and kept in kg (litres).
+  const small = smallUnit(unit);
   const say = (n: number) => (unit === 'pcs' ? fmt(n) : formatItemQuantity(unit, n));
   // Offered once, right after a batch size is first set: the recipe may have been typed in for the whole batch.
   const [offerDivide, setOfferDivide] = useState(false);
@@ -43,8 +45,8 @@ export const BatchSizeEditor: React.FC<{
         <CookingPot size={16} className="text-primary shrink-0" />
         <label className="flex items-center gap-2 text-sm font-semibold text-ink">
           One batch makes
-          <BatchInput value={makes} onCommit={commit} />
-          <span className="font-normal text-muted">{unitWord(unit)}</span>
+          <BatchInput value={makes === null ? null : toEntry(unit, makes)} onCommit={n => commit(n === null ? null : fromEntry(unit, n))} />
+          <span className="font-normal text-muted">{small ?? unitWord(unit)}</span>
         </label>
         {makes !== null && unitCost > 0 && (
           <span className="text-xs text-muted">One batch costs <span className="font-mono font-semibold text-ink">{money(unitCost * makes)}</span></span>
@@ -54,7 +56,7 @@ export const BatchSizeEditor: React.FC<{
         {makes === null
           ? unit === 'pcs'
             ? 'For things made in batches, such as 4.5 sponge bases from one mix. Leave it empty if you make them one at a time.'
-            : `For things made in batches, such as 0.8 ${unit} of ganache from one mix.`
+            : `How much one mix makes, in ${small === 'g' ? 'grams' : 'ml'}: 800 for a ganache that makes 800 ${small}.`
           : unit === 'pcs'
             ? `The recipe below is for one piece; a batch uses it ${fmt(makes)} times. Log production in batches, with what actually came out.`
             : `The recipe below is for 1 ${unitWord(unit, 1)}; a batch makes ${say(makes)}. Log production in batches, with what actually came out.`}
@@ -64,9 +66,9 @@ export const BatchSizeEditor: React.FC<{
         <div className="flex flex-wrap items-center gap-2 rounded-lg bg-primary/5 px-3 py-2 text-xs text-ink">
           <span>Is the recipe below written for the whole batch?</span>
           <button type="button" onClick={() => { onSet(makes, 'from-whole-batch'); setOfferDivide(false); }} className="font-semibold text-primary hover:text-primary-dark underline">
-            Divide it by {fmt(makes)}
+            {unit === 'pcs' ? `Divide it by ${fmt(makes)}` : `Yes, make it for 1 ${unitWord(unit, 1)}`}
           </button>
-          <button type="button" onClick={() => setOfferDivide(false)} className="text-muted hover:text-ink">No, it is for one</button>
+          <button type="button" onClick={() => setOfferDivide(false)} className="text-muted hover:text-ink">{unit === 'pcs' ? 'No, it is for one' : `No, it is for 1 ${unitWord(unit, 1)}`}</button>
         </div>
       )}
 

@@ -110,7 +110,7 @@ describe('RecipeReaderModal', () => {
     fireEvent.click(within(within(ganache).getByRole('radiogroup', { name: 'Chocolate ganache counted in' })).getByRole('radio', { name: 'kg' }));
     // 100 ml of cream: the batch weighs about 100 g.
     fireEvent.click(within(ganache).getByRole('button', { name: 'Use 100 g' }));
-    expect((within(ganache).getByLabelText('One batch makes (kg)') as HTMLInputElement).value).toBe('0.1');
+    expect((within(ganache).getByLabelText('One batch makes (g)') as HTMLInputElement).value).toBe('100');
     fireEvent.change(within(ganache).getByLabelText('Used in (optional)'), { target: { value: 'recipe:r1' } });
     fireEvent.change(within(ganache).getByLabelText('How much goes into one (g)'), { target: { value: '5' } });
     expect(within(cookies).getByText(/\+ 5 g Chocolate ganache/)).toBeTruthy();
@@ -124,6 +124,20 @@ describe('RecipeReaderModal', () => {
     expect(data.items[0]).toMatchObject({ key: 'recipe:r2', notForSale: true, countedIn: 'kg', batchMakes: 0.1 });
     expect(data.items[0].lines.map((l: { amount: number; unit: string }) => [l.amount, l.unit])).toEqual([[1000, 'ml']]);
     expect(data.items[1].parts).toEqual([{ item: { newKey: 'recipe:r2' }, quantity: 0.005 }]);
+  });
+
+  it('keeps a decimal point while it is typed', async () => {
+    open();
+    await readText();
+    const ganache = screen.getByRole('region', { name: 'Chocolate ganache' });
+    fireEvent.click(within(ganache).getByLabelText('Made ahead and kept'));
+    const makes = within(ganache).getByLabelText('One batch makes') as HTMLInputElement;
+    fireEvent.change(makes, { target: { value: '4.' } });
+    expect(makes.value).toBe('4.');
+    fireEvent.change(makes, { target: { value: '4.5' } });
+    expect(makes.value).toBe('4.5');
+    fireEvent.change(makes, { target: { value: '0.' } });
+    expect(makes.value).toBe('0.');
   });
 
   it('shows the reader\'s message when nothing could be read, and lets the owner try again', async () => {

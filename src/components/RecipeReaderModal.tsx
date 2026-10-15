@@ -8,7 +8,7 @@ import { squash } from '../utils/orderParse';
 import { formatItemQuantity, fromEntry, perUnit, toEntry } from '../utils/itemUnits';
 import { RECIPE_MAX_PHOTOS } from '../utils/recipeParse';
 import {
-  BUY_UNIT, batchShare, batchWeight, buildDraft, chooseLineMaterial, chooseUse, draftIssues, draftToImport, keptPartsOf, lineCostPerItem, lineMaterial,
+  BUY_UNIT, asksWhatItIs, batchShare, batchWeight, buildDraft, chooseLineMaterial, chooseUse, draftIssues, draftToImport, keptPartsOf, lineCostPerItem, lineMaterial,
   questionPrompt, recipeUnit, resolveDraftLine, setKeptUnit, usedNewMaterials,
   type DraftImport, type DraftLine, type DraftRecipe, type RecipeDraft,
 } from '../utils/recipeDraft';
@@ -34,6 +34,20 @@ type Step = 'input' | 'reading' | 'check' | 'saved';
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 const num = (v: string): number | null => { const n = Number(v); return v.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null; };
 const fmt = (n: number) => (Math.round(n * 100) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+
+/**
+ * A number box that keeps what is typed ("4.", "0.") while passing on the number it reads (null for none), so decimals can
+ * be typed a key at a time. A new value from outside replaces the text.
+ */
+const NumberInput: React.FC<{ id?: string; label?: string; value: number | null; onChange: (n: number | null) => void; placeholder?: string; className: string }> = ({ id, label, value, onChange, placeholder, className }) => {
+  const [text, setText] = useState(value === null ? '' : String(value));
+  const [shown, setShown] = useState(value);
+  if (shown !== value) { setShown(value); setText(value === null ? '' : String(value)); }
+  return (
+    <input id={id} aria-label={label} inputMode="decimal" value={text} placeholder={placeholder} className={className}
+      onChange={e => { const n = num(e.target.value.replace(',', '.')); setText(e.target.value); setShown(n); onChange(n); }} />
+  );
+};
 
 export const RecipeReaderModal: React.FC<RecipeReaderModalProps> = ({ reader, materials, menu, currency, forMenuItemId, onClose, onSave }) => {
   const [step, setStep] = useState<Step>('input');
@@ -245,7 +259,7 @@ const RecipeCard: React.FC<{
       </div>
       {recipe.include && (
         <>
-          {(recipe.looksLikeComponent || recipe.use.kind !== 'sell') && (
+          {asksWhatItIs(recipe) && (
             <fieldset className={`rounded-xl p-3 space-y-2 ${recipe.use.kind === 'undecided' ? 'bg-amber-50' : 'bg-stone-50'}`}>
               <legend className="sr-only">What it is for</legend>
               <p className="text-sm font-semibold text-ink">What is {label}?</p>
@@ -272,8 +286,8 @@ const RecipeCard: React.FC<{
                   </div>
                   <div>
                     <label className={MODAL_LABEL} htmlFor={`${recipe.key}-covers`}>One batch covers</label>
-                    <input id={`${recipe.key}-covers`} inputMode="decimal" value={recipe.use.covers ?? ''} placeholder="e.g. 2"
-                      onChange={e => set(r => { if (r.use.kind === 'part') r.use.covers = num(e.target.value); })} className={modalField(!recipe.use.covers)} />
+                    <NumberInput id={`${recipe.key}-covers`} value={recipe.use.covers} placeholder="e.g. 2"
+                      onChange={n => set(r => { if (r.use.kind === 'part') r.use.covers = n; })} className={modalField(!recipe.use.covers)} />
                   </div>
                 </div>
               )}
@@ -292,9 +306,10 @@ const RecipeCard: React.FC<{
                     </div>
                   )}
                   <div>
-                    <label className={MODAL_LABEL} htmlFor={`${recipe.key}-makes`}>One batch makes{unit !== 'pcs' && ` (${unit === 'kg' ? 'kg' : 'litres'})`}</label>
-                    <input id={`${recipe.key}-makes`} inputMode="decimal" value={recipe.makes ?? ''} placeholder={unit === 'pcs' ? 'e.g. 4.5' : 'e.g. 0.8'}
-                      onChange={e => set(r => { const n = num(e.target.value); r.makes = n && n > 0 ? n : null; })} className={modalField(!recipe.makes)} />
+                    <label className={MODAL_LABEL} htmlFor={`${recipe.key}-makes`}>One batch makes{unit !== 'pcs' && ` (${unit === 'kg' ? 'g' : 'ml'})`}</label>
+                    {/* By weight, typed as the recipe says it: grams (millilitres), kept in kg. */}
+                    <NumberInput key={unit} id={`${recipe.key}-makes`} value={recipe.makes ? toEntry(unit, recipe.makes) : null} placeholder={unit === 'pcs' ? 'e.g. 4.5' : 'e.g. 800'}
+                      onChange={n => set(r => { r.makes = n === null ? null : fromEntry(unit, n); })} className={modalField(!recipe.makes)} />
                     {recipe.makesAsWritten && <p className="text-[11px] text-muted mt-1">Written: “{recipe.makesAsWritten}”</p>}
                     {weight !== null && Math.abs((recipe.makes ?? 0) - weight) > 0.0005 && (
                       <p className="text-[11px] text-muted mt-1">
@@ -315,16 +330,16 @@ const RecipeCard: React.FC<{
                   {recipe.use.of && unit === 'pcs' && (
                     <div>
                       <label className={MODAL_LABEL} htmlFor={`${recipe.key}-per`}>How many go into one</label>
-                      <input id={`${recipe.key}-per`} inputMode="decimal" value={recipe.use.perItem ?? ''} placeholder="e.g. 1"
-                        onChange={e => set(r => { if (r.use.kind === 'kept') r.use.perItem = num(e.target.value); })} className={modalField(!recipe.use.perItem)} />
+                      <NumberInput id={`${recipe.key}-per`} value={recipe.use.perItem} placeholder="e.g. 1"
+                        onChange={n => set(r => { if (r.use.kind === 'kept') r.use.perItem = n; })} className={modalField(!recipe.use.perItem)} />
                       <p className="text-[11px] text-muted mt-1">0.5 for a half-kg cake on half a base.</p>
                     </div>
                   )}
                   {recipe.use.of && unit !== 'pcs' && (
                     <div>
                       <label className={MODAL_LABEL} htmlFor={`${recipe.key}-per`}>How much goes into one ({unit === 'kg' ? 'g' : 'ml'})</label>
-                      <input id={`${recipe.key}-per`} inputMode="decimal" value={recipe.use.perItem ? toEntry(unit, recipe.use.perItem) : ''} placeholder="e.g. 150"
-                        onChange={e => set(r => { if (r.use.kind === 'kept') { const n = num(e.target.value); r.use.perItem = n && n > 0 ? fromEntry(unit, n) : null; } })} className={modalField(!recipe.use.perItem)} />
+                      <NumberInput id={`${recipe.key}-per`} value={recipe.use.perItem ? toEntry(unit, recipe.use.perItem) : null} placeholder="e.g. 150"
+                        onChange={n => set(r => { if (r.use.kind === 'kept') r.use.perItem = n === null ? null : fromEntry(unit, n); })} className={modalField(!recipe.use.perItem)} />
                     </div>
                   )}
                   {existing && (
@@ -350,9 +365,12 @@ const RecipeCard: React.FC<{
             <div className="grid sm:grid-cols-3 gap-3">
               <div>
                 <label className={MODAL_LABEL} htmlFor={`${recipe.key}-makes`}>One batch makes</label>
-                <input id={`${recipe.key}-makes`} inputMode="decimal" value={recipe.makes ?? ''} placeholder="How many?"
-                  onChange={e => set(r => { const n = num(e.target.value); r.makes = n && n > 0 ? n : null; })} className={modalField(!recipe.makes)} />
+                <NumberInput id={`${recipe.key}-makes`} value={recipe.makes} placeholder="How many?"
+                  onChange={n => set(r => { r.makes = n; })} className={modalField(!recipe.makes)} />
                 {recipe.makesAsWritten && <p className="text-[11px] text-muted mt-1">Written: “{recipe.makesAsWritten}”</p>}
+                {recipe.measuredYield && (
+                  <p className="text-[11px] text-amber-700 mt-1">That is a weight, not a number of pieces. Kept and used by weight in other items? Choose “Made ahead and kept” above.</p>
+                )}
               </div>
               {existing ? (
                 <div className="sm:col-span-2">
@@ -368,7 +386,7 @@ const RecipeCard: React.FC<{
               {recipe.target.kind === 'new' && (
                 <div>
                   <label className={MODAL_LABEL} htmlFor={`${recipe.key}-price`}>Selling price ({currency}, optional)</label>
-                  <input id={`${recipe.key}-price`} inputMode="decimal" value={recipe.sellingPrice ?? ''} onChange={e => set(r => { r.sellingPrice = num(e.target.value); })} className={modalField()} />
+                  <NumberInput id={`${recipe.key}-price`} value={recipe.sellingPrice} onChange={n => set(r => { r.sellingPrice = n; })} className={modalField()} />
                 </div>
               )}
               <label className="sm:col-span-3 flex items-start gap-2 text-sm text-ink">
@@ -500,8 +518,8 @@ const NewMaterials: React.FC<{ draft: RecipeDraft; currency: string; update: (fn
           <select aria-label={`Unit for ${n.name}`} value={n.unit} onChange={e => set(n.key, x => { x.unit = e.target.value as 'g' | 'ml' | 'pcs'; })} className={`${modalField()} !py-2 bg-white`}>
             <option value="g">grams</option><option value="ml">ml</option><option value="pcs">pieces</option>
           </select>
-          <input aria-label={`Price for ${n.name}, per ${BUY_UNIT[n.unit]}`} inputMode="decimal" placeholder={`${currency} per ${BUY_UNIT[n.unit]}`}
-            value={n.pricePerBuyUnit ?? ''} onChange={e => set(n.key, x => { x.pricePerBuyUnit = num(e.target.value); })} className={`${modalField()} !py-2 bg-white font-mono`} />
+          <NumberInput label={`Price for ${n.name}, per ${BUY_UNIT[n.unit]}`} placeholder={`${currency} per ${BUY_UNIT[n.unit]}`}
+            value={n.pricePerBuyUnit} onChange={v => set(n.key, x => { x.pricePerBuyUnit = v; })} className={`${modalField()} !py-2 bg-white font-mono`} />
         </div>
       ))}
     </section>

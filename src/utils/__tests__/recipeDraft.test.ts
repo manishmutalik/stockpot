@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { batchWeight, buildDraft, chooseLineMaterial, chooseUse, measuredYield, recipeUnit, setKeptUnit, draftIssues, draftToImport, keptPartsOf, keptPieceCost, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
+import { asksWhatItIs, batchWeight, buildDraft, chooseLineMaterial, chooseUse, measuredYield, recipeUnit, setKeptUnit, draftIssues, draftToImport, keptPartsOf, keptPieceCost, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
 import type { ParsedIngredient, ParsedRecipe, ParsedRecipes } from '../recipeParse';
 import type { MenuItem, RawMaterial } from '../../types';
 import { planImportRecipes } from '../plans/planRecipes';
@@ -260,9 +260,13 @@ describe('a ganache made ahead and kept by weight', () => {
   });
 
   it('never takes "makes 800 g" as 800 pieces, and counts it in kg once it is made ahead and kept', () => {
-    const d = draft(ganache('makes 800 g', 800));
+    // Not flagged as a component by the reader: a yield by weight still asks what it is.
+    const d = draft({ ...ganache('makes 800 g', 800), looksLikeComponent: false });
     const g = d.recipes[1];
     expect(g.makes).toBeNull();
+    expect(g.use).toEqual({ kind: 'undecided' });
+    expect(asksWhatItIs(g)).toBe(true);
+    expect(asksWhatItIs(d.recipes[0])).toBe(false);
     expect(g.measuredYield).toEqual({ unit: 'kg', amount: 0.8 });
     chooseUse(g, 'kept');
     expect(g).toMatchObject({ countedIn: 'kg', makes: 0.8, use: { kind: 'kept', of: null, perItem: null } });
@@ -329,5 +333,21 @@ describe('a ganache made ahead and kept by weight', () => {
     chooseUse(g, 'kept', [{ id: 'g1', name: 'Chocolate ganache' }]);
     expect(g.countedIn).toBeUndefined();
     expect(g.use).toEqual({ kind: 'kept', of: null, perItem: 1 });
+  });
+});
+
+describe('the ganache from the field: 150 g chocolate, 250 g cream, 15 g butter, makes 400 g', () => {
+  it('is saved per kg: 375 g chocolate, 625 g cream, 37.5 g butter', () => {
+    const mats = [mat('m_choc', 'Chocolate', 'kg', 800), mat('m_cream', 'Amul cream', 'kg', 220), mat('m_butter', 'Butter', 'kg', 560)];
+    const recipe: ParsedRecipe = {
+      name: 'Chocolate ganache', makesAsWritten: 'Yield: 400gm', makes: 400, looksLikeComponent: false, looksCutOff: false,
+      ingredients: [ing('Chocolate', '150', 'g', { materialId: 'm_choc' }), ing('Amul cream', '250', 'g', { materialId: 'm_cream' }), ing('Butter', '15', 'g', { materialId: 'm_butter' })],
+    };
+    const d = buildDraft({ recipes: [recipe], moreNotRead: false }, { materials: mats, menu: [], fromPhotos: false });
+    chooseUse(d.recipes[0], 'kept');
+    expect(d.recipes[0]).toMatchObject({ countedIn: 'kg', makes: 0.4 });
+    const out = draftToImport(d, mats, [])!;
+    expect(out.items[0]).toMatchObject({ countedIn: 'kg', batchMakes: 0.4 });
+    expect(out.items[0].lines.map(l => [l.amount, l.unit])).toEqual([[375, 'g'], [625, 'g'], [37.5, 'g']]);
   });
 });

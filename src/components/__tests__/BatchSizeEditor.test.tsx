@@ -53,11 +53,20 @@ describe('BatchSizeEditor', () => {
 describe('BatchSizeEditor, for an item counted by weight', () => {
   const ganache: MenuItem = { id: 'g', name: 'Ganache', sellingPrice: 0, notForSale: true, countedIn: 'kg', recipe: [{ materialId: 'cream', amount: 500, unit: 'ml' }] };
 
-  it('takes the batch in kg and says it in grams and kilos', () => {
+  it('takes the batch in grams, as recipes say it, keeps it in kg, and offers to make the recipe for 1 kg', () => {
     const onSet = vi.fn();
     const view = render(<BatchSizeEditor item={ganache} runs={[]} unitCost={400} currencySymbol="₹" onSet={onSet} />);
-    expect(screen.getByText('kg')).toBeTruthy();
-    expect(screen.getByText(/0.8 kg of ganache from one mix/)).toBeTruthy();
+    expect(screen.getByText('g')).toBeTruthy();
+    expect(screen.getByText(/800 for a ganache that makes 800 g/)).toBeTruthy();
+    // A ganache that makes 400 g: typed as 400, kept as 0.4 kg (never 400 kg).
+    const box = screen.getByLabelText('One batch makes');
+    fireEvent.change(box, { target: { value: '400' } });
+    fireEvent.blur(box);
+    expect(onSet).toHaveBeenLastCalledWith(0.4);
+    view.rerender(<BatchSizeEditor item={{ ...ganache, batchMakes: 0.4 }} runs={[]} unitCost={400} currencySymbol="₹" onSet={onSet} />);
+    expect((screen.getByLabelText('One batch makes') as HTMLInputElement).value).toBe('400');
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, make it for 1 kg' }));
+    expect(onSet).toHaveBeenLastCalledWith(0.4, 'from-whole-batch');
     view.rerender(<BatchSizeEditor item={{ ...ganache, batchMakes: 0.8 }} runs={[]} unitCost={400} currencySymbol="₹" onSet={onSet} />);
     expect(screen.getByText(/The recipe below is for 1 kg; a batch makes 800 g/)).toBeTruthy();
     expect(screen.getByText('₹320.00')).toBeTruthy(); // 0.8 kg × ₹400 a kg
