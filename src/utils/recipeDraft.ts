@@ -21,7 +21,7 @@
 import type { ItemUnitByMeasure, MenuItem, RawMaterial } from '../types';
 import { convertAmount } from './conversions';
 import { matchMaterialByName, parseAmount, perItem, resolveLine, suggestMaterialUnit, type LineAnswers, type LineQuestion, type LineResolution } from './kitchenMeasures';
-import { defaultEntryUnit, ENTRY_UNITS, entryUnitsFor, familyOf, fromEntryUnit, inEntryUnit, itemUnit, type EntryUnit, type ItemUnit } from './itemUnits';
+import { defaultEntryUnit, ENTRY_UNITS, familyOf, fromEntryUnit, inEntryUnit, itemUnit, type EntryUnit, type ItemUnit } from './itemUnits';
 import { squash } from './orderParse';
 import type { MaterialMemory, NewMaterialInput, RecipeImportItem, RecipeImportLine } from './plans/planRecipes';
 import type { ParsedIngredient, ParsedRecipes } from './recipeParse';
@@ -126,16 +126,38 @@ export function measuredYield(asWritten: string | undefined): MeasuredYield | nu
 export const asksWhatItIs = (recipe: DraftRecipe): boolean =>
   recipe.looksLikeComponent || !!recipe.measuredYield || recipe.use.kind !== 'sell';
 
+/** The item on the menu a recipe goes to, when it goes to one. */
+const targetItem = (recipe: DraftRecipe, menu: DraftMenuItem[]): DraftMenuItem | undefined =>
+  recipe.target.kind === 'existing' ? menu.find(m => m.id === (recipe.target as { menuItemId: string }).menuItemId) : undefined;
+
 /**
- * The unit a recipe's item is counted in: an existing item's own; else, for one sold or made ahead, what "One batch makes"
- * was typed in (utils/itemUnits). A component mixed into another item has no unit of its own.
+ * The unit a recipe's item is counted in: what "One batch makes" was typed in (utils/itemUnits); until a unit is chosen for
+ * a recipe going to an item already on the menu, that item's own. A component mixed into another item has no unit.
  */
 export function recipeUnit(recipe: DraftRecipe, menu: DraftMenuItem[]): ItemUnit {
-  if (recipe.target.kind === 'existing') {
-    const id = recipe.target.menuItemId;
-    return itemUnit(menu.find(m => m.id === id));
-  }
-  return recipe.use.kind === 'kept' || recipe.use.kind === 'sell' ? itemUnit(recipe) : 'pcs';
+  if (recipe.use.kind !== 'kept' && recipe.use.kind !== 'sell') return 'pcs';
+  if (recipe.target.kind === 'existing' && !recipe.makesIn) return itemUnit(targetItem(recipe, menu));
+  return itemUnit(recipe);
+}
+
+/** What saving does to an item already on the menu whose unit changes, for the check screen; null when nothing changes. */
+export function unitChangeNote(recipe: DraftRecipe, menu: DraftMenuItem[]): string | null {
+  const change = unitChange(recipe, menu);
+  const existing = targetItem(recipe, menu);
+  if (change === undefined || !existing) return null;
+  const word = change === 'kg' ? 'kg' : change === 'l' ? 'litres' : 'pieces';
+  return `Saving counts ${existing.name} in ${word} from now on${change ? ', made for other items (not sold on the menu)' : ''}. Any stock of it counted the old way is cleared, and items that use it keep their numbers, now in ${word}: check them on the Menu.`;
+}
+
+/**
+ * The unit an item already on the menu changes to when saved ('kg', 'l', or null for pieces); undefined when it keeps its
+ * own (or the recipe makes a new item).
+ */
+export function unitChange(recipe: DraftRecipe, menu: DraftMenuItem[]): ItemUnitByMeasure | null | undefined {
+  const existing = targetItem(recipe, menu);
+  if (!existing || (recipe.use.kind !== 'kept' && recipe.use.kind !== 'sell')) return undefined;
+  const unit = recipeUnit(recipe, menu);
+  return unit === itemUnit(existing) ? undefined : unit === 'pcs' ? null : unit;
 }
 
 /** What "One batch makes" is typed in: the unit chosen beside it, or by default pieces, g or kg (ml or litres). */
@@ -145,9 +167,11 @@ export function makesUnitOf(recipe: DraftRecipe, menu: DraftMenuItem[]): EntryUn
   return defaultEntryUnit(unit, recipe.makes);
 }
 
-/** The units "One batch makes" can be typed in: any, unless the recipe goes to an item already on the menu. */
-export const makesUnitsFor = (recipe: DraftRecipe, menu: DraftMenuItem[]): EntryUnit[] =>
-  recipe.target.kind === 'existing' ? entryUnitsFor(recipeUnit(recipe, menu)) : ENTRY_UNITS.map(u => u.value);
+/**
+ * The units "One batch makes" can be typed in: any. For an item already on the menu, a different kind (kg for one counted
+ * in pieces) changes what it is counted in when saved (`unitChange`).
+ */
+export const makesUnitsFor = (_recipe: DraftRecipe, _menu: DraftMenuItem[]): EntryUnit[] => ENTRY_UNITS.map(u => u.value);
 
 /** "One batch makes" as typed, in its unit (400 for 0.4 kg shown in g). */
 export const makesShown = (recipe: DraftRecipe, menu: DraftMenuItem[]): number | null =>
@@ -160,18 +184,15 @@ export function setMakes(recipe: DraftRecipe, typed: number | null, menu: DraftM
 
 /**
  * Chooses the unit beside "One batch makes": the number typed stays and now means that unit (1.5 is 1.5 kg once kg is
- * chosen). It is also what a new item is counted in: pieces, or by weight (g, kg) or volume (ml, litres). Changing between
- * pieces and weight starts "how much goes into one" again, as its meaning changes. A recipe going to an item already on
- * the menu keeps that item's unit.
+ * chosen). It is also what the item is counted in: pieces, or by weight (g, kg) or volume (ml, litres), for a new item or
+ * one already on the menu (`unitChange`). Changing between pieces and weight starts "how much goes into one" again, as its
+ * meaning changes.
  */
 export function setMakesUnit(recipe: DraftRecipe, unit: EntryUnit, menu: DraftMenuItem[]): void {
-  if (!makesUnitsFor(recipe, menu).includes(unit)) return;
   const shown = makesShown(recipe, menu);
   const before = recipeUnit(recipe, menu);
   const family = familyOf(unit);
-  if (recipe.target.kind === 'new') {
-    if (family === 'pcs') delete recipe.countedIn; else recipe.countedIn = family;
-  }
+  if (family === 'pcs') delete recipe.countedIn; else recipe.countedIn = family;
   recipe.makesIn = unit;
   recipe.makes = shown === null ? null : fromEntryUnit(shown, unit);
   if (before !== family && recipe.use.kind === 'kept') recipe.use.perItem = family === 'pcs' ? 1 : null;
@@ -465,6 +486,7 @@ export function draftToImport(draft: RecipeDraft, materials: DraftMaterial[], me
       lines: linesOf(r),
       batchMakes: r.makes!,
       ...(r.target.kind === 'new' && { notForSale: true, ...(r.countedIn && { countedIn: r.countedIn }) }),
+      ...(unitChange(r, menu) !== undefined && { countedIn: unitChange(r, menu) }),
     };
     items.push(item);
     byRecipe.set(`recipe:${r.key}`, item);
@@ -477,6 +499,8 @@ export function draftToImport(draft: RecipeDraft, materials: DraftMaterial[], me
       lines: linesOf(r),
       ...(r.makes && r.makes > 0 && { batchMakes: r.makes }),
       ...(r.madeToOrder && { madeToOrder: true }),
+      // Sold, an item on the menu counted by weight is counted in pieces again (selling by weight comes later).
+      ...(unitChange(r, menu) === null && { countedIn: null }),
     };
     items.push(item);
     byRecipe.set(`recipe:${r.key}`, item);

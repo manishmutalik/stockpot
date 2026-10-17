@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { asksWhatItIs, batchWeight, buildDraft, chooseLineMaterial, chooseUse, makesShown, makesUnitOf, measuredYield, recipeUnit, setMakes, setMakesUnit, draftIssues, draftToImport, keptPartsOf, keptPieceCost, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
+import { asksWhatItIs, batchWeight, buildDraft, unitChange, unitChangeNote, chooseLineMaterial, chooseUse, makesShown, makesUnitOf, measuredYield, recipeUnit, setMakes, setMakesUnit, draftIssues, draftToImport, keptPartsOf, keptPieceCost, lineCostPerItem, questionPrompt, resolveDraftLine, usedNewMaterials, type RecipeDraft } from '../recipeDraft';
 import type { ParsedIngredient, ParsedRecipe, ParsedRecipes } from '../recipeParse';
 import type { MenuItem, RawMaterial } from '../../types';
 import { planImportRecipes } from '../plans/planRecipes';
@@ -315,15 +315,34 @@ describe('a ganache made ahead and kept by weight', () => {
     expect(draftIssues(d, mats, menu).some(i => i.message.startsWith('Fudge: selling by weight'))).toBe(false);
   });
 
-  it('keeps the unit of an item already on the menu', () => {
-    const onMenu = [{ id: 'g1', name: 'Chocolate ganache', countedIn: 'kg' as const }];
-    const d = buildDraft({ recipes: [ganache('makes 4', 4)], moreNotRead: false }, { materials: mats, menu: onMenu, fromPhotos: false });
+  it('starts with the unit of an item already on the menu, and can change it, saying what saving will do', () => {
+    const onMenu = [{ id: 'g1', name: 'Chocolate ganache' }];
+    const d = buildDraft({ recipes: [ganache('makes 400 g')], moreNotRead: false }, { materials: mats, menu: onMenu, fromPhotos: false });
     const g = d.recipes[0];
     chooseUse(g, 'kept', onMenu);
-    setMakesUnit(g, 'pcs', onMenu);
-    expect(recipeUnit(g, onMenu)).toBe('kg');
+    // Counted in pieces on the menu: so it starts, with nothing to change.
+    expect(recipeUnit(g, onMenu)).toBe('pcs');
+    expect(unitChange(g, onMenu)).toBeUndefined();
+    expect(unitChangeNote(g, onMenu)).toBeNull();
+    // The dropdown is never locked: 400 with g counts it in kg when saved.
+    setMakes(g, 400, onMenu);
     setMakesUnit(g, 'g', onMenu);
-    expect(makesUnitOf(g, onMenu)).toBe('g');
+    expect(recipeUnit(g, onMenu)).toBe('kg');
+    expect(g.makes).toBe(0.4);
+    expect(unitChange(g, onMenu)).toBe('kg');
+    expect(unitChangeNote(g, onMenu)).toMatch(/^Saving counts Chocolate ganache in kg from now on, made for other items/);
+    const out = draftToImport(d, mats, onMenu)!;
+    expect(out.items[0]).toMatchObject({ target: { kind: 'existing', menuItemId: 'g1', mode: 'replace' }, countedIn: 'kg', batchMakes: 0.4 });
+    // Saved: counted in kg, made for other items, its stock in pieces cleared, its batch the new one.
+    const menuNow: MenuItem[] = [{ id: 'g1', name: 'Chocolate ganache', sellingPrice: 0, finishedGoodsStock: 3, batchMakes: 1.5, recipe: [] }];
+    const plan = planImportRecipes({ ...out, materials: mats, menu: menuNow, today: '2026-10-17', ctx: { newId: () => 'x', now: () => 0 } });
+    expect(plan.ok).toBe(true);
+    if (plan.ok === true) {
+      expect(plan.writes.find(w => w.id === 'g1')!.data).toMatchObject({ countedIn: 'kg', notForSale: true, finishedGoodsStock: 0, batchMakes: 0.4 });
+    }
+    // Back to pieces: nothing changes on the menu.
+    setMakesUnit(g, 'pcs', onMenu);
+    expect(unitChange(g, onMenu)).toBeUndefined();
   });
 
   it('suggests the batch size from what the ingredients weigh', () => {
@@ -366,8 +385,7 @@ describe('a ganache made ahead and kept by weight', () => {
     expect(g.target).toEqual({ kind: 'existing', menuItemId: 'g1', mode: 'replace' });
     expect(g).toMatchObject({ countedIn: 'kg', makes: 0.8 });
     expect(recipeUnit(g, [{ id: 'g1', name: 'Chocolate ganache', countedIn: 'kg' }])).toBe('kg');
-    expect(recipeUnit(g, [{ id: 'g1', name: 'Chocolate ganache' }])).toBe('pcs');
-    // Kept in pieces on the menu: so it is here, whatever the recipe says.
+    // Kept in pieces on the menu: so it starts here, whatever the recipe says (the owner can change it).
     chooseUse(g, 'kept', [{ id: 'g1', name: 'Chocolate ganache' }]);
     expect(g.countedIn).toBeUndefined();
     expect(g.use).toEqual({ kind: 'kept', of: null, perItem: 1 });

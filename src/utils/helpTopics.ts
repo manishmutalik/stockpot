@@ -256,7 +256,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         'A base that is used in other items cannot be deleted until you take it out of them.',
         'On the phone, say "Made 9 vanilla bases" or "Made 3 pineapple cakes" as for anything else.',
       ),
-      text('**Made by weight** (a ganache, a custard, whipped cream): open its recipe and, beside **One batch makes**, choose **g** or **kg** (ml or litres for a liquid), then type how much one batch makes: 400 g, or 1.5 kg. It is then counted by weight: its recipe is for 1 kg and its cost is per kg. If the recipe below is for that whole batch, press **Yes, make it for 1 kg**. In each cake, add it with **Add a made item** and give the grams that go into one (150). Logging cakes takes those grams from its stock. Set this before it is used in other items or has stock; it cannot be sold on the menu for now.'),
+      text('**Made by weight** (a ganache, a custard, whipped cream): open its recipe and, beside **One batch makes**, choose **g** or **kg** (ml or litres for a liquid), then type how much one batch makes: 400 g, or 1.5 kg. It is then counted by weight: its recipe is for 1 kg and its cost is per kg. If the recipe below is for that whole batch, press **Yes, make it for 1 kg**. Already saved in pieces? Choose g or kg all the same: Stockpot says what changes (taken off the menu if it was sold, stock in pieces cleared, cakes that use it keep their numbers now in kg) and asks first. In each cake, add it with **Add a made item** and give the grams that go into one (150). Logging cakes takes those grams from its stock. Set this before it is used in other items or has stock; it cannot be sold on the menu for now.'),
     ],
   },
   {

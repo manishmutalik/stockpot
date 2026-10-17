@@ -184,6 +184,12 @@ describe('POST /mobile/recipes, a ganache kept by weight', () => {
     expect(readRecipeImportBody(body({ notForSale: true, countedIn: 'kg' })).ok).toBe(true);
     expect(readRecipeImportBody(body({ countedIn: 'kg' })).ok).toBe(false);
     expect(readRecipeImportBody(body({ notForSale: true, countedIn: 'g' })).ok).toBe(false);
+    expect(readRecipeImportBody(body({ notForSale: true, countedIn: null })).ok).toBe(false);
+    // An item already on the menu may change unit, to kg or back to pieces.
+    const onMenu = (countedIn: unknown) => ({ items: [{ target: { kind: 'existing', menuItemId: 'menu_cake', mode: 'replace' }, lines: [line], countedIn }], newMaterials: [], remember: [] });
+    expect(readRecipeImportBody(onMenu('kg')).ok).toBe(true);
+    expect(readRecipeImportBody(onMenu(null)).ok).toBe(true);
+    expect(readRecipeImportBody(onMenu('pcs')).ok).toBe(false);
   });
 });
 

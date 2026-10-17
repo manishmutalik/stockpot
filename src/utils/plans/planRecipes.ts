@@ -18,6 +18,7 @@
  *    can never end up inside itself. A sold item can be made when ordered (utils/madeToOrder).
  * Matched materials are otherwise never changed: their stock and price stay as they are.
  */
+import { itemUnit } from '../itemUnits';
 import type { IngredientRequirement, ItemPart, MenuItem, RawMaterial } from '../../types';
 import { pricingStamp } from '../pricing';
 import { costView, wouldLoop } from '../itemParts';
@@ -51,10 +52,12 @@ export interface RecipeImportItem {
   /** Made only to go into other items (a base made ahead and kept). New items only. */
   notForSale?: boolean;
   /**
-   * Counted by weight or volume (a ganache: utils/itemUnits): its lines and batch size are then per kg (litre). New items
-   * made for other items only.
+   * Counted by weight or volume (a ganache: utils/itemUnits): its lines and batch size are then per kg (litre). On a new
+   * item, only one made for other items. On an item already on the menu, a change of unit ('kg', 'l', or null for pieces):
+   * one counted by weight is taken off the menu (selling by weight comes later), and stock counted the old way is cleared.
+   * Items that use it keep their numbers, now in its new unit.
    */
-  countedIn?: 'kg' | 'l';
+  countedIn?: 'kg' | 'l' | null;
   /** Made when it is ordered. */
   madeToOrder?: boolean;
   /** Other items that go into one of it. */
@@ -222,8 +225,17 @@ export function planImportRecipes(input: {
       const existing = input.menu.find(m => m.id === menuItemId);
       if (!existing) return { ok: false, reason: 'unknown_menu_item' };
       const next = mode === 'replace' ? mergeRecipeLines(recipe) : mergeRecipeLines([...(existing.recipe ?? []), ...recipe]);
+      // A new unit: the batch size is the one given (an old one meant the old unit), stock counted the old way is cleared.
+      const unitChange = item.countedIn !== undefined && (item.countedIn ?? 'pcs') !== itemUnit(existing)
+        ? {
+          countedIn: item.countedIn,
+          ...(item.countedIn && { notForSale: true }),
+          ...((existing.finishedGoodsStock ?? 0) !== 0 && { finishedGoodsStock: 0 }),
+          batchMakes: item.batchMakes && item.batchMakes > 0 && item.batchMakes !== 1 ? item.batchMakes : null,
+        }
+        : {};
       writes.push({ collection: 'menu', id: menuItemId, merge: true, data: {
-        recipe: next, ...(mode === 'replace' && batch),
+        recipe: next, ...(mode === 'replace' && batch), ...unitChange,
         ...(partsOfItem[i] && { parts: mergedParts(existing.parts, partsOfItem[i]!) }),
         ...(item.madeToOrder && { madeToOrder: true }),
       } });

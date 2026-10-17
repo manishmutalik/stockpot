@@ -9,7 +9,7 @@ import { ENTRY_UNITS, formatItemQuantity, fromEntry, perUnit, toEntry } from '..
 import { RECIPE_MAX_PHOTOS } from '../utils/recipeParse';
 import {
   BUY_UNIT, asksWhatItIs, batchShare, batchWeight, buildDraft, chooseLineMaterial, chooseUse, draftIssues, draftToImport, keptPartsOf, lineCostPerItem, lineMaterial,
-  makesShown, makesUnitOf, makesUnitsFor, questionPrompt, recipeUnit, resolveDraftLine, setMakes, setMakesUnit, usedNewMaterials,
+  makesShown, makesUnitOf, makesUnitsFor, questionPrompt, recipeUnit, resolveDraftLine, setMakes, setMakesUnit, unitChangeNote, usedNewMaterials,
   type DraftImport, type DraftLine, type DraftRecipe, type RecipeDraft,
 } from '../utils/recipeDraft';
 
@@ -423,14 +423,15 @@ const MakesField: React.FC<{ recipe: DraftRecipe; menu: MenuItem[]; set: (fn: (r
       <div className="flex gap-2">
         <NumberInput key={unit} id={`${recipe.key}-makes`} value={makesShown(recipe, menu)} placeholder={unit === 'pcs' ? 'How many?' : 'How much?'}
           onChange={n => set(r => setMakes(r, n, menu))} className={`${modalField(!recipe.makes)} min-w-0 flex-1`} />
-        <select aria-label="One batch makes, in" value={unit} disabled={units.length === 1} onChange={e => set(r => setMakesUnit(r, e.target.value as typeof unit, menu))}
+        <select aria-label="One batch makes, in" value={unit} onChange={e => set(r => setMakesUnit(r, e.target.value as typeof unit, menu))}
           className={`${modalField()} !w-28 shrink-0`}>
           {ENTRY_UNITS.filter(u => units.includes(u.value)).map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
         </select>
       </div>
-      {recipe.target.kind === 'existing' && recipe.measuredYield && unit === 'pcs' && (
-        <p className="text-[11px] text-amber-700 mt-1">
-          {menu.find(m => m.id === (recipe.target as { menuItemId: string }).menuItemId)?.name} is counted in pieces on your menu. To keep it by weight, save this as a new item, or change it on the Menu first.
+      {unitChangeNote(recipe, menu) && <p className="text-[11px] text-amber-700 mt-1">{unitChangeNote(recipe, menu)}</p>}
+      {!unitChangeNote(recipe, menu) && recipe.target.kind === 'existing' && recipe.measuredYield && unit === 'pcs' && (
+        <p className="text-[11px] text-muted mt-1">
+          {menu.find(m => m.id === (recipe.target as { menuItemId: string }).menuItemId)?.name} is counted in pieces on your menu. Choose g or kg beside the number to count it by weight.
         </p>
       )}
     </>
