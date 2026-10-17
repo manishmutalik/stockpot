@@ -36,11 +36,14 @@ describe('counting an item by weight', () => {
     expect(setDoc).toHaveBeenCalledWith({ path: 'users/user1/menu/ganache' }, { countedIn: 'DELETE' }, { merge: true });
   });
 
-  it('keeps items sold on the menu in pieces', async () => {
-    const { h, showAlert } = setup([cake]);
-    await h.setCountedIn('cake', 'kg');
+  it('takes an item sold on the menu off it when it is counted by weight, once the owner agrees', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const { h } = setup([cake]);
+    expect(await h.setCountedIn('cake', 'kg')).toBe(false);
     expect(setDoc).not.toHaveBeenCalled();
-    expect(showAlert).toHaveBeenCalledWith('Not yet', expect.stringMatching(/Sold on the menu/));
+    expect(confirm.mock.calls[0][0]).toMatch(/^Count Truffle cake in kg\?\n\nIt is sold on the menu: it will be made for other items instead/);
+    expect(await h.setCountedIn('cake', 'kg')).toBe(true);
+    expect(setDoc).toHaveBeenCalledWith({ path: 'users/user1/menu/cake' }, { countedIn: 'kg', notForSale: true, madeToOrder: false }, { merge: true });
   });
 
   it('will not put an item counted by weight on the menu', async () => {
@@ -50,11 +53,12 @@ describe('counting an item by weight', () => {
     expect(showAlert).toHaveBeenCalledWith('Not yet', expect.stringMatching(/counted in kg/));
   });
 
-  it('is refused while another item uses it, naming it', async () => {
-    const { h, showAlert } = setup([ganache, { ...cake, parts: [{ itemId: 'ganache', quantity: 1 }] }]);
-    await h.setCountedIn('ganache', 'kg');
-    expect(setDoc).not.toHaveBeenCalled();
-    expect(showAlert).toHaveBeenCalledWith('Used in other items', expect.stringMatching(/^Truffle cake uses Chocolate ganache, in pieces/));
+  it('says what items that use it will read, and keeps their numbers', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const { h } = setup([ganache, { ...cake, parts: [{ itemId: 'ganache', quantity: 0.15 }] }]);
+    expect(await h.setCountedIn('ganache', 'kg')).toBe(true);
+    expect(confirm.mock.calls[0][0]).toMatch(/Truffle cake uses 0.15 pieces of it: that will read 150 g\. Check it afterwards\./);
+    expect(setDoc).toHaveBeenCalledWith({ path: 'users/user1/menu/ganache' }, { countedIn: 'kg' }, { merge: true });
   });
 
   it('turns a recipe per piece back into the whole batch, and clears a batch size that cannot carry over', async () => {
@@ -69,7 +73,7 @@ describe('counting an item by weight', () => {
     const { h } = setup([{ ...ganache, finishedGoodsStock: 3 }]);
     await h.setCountedIn('ganache', 'kg');
     expect(setDoc).not.toHaveBeenCalled();
-    expect(confirm.mock.calls[0][0]).toMatch(/has 3 pieces in stock/);
+    expect(confirm.mock.calls[0][0]).toMatch(/Its stock \(3 pieces\) is cleared/);
     await h.setCountedIn('ganache', 'kg');
     expect(setDoc).toHaveBeenCalledWith({ path: 'users/user1/menu/ganache' }, { countedIn: 'kg', finishedGoodsStock: 0 }, { merge: true });
   });

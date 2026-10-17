@@ -223,7 +223,7 @@ export interface MenuItem {
    * that unit: its recipe is for 1 kg, its stock, batch size and production are in kg, its cost is per kg, and another
    * item using it gives the kg that go into one (0.15 for 150 g) (utils/itemUnits). Absent: counted in pieces.
    */
-  countedIn?: ItemUnitByMeasure;
+  countedIn?: ItemUnitByMeasure | null;
 }
 
 /** The units an item can be counted in besides pieces. */

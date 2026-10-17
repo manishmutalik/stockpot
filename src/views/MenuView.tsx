@@ -730,8 +730,8 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                       {!item.madeToOrder && (
                         <BatchSizeEditor item={item} runs={productionRuns} unitCost={cost} currencySymbol={currency.symbol}
                           onSet={(makes, scale) => setBatchSize(item.id, makes, scale)}
-                          // Made for other items: the unit beside the batch is also what it is counted in (pieces, kg, litres).
-                          onUnit={made ? next => setCountedIn(item.id, next) : undefined} />
+                          // The unit beside the batch is also what it is counted in (pieces, kg, litres).
+                          onUnit={next => setCountedIn(item.id, next)} />
                       )}
 
                       <ItemPartsEditor item={item} menu={menu} costed={costed} materials={materials} currencySymbol={currency.symbol}

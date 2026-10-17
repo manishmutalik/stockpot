@@ -6,7 +6,7 @@ import { perItem } from '../../../../src/utils/kitchenMeasures';
 import { squash } from '../../../../src/utils/orderParse';
 import {
   BUY_UNIT, asksWhatItIs, batchShare, batchWeight, chooseLineMaterial, chooseUse, keptPartsOf, lineCostPerItem, lineMaterial, questionPrompt, recipeUnit, resolveDraftLine,
-  makesShown, makesUnitOf, makesUnitsFor, setMakes, setMakesUnit, usedNewMaterials,
+  makesShown, makesUnitOf, makesUnitsFor, setMakes, setMakesUnit, unitChangeNote, usedNewMaterials,
   type DraftLine, type DraftRecipe, type LineChoice, type RecipeDraft,
 } from '../../../../src/utils/recipeDraft';
 import { ENTRY_UNITS, formatItemQuantity, fromEntry, perUnit as perItemUnit, toEntry } from '../../../../src/utils/itemUnits';
@@ -70,9 +70,9 @@ export function RecipeCheckCard({ draft, recipe, setup, update, issueLines, sing
           options={ENTRY_UNITS.filter(u => makesUnits.includes(u.value))}
           onChange={v => { set(r => setMakesUnit(r, v, menu)); setMakesNonce(n => n + 1); }} />
       )}
-      {recipe.target.kind === 'existing' && recipe.measuredYield && makesUnit === 'pcs' && existing ? (
-        <Note tone="amber" text={`${existing.name} is counted in pieces on your menu. To keep it by weight, save this as a new item, or change it on the website's Menu first.`} />
-      ) : null}
+      {unitChangeNote(recipe, menu) ? <Note tone="amber" text={unitChangeNote(recipe, menu)!} />
+        : recipe.target.kind === 'existing' && recipe.measuredYield && makesUnit === 'pcs' && existing
+          ? <Note text={`${existing.name} is counted in pieces on your menu. Choose g or kg below the number to count it by weight.`} /> : null}
     </View>
   );
   const targetChoices = existing && (

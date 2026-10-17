@@ -1,5 +1,14 @@
 # Changelog
 
+## The unit beside One batch makes always works
+
+- The dropdown did nothing for an item already saved in pieces: missing for one sold on the menu, refused for one used
+  in a cake, and locked in Read a recipe for a recipe going to an item on the menu. It now always works, and says what
+  changes first: an item sold on the menu is taken off it (selling by weight comes later), stock counted in pieces is
+  cleared, and items that use it keep their numbers in the new unit ("Truffle Cake uses 0.15 pieces of it: that will
+  read 150 g"). On the Menu this is one question; in Read a recipe it is a note, and Save does it.
+- Data: a recipe import item for an item on the menu can carry `countedIn` ('kg', 'l', or null for pieces).
+
 ## One batch makes: a number and its unit
 
 - **One batch makes** now has a unit beside it: pieces, g, kg, ml or litres, in Read a recipe (web and phone) and on the

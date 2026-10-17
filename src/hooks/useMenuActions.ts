@@ -349,11 +349,14 @@ export function useMenuActions(
   };
 
   /**
-   * Counts an item made for other items in pieces, kilograms or litres (utils/itemUnits). Its recipe, stock, batch size and
-   * cost then mean that unit, so the change is refused while other items use it (their amounts would change meaning), and
-   * stock already made is cleared once the owner agrees. A batch size cannot carry over (4 bases are not 4 kg): the recipe
-   * goes back to being for the whole batch and the size is cleared, so setting the new size offers to divide it again.
-   * Items sold on the menu stay in pieces for now.
+   * Counts an item in pieces, kilograms or litres (utils/itemUnits). Its recipe, stock, batch size and cost then mean that
+   * unit, so the owner is told what changes and asked once:
+   *  - an item sold on the menu counted by weight is taken off the menu (selling by weight comes later);
+   *  - items that use it keep their numbers, now in the new unit (0.15 of it reads 150 g), to be checked;
+   *  - stock counted the old way is cleared;
+   *  - the recipe goes back to being for the whole batch and the batch size is cleared (4 bases are not 4 kg), so setting
+   *    the new size offers to divide it again.
+   * Resolves whether it changed.
    */
   const setCountedIn = async (itemId: string, unit: ItemUnitByMeasure | null): Promise<boolean> => {
     if (!auth.currentUser) return false;
@@ -361,23 +364,26 @@ export function useMenuActions(
     const item = menu.find(m => m.id === itemId);
     if (!item) return false;
     const from = itemUnit(item);
-    if ((unit ?? 'pcs') === from) return true;
-    if (unit && !item.notForSale) {
-      showAlert('Not yet', 'Only items made for other items (a ganache, a custard) can be counted by weight for now. Turn off "Sold on the menu" first.');
-      return false;
-    }
+    const to = unit ?? 'pcs';
+    if (to === from) return true;
+    const offMenu = unit !== null && !item.notForSale;
     const users = itemsUsing(menu, itemId);
-    if (users.length > 0) {
-      showAlert('Used in other items', `${users.map(u => u.name).join(', ')} ${users.length === 1 ? 'uses' : 'use'} ${item.name}, in ${unitWord(from)}. Remove it from ${users.length === 1 ? 'that item' : 'them'} first, change how it is counted, then add it back with the new amount.`);
-      return false;
-    }
     const inStock = Math.round((item.finishedGoodsStock ?? 0) * 1000) / 1000;
-    const stockText = from === 'pcs' ? `${inStock} ${unitWord('pcs', inStock)}` : formatItemQuantity(from, inStock);
-    if (inStock !== 0 && !window.confirm(`${item.name} has ${stockText} in stock, counted in ${unitWord(from)}. That cannot carry over: clear it and count it in ${unitWord(unit ?? 'pcs')} from now on?\n\nLog what you have again afterwards.`)) return false;
+    const amount = (u: typeof to, n: number) => (u === 'pcs' ? `${Math.round(n * 1000) / 1000} ${unitWord('pcs', n)}` : formatItemQuantity(u, n));
+    const changes = [
+      ...(offMenu ? [`It is sold on the menu: it will be made for other items instead (selling by weight comes later).`] : []),
+      ...users.map(u => {
+        const q = partsOf(u).filter(p => p.itemId === itemId).reduce((sum, p) => sum + p.quantity, 0);
+        return `${u.name} uses ${amount(from, q)} of it: that will read ${amount(to, q)}. Check it afterwards.`;
+      }),
+      ...(inStock !== 0 ? [`Its stock (${amount(from, inStock)}) is cleared: log what you have again.`] : []),
+    ];
+    if (changes.length > 0 && !window.confirm(`Count ${item.name} in ${unitWord(to)}?\n\n${changes.join('\n')}`)) return false;
     const wholeBatch = item.batchMakes && item.batchMakes > 0 && item.batchMakes !== 1 ? rescaleForBatchSize(item, 1) : null;
     try {
       await setDoc(doc(db, 'users', userId, 'menu', itemId), {
         countedIn: unit ?? deleteField(),
+        ...(offMenu && { notForSale: true, madeToOrder: false }),
         ...(inStock !== 0 && { finishedGoodsStock: 0 }),
         ...(wholeBatch && { recipe: wholeBatch.recipe, ...(wholeBatch.parts && { parts: wholeBatch.parts }) }),
         ...(item.batchMakes !== undefined && { batchMakes: deleteField() }),

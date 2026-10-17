@@ -138,9 +138,9 @@ describe('MenuView', () => {
       await waitFor(() => expect(props.setCountedIn).toHaveBeenCalledWith('ganache', null));
     });
 
-    it('offers only pieces beside the batch of an item sold on the menu', () => {
-      render(<MenuView {...open({ setBatchSize: vi.fn() })} />);
-      expect(screen.queryByLabelText('One batch makes, in')).toBeNull();
+    it('offers every unit beside the batch of an item sold on the menu too (choosing kg asks to take it off the menu)', () => {
+      render(<MenuView {...open({ setBatchSize: vi.fn(), productionRuns: [] })} />);
+      expect([...(screen.getByLabelText('One batch makes, in') as HTMLSelectElement).options].map(o => o.value)).toEqual(['pcs', 'g', 'kg', 'ml', 'l']);
     });
 
     it('prompts for servings before estimating nutrition', () => {

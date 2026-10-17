@@ -93,8 +93,12 @@ export function readRecipeImportBody(body: unknown): Read<RecipeImportBody> {
     }
     if (it.batchMakes !== undefined && !positive(it.batchMakes, 10_000)) return bad('How many one batch makes must be above nothing.');
     if ((it.notForSale !== undefined && it.notForSale !== true) || (it.madeToOrder !== undefined && it.madeToOrder !== true)) return bad('A recipe is marked in a way that is not understood.');
-    // Counted by weight: only an item made for other items (selling by weight comes later).
-    if (it.countedIn !== undefined && ((it.countedIn !== 'kg' && it.countedIn !== 'l') || it.notForSale !== true)) return bad('A recipe is marked in a way that is not understood.');
+    // Counted by weight: a new item only when made for other items (selling by weight comes later); an item already on the
+    // menu may change unit ('kg', 'l', or null for pieces).
+    if (it.countedIn !== undefined) {
+      const known = it.countedIn === 'kg' || it.countedIn === 'l' || (it.countedIn === null && target.kind === 'existing');
+      if (!known || (target.kind === 'new' && it.notForSale !== true)) return bad('A recipe is marked in a way that is not understood.');
+    }
     const parts: NonNullable<RecipeImportItem['parts']> = [];
     if (it.parts !== undefined) {
       if (!Array.isArray(it.parts) || it.parts.length > 20) return bad('A recipe has too many items in it.');
@@ -110,7 +114,7 @@ export function readRecipeImportBody(body: unknown): Read<RecipeImportBody> {
       target, lines,
       ...(it.batchMakes !== undefined && { batchMakes: it.batchMakes as number }),
       ...(it.notForSale === true && { notForSale: true }),
-      ...((it.countedIn === 'kg' || it.countedIn === 'l') && { countedIn: it.countedIn }),
+      ...((it.countedIn === 'kg' || it.countedIn === 'l' || it.countedIn === null) && { countedIn: it.countedIn as 'kg' | 'l' | null }),
       ...(it.madeToOrder === true && { madeToOrder: true }),
       ...(parts.length > 0 && { parts }),
     });
