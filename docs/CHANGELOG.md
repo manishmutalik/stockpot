@@ -8,7 +8,8 @@
 - `buildKitchenData(catalogue, …)`: the demo-data builder now takes any kitchen's catalogue and works out its costs,
   stock, stamps and price history; the bakery demo (`BAKERY`) comes out exactly as before.
 - `npm run seed:kitchen -- --email you@example.com [--create] [--kitchen cloud|bakery]`: fills an empty account with a
-  sample kitchen, signed in as that account (so the rules apply), and refuses an account that already has a kitchen.
+  sample kitchen, signed in as that account (so the rules apply). It refuses an account that already has materials, a
+  menu or orders, and keeps the settings an account already has (its name, time zone, GST), filling only what is blank.
 
 ## R&D Lab: bases and fillings in a session
 

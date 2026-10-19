@@ -10,13 +10,14 @@
  *   npm run seed:kitchen -- --dry-run                            show what would be written, without signing in
  *
  * The password is read from STOCKPOT_PASSWORD, or asked for. It signs in as that account, through the same rules as the
- * app, so it can only ever write to that account; and it stops if the account already has a kitchen, so it can never
- * overwrite real data.
+ * app, so it can only ever write to that account; and it stops if the account already has materials, a menu or orders,
+ * so it can never overwrite real data. Settings the account already has (its name, time zone, GST) are kept; the
+ * sample fills only what is blank.
  */
 import { createInterface } from 'node:readline/promises';
 import { initializeApp } from 'firebase/app';
 import { createUserWithEmailAndPassword, getAuth, sendEmailVerification, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { doc, getDoc, initializeFirestore, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, initializeFirestore, limit, query, writeBatch } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 import { BAKERY, buildKitchenData } from '../src/utils/demoData';
 import { CLOUD_KITCHEN } from '../src/utils/cloudKitchenData';
@@ -34,11 +35,16 @@ function args() {
   return { email: value('email'), kitchen, create: argv.includes('--create'), dryRun: argv.includes('--dry-run'), name: value('name') };
 }
 
+/** A setting someone has filled in: not empty text, an empty list or an empty map. */
+const isSet = (v: unknown) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)
+  && !(typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0);
+
 /** Every document to write, as [collection, id, data]; the settings live at settings/bakery, as the app keeps them. */
-function documents(uid: string, email: string, kitchen: keyof typeof KITCHENS) {
+function documents(uid: string, email: string, kitchen: keyof typeof KITCHENS, existingSettings: Record<string, unknown> = {}) {
   const today = todayInZone('Asia/Kolkata');
   const data = buildKitchenData(KITCHENS[kitchen], uid, today, email);
-  const docs: [string, string, object][] = [['settings', 'bakery', data.settings]];
+  const kept = Object.fromEntries(Object.entries(existingSettings).filter(([, v]) => isSet(v)));
+  const docs: [string, string, object][] = [['settings', 'bakery', { ...data.settings, ...kept }]];
   const add = (collection: string, items: { id: string }[]) => items.forEach(item => docs.push([collection, item.id, item]));
   add('materials', data.materials);
   add('menu', data.menu);
@@ -81,11 +87,15 @@ async function main() {
     console.log(`Made the account ${email}. A verification email is on its way: open it before using the AI features.`);
   }
 
-  if ((await getDoc(doc(db, 'users', user.uid, 'settings', 'bakery'))).exists()) {
-    throw new Error(`${email} already has a kitchen. This only fills an empty account, so nothing was written.`);
+  // Signing in to the app writes default settings, so an account counts as empty until it has materials, a menu or orders.
+  for (const c of ['materials', 'menu', 'orders']) {
+    if (!(await getDocs(query(collection(db, 'users', user.uid, c), limit(1)))).empty) {
+      throw new Error(`${email} already has ${c}. This only fills an empty account, so nothing was written.`);
+    }
   }
+  const existing = await getDoc(doc(db, 'users', user.uid, 'settings', 'bakery'));
 
-  const { today, docs } = documents(user.uid, email, kitchen);
+  const { today, docs } = documents(user.uid, email, kitchen, existing.data());
   for (let i = 0; i < docs.length; i += BATCH_SIZE) {
     const batch = writeBatch(db);
     for (const [collection, id, data] of docs.slice(i, i + BATCH_SIZE)) batch.set(doc(db, 'users', user.uid, collection, id), data);
