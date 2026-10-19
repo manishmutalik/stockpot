@@ -1,5 +1,16 @@
 # Changelog
 
+## Recipes & Menus: Menu, and Bases and fillings
+
+- Recipes & Menus has two tabs, each with a line saying what it holds: **Menu** (what you sell: prices, margins and
+  sales) and **Bases and fillings** (made ahead to go into what you sell; not sold on their own), with how many items
+  each has. It opens on the Menu, or on the tab of the item being opened.
+- The headline figures, margin filter, sales period and What if… are on the Menu tab only. Search covers the tab you
+  are on and says how many more match on the other ("2 more in Bases and fillings"); click it to go there.
+- **Add** adds to the tab you are on: **Add base or filling** makes a new item already off the menu. Turning **Sold on
+  the menu** off or on moves an item between the tabs, and the screen follows it.
+- Log Production Run groups the items into Menu and Bases and fillings.
+
 ## The unit beside One batch makes always works
 
 - The dropdown did nothing for an item already saved in pieces: missing for one sold on the menu, refused for one used

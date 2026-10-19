@@ -139,6 +139,18 @@ describe('ProductionRunModal — redesigned form', () => {
     return { onSave, onClose };
   };
 
+  it('groups the items into the Menu and Bases and fillings', () => {
+    render(
+      <ProductionRunModal
+        isOpen={true} onClose={vi.fn()} materials={materials} onSave={vi.fn()} currency={currency}
+        menu={[...menu, { id: 'base', name: 'Sponge Base', recipe: [], sellingPrice: 0, notForSale: true }] as never}
+      />
+    );
+    const groups = [...document.querySelectorAll('optgroup')];
+    expect(groups.map(g => g.label)).toEqual(['Menu', 'Bases and fillings']);
+    expect([...groups[1].querySelectorAll('option')].map(o => o.textContent)).toEqual(['Sponge Base']);
+  });
+
   it('is a labelled dialog that closes from the header button', () => {
     const { onClose } = renderModal();
     expect(screen.getByRole('dialog', { name: 'Log Production Run' })).toBeTruthy();

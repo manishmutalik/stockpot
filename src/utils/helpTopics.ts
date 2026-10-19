@@ -239,12 +239,12 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: 'made-items', section: 'recipes', apps: ['web', 'phone'],
     title: 'Bases, fillings and items made from other items',
     summary: 'A sponge base made ahead for cream cakes, a ganache, cookies in a hamper.',
-    keywords: ['base', 'sponge', 'sub recipe', 'sub-recipe', 'filling', 'ganache', 'custard', 'premix', 'cake gel', 'hamper', 'combo', 'made ahead', 'intermediate', 'not for sale', 'grams', 'kg', 'weight', 'whipped cream', 'counted in'],
+    keywords: ['base', 'sponge', 'sub recipe', 'sub-recipe', 'filling', 'ganache', 'custard', 'premix', 'cake gel', 'hamper', 'combo', 'made ahead', 'intermediate', 'not for sale', 'bases and fillings', 'tab', 'grams', 'kg', 'weight', 'whipped cream', 'counted in'],
     body: [
       text('If you make something ahead and use it in other items (a sponge base for cream cakes, a ganache, a masala base, cookies that go into hampers), add it as its own item and use it in the others. Its cost then flows into every item built on it. Reading the recipes with **Read a recipe**? Choose **Made ahead and kept** for the base, and Stockpot does the steps below for you.'),
       steps(
-        'On the website, in **Recipes & Menus**, add the base as an item, with its recipe for **one** base. A batch that makes 4.5 bases? Set **One batch makes** to 4.5; if you typed the recipe for the whole batch, Stockpot offers to divide it (the recipe reader does both for you).',
-        'Open its recipe and turn off **Sold on the menu**. It moves to **Made for other items**, and stays out of orders, the shared menu and margin figures.',
+        'On the website, in **Recipes & Menus**, open the **Bases and fillings** tab and click **Add base or filling**, with its recipe for **one** base. A batch that makes 4.5 bases? Set **One batch makes** to 4.5; if you typed the recipe for the whole batch, Stockpot offers to divide it (the recipe reader does both for you).',
+        'It stays on that tab, out of orders, the shared menu and margin figures. Something already on the **Menu** tab? Open its recipe and turn off **Sold on the menu**: it moves to **Bases and fillings**.',
         'In each cream cake, click **Add a made item** and choose the base: 1 for a 1 kg cake, 0.5 for a half-kg cake.',
         'When you bake bases, log a **Production Run** for them in batches (2 batches is 9 bases), with what actually came out.',
         'Make the cream cakes when they are ordered? Turn on **Made when ordered** for them: each sale takes the base, cream and fruit by itself (see **Things you make when they are ordered**). Make them ahead instead? Log a run for the cakes: the bases come out of base stock, and the cream and fruit out of your materials.',

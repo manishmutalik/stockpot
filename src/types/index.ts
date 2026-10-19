@@ -599,7 +599,8 @@ export interface AppViewProps {
   deleteCategory: (c: string) => void;
   updateMaterial: (id: string, f: string, v: any) => void;
   deleteMaterial: (id: string) => void;
-  addMenuItem: () => void;
+  /** Adds a blank item: one sold on the menu, or (`notForSale`) a base or filling. Resolves its id. */
+  addMenuItem: (options?: { notForSale?: boolean }) => Promise<string | undefined> | void;
   updateMenuItem: (id: string, m: any) => void;
   updateMenuItemField: (id: string, f: string, v: any) => void;
   deleteMenuItem: (id: string) => void;
