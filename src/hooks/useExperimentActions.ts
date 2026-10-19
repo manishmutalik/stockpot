@@ -10,14 +10,85 @@
  * shared Firestore listener in App.tsx and passed in as read-only
  * parameters (same pattern as the other extracted hooks).
  */
-import { auth, db, doc, setDoc, deleteDoc } from '../firebase';
+import { auth, db, doc, setDoc, deleteDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { RecipeExperiment, RawMaterial } from '../types';
+import { ItemPart, MenuItem, RecipeExperiment, RawMaterial } from '../types';
+
+const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
 export function useExperimentActions(
   experiments: RecipeExperiment[],
-  materials: RawMaterial[]
+  materials: RawMaterial[],
+  menu: MenuItem[] = []
 ) {
+  /**
+   * Saves an experiment's bases and fillings (`parts`) and, in the same write, takes what more it now uses of each from
+   * that item's finished stock (`used`: item id → amount; negative gives back), as making an item does. Stock may go
+   * below zero, as there: it comes right when the made items are logged.
+   */
+  const saveParts = async (exp: RecipeExperiment, parts: ItemPart[] | null, used: Record<string, number>) => {
+    if (!auth.currentUser) return;
+    const userId = auth.currentUser.uid;
+    const batch = writeBatch(db);
+    const expRef = doc(db, 'users', userId, 'experiments', exp.id);
+    if (parts) batch.set(expRef, { ...exp, parts }, { merge: true });
+    else batch.delete(expRef);
+    for (const [itemId, amount] of Object.entries(used)) {
+      const item = menu.find(m => m.id === itemId);
+      if (!item || !amount) continue;
+      batch.set(doc(db, 'users', userId, 'menu', itemId), { finishedGoodsStock: round4((item.finishedGoodsStock ?? 0) - amount) }, { merge: true });
+    }
+    try {
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, parts ? OperationType.UPDATE : OperationType.DELETE, `users/${userId}/experiments/${exp.id}`);
+    }
+  };
+
+  /** Adds a base, filling or other made item to an experiment, with nothing used yet. */
+  const addPartToExperiment = async (expId: string, itemId: string) => {
+    const exp = experiments.find(e => e.id === expId);
+    const parts = exp?.parts ?? [];
+    if (!exp || parts.some(p => p.itemId === itemId) || !menu.some(m => m.id === itemId)) return;
+    await saveParts(exp, [...parts, { itemId, quantity: 0 }], {});
+  };
+
+  /** Sets how much of a made item an experiment used (in the item's unit), taking the difference from its stock. */
+  const updateExperimentPart = async (expId: string, itemId: string, quantity: number) => {
+    const exp = experiments.find(e => e.id === expId);
+    const before = exp?.parts?.find(p => p.itemId === itemId);
+    if (!exp || !before) return;
+    const next = Math.max(0, quantity);
+    await saveParts(exp, (exp.parts ?? []).map(p => (p.itemId === itemId ? { ...p, quantity: next } : p)), { [itemId]: next - before.quantity });
+  };
+
+  /**
+   * After a made item's unit changed (pieces to kg, say), which clears its stock: sets what the experiment used in the
+   * new unit, taken from that cleared stock.
+   */
+  const restartExperimentPart = async (expId: string, itemId: string, quantity: number) => {
+    const exp = experiments.find(e => e.id === expId);
+    if (!exp || !auth.currentUser || !exp.parts?.some(p => p.itemId === itemId)) return;
+    const userId = auth.currentUser.uid;
+    const next = Math.max(0, quantity);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', userId, 'experiments', expId), { ...exp, parts: exp.parts.map(p => (p.itemId === itemId ? { ...p, quantity: next } : p)) }, { merge: true });
+    batch.set(doc(db, 'users', userId, 'menu', itemId), { finishedGoodsStock: round4(-next) }, { merge: true });
+    try {
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/experiments/${expId}`);
+    }
+  };
+
+  /** Takes a made item out of an experiment, giving what it used back to stock. */
+  const removePartFromExperiment = async (expId: string, itemId: string) => {
+    const exp = experiments.find(e => e.id === expId);
+    const before = exp?.parts?.find(p => p.itemId === itemId);
+    if (!exp || !before) return;
+    await saveParts(exp, (exp.parts ?? []).filter(p => p.itemId !== itemId), { [itemId]: -before.quantity });
+  };
+
   /**
    * Creates a new recipe experiment document in Firestore. The experiment
    * starts with no materials assigned.
@@ -57,10 +128,15 @@ export function useExperimentActions(
     }
   };
 
-  /** Removes an experiment document from Firestore. */
+  /** Removes an experiment document from Firestore, giving the bases and fillings it used back to stock. */
   const deleteExperiment = async (id: string) => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
+    const exp = experiments.find(e => e.id === id);
+    if (exp?.parts?.some(p => p.quantity > 0)) {
+      await saveParts(exp, null, Object.fromEntries(exp.parts.map(p => [p.itemId, -p.quantity])));
+      return;
+    }
     try {
       await deleteDoc(doc(db, 'users', userId, 'experiments', id));
     } catch (err) {
@@ -129,5 +205,9 @@ export function useExperimentActions(
     addMaterialToExperiment,
     removeMaterialFromExperiment,
     updateExperimentMaterial,
+    addPartToExperiment,
+    updateExperimentPart,
+    restartExperimentPart,
+    removePartFromExperiment,
   };
 }

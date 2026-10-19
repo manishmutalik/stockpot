@@ -160,6 +160,15 @@ describe('financialsForRange', () => {
     expect(f.expenses).toBe(30 + 10 + 20);
   });
 
+  it('counts bases and fillings used in R&D at their ingredients', () => {
+    const sponge = { id: 'base', name: 'Sponge Base', sellingPrice: 0, notForSale: true, recipe: [{ materialId: 'flour', amount: 250, unit: 'g' }] };
+    const f = financialsForRange({
+      ...base, ...range, menu: [cake(100), sponge] as never, orders: [],
+      experiments: [{ id: 'e1', name: 'Trial', date: '2026-03-08', materials: [], parts: [{ itemId: 'base', quantity: 1.5 }] }],
+    });
+    expect(f.experimentExpenses).toBe(15); // 1.5 bases at 10
+  });
+
   it('takes off what runs in the range came out short of, and adds back what they made over', () => {
     const runs = [
       { date: '2026-03-05', quantityProduced: 9, quantityYield: 8, costTotal: 90 },

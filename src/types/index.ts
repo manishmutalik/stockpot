@@ -445,6 +445,12 @@ export interface RecipeExperiment {
   name: string;
   date: string; // YYYY-MM-DD
   materials: IngredientRequirement[];
+  /**
+   * Bases, fillings or other made items tried in the session, each in its own unit (pieces, kg or litres). They are
+   * taken from the item's finished stock (and given back when the line or session is removed); its cost is the item's
+   * ingredients, as costed on the menu (utils/rndStats).
+   */
+  parts?: ItemPart[];
   notes?: string;
 }
 
@@ -619,6 +625,12 @@ export interface AppViewProps {
   addMaterialToExperiment: (id: string) => void;
   updateExperimentMaterial: (id: string, mId: string, f: string, v: any) => void;
   removeMaterialFromExperiment: (id: string, mId: string) => void;
+  /** Bases, fillings and other made items in an R&D session: taken from (and given back to) their finished stock. */
+  addPartToExperiment: (expId: string, itemId: string) => void;
+  updateExperimentPart: (expId: string, itemId: string, quantity: number) => void;
+  /** After the item's unit changed (its stock cleared): the amount used, in the new unit. */
+  restartExperimentPart: (expId: string, itemId: string, quantity: number) => void;
+  removePartFromExperiment: (expId: string, itemId: string) => void;
   processVoiceCommand: (t: string) => void;
   startListening: () => void;
   copyMenuItem: (id: string) => void;
