@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ExperimentsView } from '../ExperimentsView';
 
 const ymd = (offset: number) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toISOString().split('T')[0]; };
@@ -27,6 +27,7 @@ const makeProps = (over: Record<string, any> = {}) => ({
   addExperiment: vi.fn(), updateExperiment: vi.fn(), deleteExperiment: vi.fn(),
   addMaterialToExperiment: vi.fn(), updateExperimentMaterial: vi.fn(), removeMaterialFromExperiment: vi.fn(),
   addPartToExperiment: vi.fn(), updateExperimentPart: vi.fn(), removePartFromExperiment: vi.fn(),
+  restartExperimentPart: vi.fn(), setCountedIn: vi.fn().mockResolvedValue(true),
   ...over,
 }) as any;
 
@@ -102,5 +103,34 @@ describe('ExperimentsView', () => {
     expect(screen.getByText('In stock: 6')).toBeTruthy();
     fireEvent.click(screen.getByLabelText('Remove Sponge Base'));
     expect(props.removePartFromExperiment).toHaveBeenCalledWith('a', 'base');
+  });
+
+  it('types an amount in g or kg, and counts a piece item by weight when g is chosen', async () => {
+    const withParts = [{ ...experiments[0], parts: [{ itemId: 'base', quantity: 300 }, { itemId: 'ganache', quantity: 0.25 }] }];
+    const props = makeProps({ experiments: withParts });
+    render(<ExperimentsView {...props} />);
+    const ganacheUnit = screen.getByLabelText('Unit of Ganache') as HTMLSelectElement;
+    expect([...ganacheUnit.options].map(o => o.text)).toEqual(['pieces', 'g', 'kg', 'ml', 'litres']);
+    expect(ganacheUnit.value).toBe('g');
+    // kg only changes how it is typed.
+    fireEvent.change(ganacheUnit, { target: { value: 'kg' } });
+    expect((screen.getByLabelText('Amount of Ganache') as HTMLInputElement).value).toBe('0.25');
+    fireEvent.change(screen.getByLabelText('Amount of Ganache'), { target: { value: '0.4' } });
+    expect(props.updateExperimentPart).toHaveBeenLastCalledWith('a', 'ganache', 0.4);
+    expect(props.setCountedIn).not.toHaveBeenCalled();
+    // The base is counted in pieces: g counts it by weight, and the 300 typed is 300 g.
+    expect((screen.getByLabelText('Unit of Sponge Base') as HTMLSelectElement).value).toBe('pcs');
+    fireEvent.change(screen.getByLabelText('Unit of Sponge Base'), { target: { value: 'g' } });
+    expect(props.setCountedIn).toHaveBeenCalledWith('base', 'kg');
+    await waitFor(() => expect(props.restartExperimentPart).toHaveBeenCalledWith('a', 'base', 0.3));
+  });
+
+  it('leaves the amount alone when the unit change is not made', async () => {
+    const props = makeProps({ experiments: [{ ...experiments[0], parts: [{ itemId: 'base', quantity: 2 }] }], setCountedIn: vi.fn().mockResolvedValue(false) });
+    render(<ExperimentsView {...props} />);
+    fireEvent.change(screen.getByLabelText('Unit of Sponge Base'), { target: { value: 'kg' } });
+    await waitFor(() => expect(props.setCountedIn).toHaveBeenCalledWith('base', 'kg'));
+    expect(props.restartExperimentPart).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('Unit of Sponge Base') as HTMLSelectElement).value).toBe('pcs');
   });
 });

@@ -66,4 +66,11 @@ describe('useExperimentActions: bases and fillings', () => {
     expect(deleteDoc).toHaveBeenCalledTimes(1);
     expect(batchCommit).not.toHaveBeenCalled();
   });
+
+  it('after a unit change, sets the amount in the new unit and takes it from the cleared stock', async () => {
+    const { result } = renderHook(() => useExperimentActions([exp([{ itemId: 'base', quantity: 300 }])], [], menu));
+    await result.current.restartExperimentPart('e1', 'base', 0.3);
+    expect(expWrite().parts).toEqual([{ itemId: 'base', quantity: 0.3 }]);
+    expect(stockWrite('base')).toEqual({ finishedGoodsStock: -0.3 });
+  });
 });

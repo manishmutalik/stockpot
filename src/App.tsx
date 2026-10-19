@@ -825,7 +825,7 @@ function BakeryApp() {
   const {
     addExperiment, updateExperiment, deleteExperiment,
     addMaterialToExperiment, removeMaterialFromExperiment, updateExperimentMaterial,
-    addPartToExperiment, updateExperimentPart, removePartFromExperiment,
+    addPartToExperiment, updateExperimentPart, restartExperimentPart, removePartFromExperiment,
   } = useExperimentActions(experiments, materials, menu);
 
   // ── Wastage / Discard Actions ────────────────────────────────────────────────
@@ -1345,7 +1345,7 @@ function BakeryApp() {
     refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
     addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder, setCountedIn,
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
-    removeMaterialFromExperiment, addPartToExperiment, updateExperimentPart, removePartFromExperiment, copyMenuItem, addIngredientToRecipe,
+    removeMaterialFromExperiment, addPartToExperiment, updateExperimentPart, restartExperimentPart, removePartFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
     deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
     addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders, saveSettings,

@@ -62,6 +62,25 @@ export function useExperimentActions(
     await saveParts(exp, (exp.parts ?? []).map(p => (p.itemId === itemId ? { ...p, quantity: next } : p)), { [itemId]: next - before.quantity });
   };
 
+  /**
+   * After a made item's unit changed (pieces to kg, say), which clears its stock: sets what the experiment used in the
+   * new unit, taken from that cleared stock.
+   */
+  const restartExperimentPart = async (expId: string, itemId: string, quantity: number) => {
+    const exp = experiments.find(e => e.id === expId);
+    if (!exp || !auth.currentUser || !exp.parts?.some(p => p.itemId === itemId)) return;
+    const userId = auth.currentUser.uid;
+    const next = Math.max(0, quantity);
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'users', userId, 'experiments', expId), { ...exp, parts: exp.parts.map(p => (p.itemId === itemId ? { ...p, quantity: next } : p)) }, { merge: true });
+    batch.set(doc(db, 'users', userId, 'menu', itemId), { finishedGoodsStock: round4(-next) }, { merge: true });
+    try {
+      await batch.commit();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${userId}/experiments/${expId}`);
+    }
+  };
+
   /** Takes a made item out of an experiment, giving what it used back to stock. */
   const removePartFromExperiment = async (expId: string, itemId: string) => {
     const exp = experiments.find(e => e.id === expId);
@@ -188,6 +207,7 @@ export function useExperimentActions(
     updateExperimentMaterial,
     addPartToExperiment,
     updateExperimentPart,
+    restartExperimentPart,
     removePartFromExperiment,
   };
 }

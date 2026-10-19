@@ -628,6 +628,8 @@ export interface AppViewProps {
   /** Bases, fillings and other made items in an R&D session: taken from (and given back to) their finished stock. */
   addPartToExperiment: (expId: string, itemId: string) => void;
   updateExperimentPart: (expId: string, itemId: string, quantity: number) => void;
+  /** After the item's unit changed (its stock cleared): the amount used, in the new unit. */
+  restartExperimentPart: (expId: string, itemId: string, quantity: number) => void;
   removePartFromExperiment: (expId: string, itemId: string) => void;
   processVoiceCommand: (t: string) => void;
   startListening: () => void;

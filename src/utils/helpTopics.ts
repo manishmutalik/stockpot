@@ -427,7 +427,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     keywords: ['r&d', 'experiment', 'trial', 'test', 'new recipe', 'lab', 'base', 'filling', 'ganache'],
     body: [
       text('Trying out a new recipe uses real ingredients. In **R&D Lab**, click **New R&D Session**, name it, and add the materials you used. The stock shown for them goes down by what you used, and the cost shows as R&D on the Dashboard rather than hiding inside your other figures.'),
-      text('Used a base or filling you had made (a sponge base, 300 g of ganache)? Choose it in **+ Add a base or filling** and say how much: pieces, or grams for one made by weight. It is taken from its stock and costed at what its ingredients cost. Removing it, or the session, puts it back.'),
+      text('Used a base or filling you had made (a sponge base, 300 g of ganache)? Choose it in **+ Add a base or filling** and say how much, choosing the unit beside it: pieces, or g or kg (ml or litres). Choosing g for one saved in pieces counts it by weight from then on, as on the Menu (Stockpot says what changes first). It is taken from its stock and costed at what its ingredients cost. Removing it, or the session, puts it back.'),
     ],
   },
 

@@ -4,8 +4,52 @@ import { Beaker, Calendar, Coins, FlaskConical, Plus, Search, Trash2, Wheat, Cal
 import { AppViewProps } from '../types';
 import { MetricCard } from '../components/MetricCard';
 import { convertAmount } from '../utils/conversions';
-import { formatItemQuantity, fromEntry, itemUnit, smallUnit, toEntry, unitWord } from '../utils/itemUnits';
+import {
+  ENTRY_UNITS, EntryUnit, ItemUnit, familyOf, formatItemQuantity, fromEntryUnit, inEntryUnit, itemUnit, smallUnit,
+} from '../utils/itemUnits';
 import { experimentCost, madeItemCost, summarizeExperiments } from '../utils/rndStats';
+
+/** What an amount used is typed in at first: grams (ml) below 1 kg (litre), so a new line starts in grams. */
+const startUnit = (unit: ItemUnit, quantity: number): EntryUnit => smallUnit(unit) && !(quantity >= 1) ? smallUnit(unit)! : unit === 'kg' ? 'kg' : unit === 'l' ? 'l' : 'pcs';
+
+/**
+ * How much of a made item a session used: a number and its unit. Grams or kg (ml or litres) only change how the number
+ * is typed; a unit of another kind (g for an item counted in pieces) changes what the item is counted in, through
+ * `onUnit`, carrying the number over (300 typed in pieces, then g, is 300 g).
+ */
+function PartAmount({ name, unit, quantity, onQuantity, onUnit }: {
+  name: string; unit: ItemUnit; quantity: number;
+  onQuantity: (quantity: number) => void;
+  onUnit: (to: ItemUnit, quantity: number) => void;
+}) {
+  const [entry, setEntry] = useState<EntryUnit>(() => startUnit(unit, quantity));
+  // Back to the item's own kind when a unit change was not made (or the item changed elsewhere).
+  const shown = familyOf(entry) === unit ? entry : startUnit(unit, quantity);
+  const typed = inEntryUnit(quantity, shown);
+  return (
+    <>
+      <input
+        type="number" min={0} step="any"
+        aria-label={`Amount of ${name}`}
+        value={typed}
+        onChange={(e) => onQuantity(fromEntryUnit(parseFloat(e.target.value) || 0, shown))}
+        className="w-20 bg-white border border-transparent hover:border-stone-200 rounded-lg px-2 py-1 text-sm font-mono font-semibold text-ink text-right outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+      />
+      <select
+        aria-label={`Unit of ${name}`}
+        value={shown}
+        onChange={(e) => {
+          const next = e.target.value as EntryUnit;
+          setEntry(next);
+          if (familyOf(next) !== unit) onUnit(familyOf(next), fromEntryUnit(typed, next));
+        }}
+        className="h-7 rounded-md bg-white border border-transparent hover:border-stone-200 px-1.5 font-mono text-[11px] font-semibold text-muted outline-none focus:border-primary cursor-pointer"
+      >
+        {ENTRY_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+      </select>
+    </>
+  );
+}
 
 const selectCls =
   'h-9 rounded-lg bg-stone-50 border border-transparent px-3 text-xs font-semibold text-ink focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none cursor-pointer';
@@ -14,8 +58,14 @@ export const ExperimentsView: React.FC<AppViewProps> = (props) => {
   const {
     materials, menu, experiments, currency, settings, addExperiment, updateExperiment, deleteExperiment,
     addMaterialToExperiment, updateExperimentMaterial, removeMaterialFromExperiment,
-    addPartToExperiment, updateExperimentPart, removePartFromExperiment
+    addPartToExperiment, updateExperimentPart, restartExperimentPart, removePartFromExperiment, setCountedIn
   } = props;
+
+  // A unit of another kind changes what the item is counted in (asked first, as on the Menu; its stock is cleared), then
+  // this session's amount is set in the new unit.
+  const changePartUnit = async (expId: string, itemId: string, to: ItemUnit, quantity: number) => {
+    if (await setCountedIn(itemId, to === 'pcs' ? null : to)) restartExperimentPart(expId, itemId, quantity);
+  };
 
   const [search, setSearch] = useState('');
 
@@ -273,21 +323,17 @@ export const ExperimentsView: React.FC<AppViewProps> = (props) => {
                               {parts.map((part) => {
                                 const item = menu.find(m => m.id === part.itemId);
                                 const unit = itemUnit(item);
-                                const typedIn = smallUnit(unit) ?? unitWord(unit, 2);
                                 const lineCost = item ? madeItemCost(item, menu, materials) * part.quantity : 0;
                                 return (
                                   <div key={part.itemId} className="flex items-center gap-3 bg-stone-50 p-3 rounded-xl">
                                     <div className="flex-1 min-w-0">
                                       <div className="text-sm font-semibold text-ink truncate">{item?.name || 'Unknown'}</div>
                                       <div className="flex items-center gap-2 mt-1">
-                                        <input
-                                          type="number" min={0} step="any"
-                                          aria-label={`Amount of ${item?.name || 'item'}`}
-                                          value={toEntry(unit, part.quantity)}
-                                          onChange={(e) => updateExperimentPart(exp.id, part.itemId, fromEntry(unit, parseFloat(e.target.value) || 0))}
-                                          className="w-20 bg-white border border-transparent hover:border-stone-200 rounded-lg px-2 py-1 text-sm font-mono font-semibold text-ink text-right outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                        <PartAmount
+                                          name={item?.name || 'item'} unit={unit} quantity={part.quantity}
+                                          onQuantity={q => updateExperimentPart(exp.id, part.itemId, q)}
+                                          onUnit={(to, q) => changePartUnit(exp.id, part.itemId, to, q)}
                                         />
-                                        <span className="font-mono text-[10px] font-semibold text-muted uppercase">{typedIn}</span>
                                         <span className="font-mono text-[11px] text-muted ml-auto">{money(lineCost)}</span>
                                       </div>
                                       {item && (
