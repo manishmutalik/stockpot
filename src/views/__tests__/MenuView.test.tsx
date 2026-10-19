@@ -331,15 +331,44 @@ describe('MenuView: items made from other items', () => {
     { id: 'base', name: 'Sponge Base', sellingPrice: 0, notForSale: true, finishedGoodsStock: 4.5, recipe: [{ materialId: 'flour', amount: 300, unit: 'g' }] }, // 3
   ];
 
-  it('costs a cake with its base, and lists bases apart, without price or margin', () => {
+  it('costs a cake with its base, and keeps bases on their own tab, without price or margin', () => {
     render(<MenuView {...makeProps({ menu: partsMenu })} />);
     expect(within(card('Cream Cake')).getByText('Cost: $5.00')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Made for other items' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /Menu/, selected: true }).textContent).toContain('1');
+    expect(screen.getByText('What you sell: prices, margins and sales.')).toBeTruthy();
+    expect(screen.queryByDisplayValue('Sponge Base')).toBeNull();
+    expect(screen.getByText('Menu Items').nextElementSibling?.textContent).toBe('1');
+
+    fireEvent.click(screen.getByRole('tab', { name: /Bases and fillings/ }));
+    expect(screen.getByText(/Made ahead to go into what you sell/)).toBeTruthy();
+    expect(screen.queryByDisplayValue('Cream Cake')).toBeNull();
     const base = card('Sponge Base');
-    expect(within(base).getByText('Made for other items')).toBeTruthy();
     expect(within(base).getByText(/Used in Cream Cake/)).toBeTruthy();
     expect(within(base).queryByLabelText('Sale price')).toBeNull();
-    expect(screen.getByText('Menu Items').nextElementSibling?.textContent).toBe('1');
+    // The Menu's figures and margin tools stay on the Menu tab.
+    expect(screen.queryByText('Menu Items')).toBeNull();
+    expect(screen.queryByLabelText('Filter by margin')).toBeNull();
+  });
+
+  it('adds to the tab it is on', async () => {
+    const addMenuItem = vi.fn().mockResolvedValue('new');
+    const props = makeProps({ menu: partsMenu, addMenuItem });
+    render(<MenuView {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: /Add Menu Item/ }));
+    expect(addMenuItem).toHaveBeenLastCalledWith({});
+    fireEvent.click(screen.getByRole('tab', { name: /Bases and fillings/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Add base or filling/ }));
+    expect(addMenuItem).toHaveBeenLastCalledWith({ notForSale: true });
+    await waitFor(() => expect(props.setExpandedRecipeId).toHaveBeenCalledWith('new'));
+  });
+
+  it('searches both tabs, and opens on the tab of the item being edited', () => {
+    render(<MenuView {...makeProps({ menu: partsMenu, expandedRecipeId: 'base' })} />);
+    expect(screen.getByRole('tab', { name: /Bases and fillings/, selected: true })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Search menu items'), { target: { value: 'cake' } });
+    expect(screen.getByText('No bases or fillings match these filters.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '1 more in Menu' }));
+    expect(screen.getByDisplayValue('Cream Cake')).toBeTruthy();
   });
 
   it('turns "Sold on the menu" off and on, and adds a made item to a recipe', () => {

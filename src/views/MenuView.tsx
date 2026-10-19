@@ -114,6 +114,9 @@ const RecipeLine: React.FC<{
   );
 };
 
+/** The two tabs: items sold on the menu, and bases and fillings made only to go into them (`notForSale`). */
+type MenuTab = 'menu' | 'made';
+
 export const MenuView: React.FC<AppViewProps> = (props) => {
   const {
     materials, categories, menu, orders, settings, currency, expandedRecipeId, setExpandedRecipeId,
@@ -191,24 +194,41 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
   }, [orders, menu, materials, settings.gstApplicable, settings.gstRate, settings.gstPricingMode, salesPeriod]);
   const periodPhrase = SALES_PERIODS.find(p => p.value === salesPeriod)!.phrase;
 
+  // Two tabs: what is sold (the Menu), and bases and fillings made only to go into it. Opens on the Menu, or on the tab of
+  // the item opened for editing; follows that item when it moves between them ("Sold on the menu" turned off or on).
+  const tabOf = (item: Pick<MenuItemType, 'notForSale'> | undefined): MenuTab => (item?.notForSale ? 'made' : 'menu');
+  const expandedItem = expandedRecipeId ? menu.find(m => m.id === expandedRecipeId) : undefined;
+  const [tab, setTab] = useState<MenuTab>(() => tabOf(expandedItem));
+  const followKey = expandedItem ? `${expandedItem.id}:${tabOf(expandedItem)}` : '';
+  const [followed, setFollowed] = useState(followKey);
+  if (followed !== followKey) {
+    setFollowed(followKey);
+    if (expandedItem) setTab(tabOf(expandedItem));
+  }
+  const counts = { menu: menu.filter(m => !m.notForSale).length, made: menu.filter(m => m.notForSale).length };
+  const addItem = async () => {
+    const id = await addMenuItem(tab === 'made' ? { notForSale: true } : {});
+    if (id) setExpandedRecipeId(id);
+  };
+
   const q = search.trim().toLowerCase();
+  const matchesSearch = (item: MenuItemType) => !q || (item.name || '').toLowerCase().includes(q);
+  // Matches on the other tab, so a search never hides what it finds.
+  const otherMatches = q ? menu.filter(m => tabOf(m) !== tab && matchesSearch(m)).length : 0;
   const visible = useMemo(
     () => menu.filter(item => {
+      if (tabOf(item) !== tab) return false;
       if (q && !(item.name || '').toLowerCase().includes(q)) return false;
-      if (marginFilter === 'all') return true;
-      // Bases and fillings have no price or margin of their own: they only show under All.
-      if (item.notForSale) return false;
+      // Bases and fillings have no price or margin of their own: the margin filter is for the Menu.
+      if (tab === 'made' || marginFilter === 'all') return true;
       if (marginFilter === 'repricing') return repricingIds.has(item.id);
       // Unpriced items have no margin to speak of: they belong under "needs review".
       if (!(item.sellingPrice > 0)) return marginFilter === 'low';
       return getMarginInfo(basePriceOf(item.sellingPrice, settings), recipeCost(cv(item).recipe, materials)).tier === marginFilter;
     }),
-    [menu, costed, materials, q, marginFilter, repricingIds, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]
+    [menu, costed, materials, q, tab, marginFilter, repricingIds, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]
   );
-
-  // Items sold on the menu first, then those made only for other items (bases, fillings), under their own heading.
-  const ordered = useMemo(() => [...visible.filter(m => !m.notForSale), ...visible.filter(m => m.notForSale)], [visible]);
-  const firstMadeId = ordered.find(m => m.notForSale)?.id;
+  const ordered = visible;
 
   const isPackaging = (req: IngredientRequirement) => materials.find(m => m.id === req.materialId)?.category === 'Packaging Materials';
 
@@ -245,20 +265,43 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
             </button>
           )}
           <button
-            onClick={addMenuItem}
+            onClick={addItem}
             className="h-10 flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 rounded-lg text-sm font-semibold shadow-sm transition-colors"
           >
             <Plus size={18} />
-            Add Menu Item
+            {tab === 'made' ? 'Add base or filling' : 'Add Menu Item'}
           </button>
         </div>
+      </div>
+
+      {/* What is sold, and what is made to go into it */}
+      <div>
+        <div role="tablist" aria-label="Recipes" className="flex gap-1 border-b border-stone-200">
+          {([['menu', 'Menu'], ['made', 'Bases and fillings']] as const).map(([value, label]) => (
+            <button
+              key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}
+              className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+                tab === value ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-ink'
+              }`}
+            >
+              {label}
+              <span className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${tab === value ? 'bg-primary/10' : 'bg-stone-100'}`}>{counts[value]}</span>
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-sm text-muted">
+          {tab === 'menu'
+            ? 'What you sell: prices, margins and sales.'
+            : 'Made ahead to go into what you sell: bases, fillings, ganache, masalas. Not sold on their own.'}
+        </p>
       </div>
 
       <datalist id="menu-categories">
         {[...new Set(menu.map(m => (m.category || '').trim()).filter(Boolean))].map(c => <option key={c} value={c} />)}
       </datalist>
 
-      {/* Headline figures */}
+      {/* Headline figures (the Menu's: bases and fillings have no price or margin) */}
+      {tab === 'menu' && (
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <MetricCard
           label="Menu Items"
@@ -293,6 +336,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
           footRight={summary.needsReview.length > 0 ? 'Margin < 40%' : null}
         />
       </div>
+      )}
 
       {/* Search + margin filter */}
       <div className="surface-card p-4 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -302,11 +346,12 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search menu items"
+            placeholder={tab === 'made' ? 'Search bases and fillings' : 'Search menu items'}
             aria-label="Search menu items"
             className="w-full h-10 pl-10 pr-3 rounded-lg bg-stone-50 border border-transparent text-sm text-ink placeholder:text-muted focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
           />
         </div>
+        {tab === 'menu' && (<>
         <select aria-label="Filter by margin" value={marginFilter} onChange={(e) => setMarginFilter(e.target.value as MarginFilter)} className={selectCls}>
           <option value="all">All Margins</option>
           <option value="high">60% and up</option>
@@ -325,8 +370,14 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
           <Calculator size={16} />
           What if…
         </button>
+        </>)}
+        {otherMatches > 0 && (
+          <button type="button" onClick={() => setTab(tab === 'menu' ? 'made' : 'menu')} className="text-sm font-semibold text-primary hover:underline">
+            {otherMatches} more in {tab === 'menu' ? 'Bases and fillings' : 'Menu'}
+          </button>
+        )}
         <span className="font-mono text-[11px] text-muted sm:ml-auto">
-          {visible.length} of {menu.length} item{menu.length === 1 ? '' : 's'}
+          {visible.length} of {counts[tab]} item{counts[tab] === 1 ? '' : 's'}
         </span>
       </div>
 
@@ -351,16 +402,26 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
             </button>
           )}
           <button
-            onClick={addMenuItem}
+            onClick={addItem}
             className="inline-flex items-center gap-2 h-10 bg-primary hover:bg-primary-dark text-white px-6 rounded-lg text-sm font-semibold shadow-sm transition-colors"
           >
             <Plus size={18} />
-            Add Menu Item
+            {tab === 'made' ? 'Add base or filling' : 'Add Menu Item'}
           </button>
         </div>
       )}
-      {menu.length > 0 && visible.length === 0 && (
-        <div className="surface-card text-center py-14 text-muted">No menu items match these filters.</div>
+      {menu.length > 0 && counts[tab] === 0 && (
+        <div className="surface-card text-center py-14 px-8 text-muted space-y-3">
+          <p>
+            {tab === 'made'
+              ? 'No bases or fillings yet. Add a sponge base, a ganache or a masala you make ahead, then add it to the items that use it with "Add a made item".'
+              : 'Nothing on the menu yet. Add what you sell.'}
+          </p>
+          {tab === 'made' && openRecipeReader && <p className="text-xs">Reading a recipe? Choose "Made ahead and kept" and it lands here.</p>}
+        </div>
+      )}
+      {counts[tab] > 0 && visible.length === 0 && (
+        <div className="surface-card text-center py-14 text-muted">No {tab === 'made' ? 'bases or fillings' : 'menu items'} match these filters.</div>
       )}
 
       <div className="grid gap-4">
@@ -379,12 +440,6 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
           const unpriced = unpricedMaterials(cv(item), materials);
           return (
             <React.Fragment key={item.id}>
-            {item.id === firstMadeId && (
-              <div className="pt-4">
-                <h3 className="font-mono text-[11px] font-semibold uppercase tracking-wider text-muted">Made for other items</h3>
-                <p className="text-xs text-muted mt-1">Bases, fillings and anything else you make ahead to go into the items you sell. Not on the menu or in orders.</p>
-              </div>
-            )}
             <div className={`surface-card overflow-hidden ${expanded ? 'ring-1 ring-primary/30' : ''}`}>
               <div className="p-4 sm:p-5 space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -419,11 +474,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                             Cost incomplete
                           </span>
                         )}
-                        {made ? (
-                          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                            Made for other items
-                          </span>
-                        ) : (
+                        {!made && (
                           <span className={`font-mono text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ${MARGIN_PILL[tier]}`}>
                             {isLoss ? `Loss (${margin.toFixed(0)}%)` : `${margin.toFixed(0)}% Margin`}
                           </span>
@@ -696,7 +747,11 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
                         <div className="min-w-0">
                           <p className="text-sm font-semibold text-ink">Sold on the menu</p>
-                          <p className="text-xs text-muted">Turn off for a base or filling you make only to go into other items.</p>
+                          <p className="text-xs text-muted">
+                            {made
+                              ? 'Turn on to sell it: it moves to the Menu tab.'
+                              : 'Turn off for a base or filling you make only to go into other items: it moves to Bases and fillings.'}
+                          </p>
                         </div>
                         <button
                           type="button" role="switch" aria-checked={!made} aria-label="Sold on the menu"

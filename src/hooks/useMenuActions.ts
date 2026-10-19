@@ -30,23 +30,28 @@ export function useMenuActions(
 
   /**
    * Creates a new blank menu item in Firestore. Starts with an empty recipe
-   * and zero selling price; the user edits it inline in the Menu tab.
+   * and zero selling price; the user edits it inline in the Menu tab. With
+   * `notForSale`, it is a base or filling, made only to go into other items.
+   * Resolves the new item's id (undefined when it could not be saved).
    */
-  const addMenuItem = async () => {
-    if (!auth.currentUser) return;
+  const addMenuItem = async (options: { notForSale?: boolean } = {}): Promise<string | undefined> => {
+    if (!auth.currentUser) return undefined;
     const userId = auth.currentUser.uid;
     const id = Math.random().toString(36).substr(2, 9);
     const newItem: MenuItem = {
       id,
-      name: 'New Menu Item',
+      name: options.notForSale ? 'New base or filling' : 'New Menu Item',
       sellingPrice: 0,
       recipe: [],
-      emoji: '🧁'
+      emoji: options.notForSale ? '🥣' : '🧁',
+      ...(options.notForSale && { notForSale: true }),
     };
     try {
       await setDoc(doc(db, 'users', userId, 'menu', id), newItem);
+      return id;
     } catch (err) {
       handleFirestoreError(err, OperationType.WRITE, `users/${userId}/menu/${id}`);
+      return undefined;
     }
   };
 

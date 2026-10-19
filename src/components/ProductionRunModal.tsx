@@ -26,6 +26,8 @@ interface MenuItem {
   madeToOrder?: boolean;
   /** Counted by weight or volume (utils/itemUnits). */
   countedIn?: 'kg' | 'l';
+  /** A base or filling made only to go into other items. */
+  notForSale?: boolean;
 }
 
 interface RawMaterial {
@@ -479,9 +481,14 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
                   className={`${modalField(invalidRowIndex === i && !row.recipeId)} flex-1 min-w-0 font-semibold`}
                 >
                   <option value="" disabled>Select a recipe...</option>
-                  {menu.filter(item => !item.madeToOrder).map(item => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
-                  ))}
+                  {([['Menu', false], ['Bases and fillings', true]] as const).map(([label, made]) => {
+                    const items = menu.filter(item => !item.madeToOrder && !!item.notForSale === made);
+                    return items.length > 0 && (
+                      <optgroup key={label} label={label}>
+                        {items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      </optgroup>
+                    );
+                  })}
                 </select>
                 <QuantityStepper
                   value={row.quantity}
