@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Award, BookOpen, Calculator, Check, Copy, Edit2, Package, Percent, Plus, Salad, Search, Sparkles, Trash2,
-  TriangleAlert, Utensils, X
+  Award, BookOpen, Calculator, Check, Copy, Edit2, Layers, Package, Percent, Plus, Salad, Search, Sparkles, Trash2,
+  TriangleAlert, Utensils, UtensilsCrossed, X
 } from 'lucide-react';
 import { AppViewProps, IngredientRequirement, MenuItem as MenuItemType, RawMaterial } from '../types';
 import { MetricCard } from '../components/MetricCard';
@@ -276,20 +276,21 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
 
       {/* What is sold, and what is made to go into it */}
       <div>
-        <div role="tablist" aria-label="Recipes" className="flex gap-1 border-b border-stone-200">
-          {([['menu', 'Menu'], ['made', 'Bases and fillings']] as const).map(([value, label]) => (
+        <div role="tablist" aria-label="Recipes" className="flex gap-1 rounded-xl bg-stone-200/70 p-1 sm:inline-flex">
+          {([['menu', 'Menu', UtensilsCrossed], ['made', 'Bases and fillings', Layers]] as const).map(([value, label, Icon]) => (
             <button
               key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)}
-              className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
-                tab === value ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-ink'
+              className={`flex min-h-9 flex-auto items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] font-semibold transition-colors sm:gap-2 sm:px-5 sm:text-sm ${
+                tab === value ? 'bg-primary text-white shadow-sm' : 'text-ink hover:bg-white/80'
               }`}
             >
-              {label}
-              <span className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${tab === value ? 'bg-primary/10' : 'bg-stone-100'}`}>{counts[value]}</span>
+              <Icon size={16} className="hidden shrink-0 sm:block" />
+              <span className="text-left leading-tight">{label}</span>
+              <span className={`rounded-full px-1.5 py-0.5 font-mono text-[10px] leading-none sm:text-[11px] ${tab === value ? 'bg-white/20' : 'bg-white text-muted'}`}>{counts[value]}</span>
             </button>
           ))}
         </div>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-3 text-sm text-muted">
           {tab === 'menu'
             ? 'What you sell: prices, margins and sales.'
             : 'Made ahead to go into what you sell: bases, fillings, ganache, masalas. Not sold on their own.'}
