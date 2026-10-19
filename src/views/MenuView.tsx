@@ -206,9 +206,18 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     if (expandedItem) setTab(tabOf(expandedItem));
   }
   const counts = { menu: menu.filter(m => !m.notForSale).length, made: menu.filter(m => m.notForSale).length };
+  // A new item goes to the top of its tab, opened, scrolled to and its name selected to type over: further down the
+  // list it opened out of sight and the button seemed to do nothing. Search and the margin filter are cleared, so
+  // they cannot hide it.
+  const [addedId, setAddedId] = useState<string | null>(null);
+  const shownAddedId = useRef<string | null>(null);
   const addItem = async () => {
     const id = await addMenuItem(tab === 'made' ? { notForSale: true } : {});
-    if (id) setExpandedRecipeId(id);
+    if (!id) return;
+    setSearch('');
+    setMarginFilter('all');
+    setAddedId(id);
+    setExpandedRecipeId(id);
   };
 
   const q = search.trim().toLowerCase();
@@ -228,7 +237,20 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     }),
     [menu, costed, materials, q, tab, marginFilter, repricingIds, settings.gstApplicable, settings.gstRate, settings.gstPricingMode]
   );
-  const ordered = visible;
+  const ordered = useMemo(() => {
+    const added = visible.find(m => m.id === addedId);
+    return added ? [added, ...visible.filter(m => m !== added)] : visible;
+  }, [visible, addedId]);
+  useEffect(() => {
+    if (!addedId || shownAddedId.current === addedId || !ordered.some(m => m.id === addedId)) return;
+    shownAddedId.current = addedId;
+    const card = document.querySelector<HTMLElement>(`[data-item-id="${addedId}"]`);
+    const name = card?.querySelector<HTMLInputElement>('input[aria-label="Item name"]');
+    name?.focus({ preventScroll: true });
+    name?.select();
+    // After the opened card has laid out, or the scroll stops short.
+    requestAnimationFrame(() => card?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }));
+  }, [addedId, ordered]);
 
   const isPackaging = (req: IngredientRequirement) => materials.find(m => m.id === req.materialId)?.category === 'Packaging Materials';
 
@@ -441,7 +463,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
           const unpriced = unpricedMaterials(cv(item), materials);
           return (
             <React.Fragment key={item.id}>
-            <div className={`surface-card overflow-hidden ${expanded ? 'ring-1 ring-primary/30' : ''}`}>
+            <div data-item-id={item.id} className={`surface-card overflow-hidden scroll-mt-24 ${expanded ? 'ring-1 ring-primary/30' : ''}`}>
               <div className="p-4 sm:p-5 space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-center gap-4 min-w-0 flex-1">

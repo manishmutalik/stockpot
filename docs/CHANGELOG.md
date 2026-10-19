@@ -1,5 +1,11 @@
 # Changelog
 
+## A new item opens where you can see it
+
+- **Add Menu Item** and **Add base or filling** put the new item at the top of its tab, opened, scroll to it, and
+  select its name so you can type over it. Before, with a few items already there, it opened below the screen and the
+  button seemed to do nothing. A search or margin filter that would hide it is cleared.
+
 ## Recipes & Menus: Menu, and Bases and fillings
 
 - Recipes & Menus has two tabs, each with a line saying what it holds: **Menu** (what you sell: prices, margins and

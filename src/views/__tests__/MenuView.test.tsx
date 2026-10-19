@@ -362,6 +362,21 @@ describe('MenuView: items made from other items', () => {
     await waitFor(() => expect(props.setExpandedRecipeId).toHaveBeenCalledWith('new'));
   });
 
+  it('puts a new item at the top, clears what would hide it, and selects its name to type over', async () => {
+    const addMenuItem = vi.fn().mockResolvedValue('new');
+    const props = makeProps({ menu: partsMenu, addMenuItem });
+    const { rerender } = render(<MenuView {...props} />);
+    fireEvent.change(screen.getByLabelText('Search menu items'), { target: { value: 'cream' } });
+    fireEvent.click(screen.getByRole('button', { name: /Add Menu Item/ }));
+    await waitFor(() => expect(props.setExpandedRecipeId).toHaveBeenCalledWith('new'));
+    const fresh = { id: 'new', name: 'New Menu Item', sellingPrice: 0, recipe: [], emoji: '🧁' };
+    rerender(<MenuView {...props} menu={[...partsMenu, fresh] as never} expandedRecipeId="new" />);
+    expect((screen.getByLabelText('Search menu items') as HTMLInputElement).value).toBe('');
+    const names = screen.getAllByLabelText('Item name') as HTMLInputElement[];
+    expect(names[0].value).toBe('New Menu Item');
+    expect(document.activeElement).toBe(names[0]);
+  });
+
   it('searches both tabs, and opens on the tab of the item being edited', () => {
     render(<MenuView {...makeProps({ menu: partsMenu, expandedRecipeId: 'base' })} />);
     expect(screen.getByRole('tab', { name: /Bases and fillings/, selected: true })).toBeTruthy();
