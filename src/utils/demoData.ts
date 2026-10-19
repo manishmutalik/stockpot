@@ -1,7 +1,8 @@
 import { convertAmount } from './conversions';
 import { stampFor, type OrderStamp } from './orderPricing';
 import { costView } from './itemParts';
-import type { OrderTaken, PaymentMethod, PriceLogEntry } from '../types';
+import type { OrderTaken, PaymentMethod, PriceLogEntry, WastageLog } from '../types';
+import { pricingStamp } from './pricing';
 
 /**
  * Sample data for the demo sandbox.
@@ -35,10 +36,16 @@ export interface DemoMenuItem {
   batchMakes?: number;
   /** Made when ordered (utils/madeToOrder): the cream cake, assembled on a base for each order. */
   madeToOrder?: boolean;
+  /** Counted by weight or volume (utils/itemUnits): a gravy kept by the kg. Its recipe is then for 1 kg. */
+  countedIn?: 'kg' | 'l';
+  /** A target margin of its own (utils/pricing), so a price alert can say it is under target. */
+  targetMargin?: number;
 }
 export interface DemoOrder {
   id: string; menuItemId: string; quantity: number; date: string;
   customerName: string; customerPhone: string; fulfilled: boolean;
+  /** Sent by a courier: what the customer paid for delivery, and what the courier cost. */
+  deliveryMethod?: 'third_party'; deliveryCharge?: number; deliveryFee?: number;
 }
 /** A demo order carries its price and cost stamp, like every order made in the app. */
 export type DemoOrderWithStamp = DemoOrder & OrderStamp & { paymentMethod: PaymentMethod; paymentFeeRate: number; discount?: number; taken?: OrderTaken };
@@ -49,6 +56,42 @@ export interface DemoRun {
   partsUsed?: { itemId: string; quantity: number }[]; partsCost?: number;
   /** Logged in batches: how many. */
   batches?: number;
+}
+
+/** A material as bought: its opening stock (`bought`), its price now, and its alert level. */
+export interface KitchenPurchase {
+  id: string; name: string; unit: string; bought: number; costPerUnit: number; category: string; threshold: number;
+}
+/** One order: the item, how many, how many days ago, who; and, when it differs from the default, how it was paid. */
+export interface KitchenOrderRow {
+  item: string; quantity: number; daysAgo: number; customer: string; phone: string;
+  method?: PaymentMethod; discount?: number;
+  delivery?: { charge: number; fee: number };
+}
+/** One production run: recipe, produced, sellable (if it differed), days ago, shelf life in days, batches. */
+export type KitchenRunRow = [id: string, recipeId: string, produced: number, sellable: number | undefined, daysAgo: number, shelfLife: number, batches?: number];
+
+/**
+ * A sample kitchen: what it bought, its menu (recipes per unit), its orders and production runs, and the rest. Everything
+ * that follows from these (costs, stock, stamps, the price history) is worked out by `buildKitchenData`, so any kitchen
+ * described here adds up the way a real one in the app does.
+ */
+export interface KitchenCatalogue {
+  name: string; address: string; phone: string;
+  purchases: KitchenPurchase[];
+  menu: Omit<DemoMenuItem, 'finishedGoodsStock'>[];
+  orders: KitchenOrderRow[];
+  runs: KitchenRunRow[];
+  /** Runs made for a particular order rather than for the shelf. */
+  customerOrderRuns?: string[];
+  /** Materials topped up later at another price: the share bought then, the opening price as a share of today's, and when. */
+  topUps: Record<string, { share: number; openedAt: number; daysAgo: number }>;
+  experiments: { id: string; name: string; daysAgo: number; materials: { materialId: string; amount: number; unit: string }[]; notes?: string }[];
+  fixedCosts: { id: string; name: string; monthlyAmount: number }[];
+  /** Materials thrown away: the material, how much (in its unit), days ago, why. Taken from stock. */
+  wastage?: { materialId: string; quantity: number; daysAgo: number; reason: string }[];
+  /** When the items were priced, at the opening prices (utils/pricing stamp), so price rises since then show as alerts. */
+  pricedDaysAgo?: number;
 }
 
 /** Fee % the demo business pays per payment method. */
@@ -64,13 +107,15 @@ const dayOffset = (today: string, daysAgo: number) => {
   return d.toISOString().split('T')[0];
 };
 
-export function buildDemoData(userId: string, today: string) {
-  const at = (daysAgo: number) => dayOffset(today, daysAgo);
 
-  // ── Materials: what was bought (opening stock), price, and alert level ─────
-  // Current stock is worked out below from what the production runs used.
-  // Prices are typical Indian retail/wholesale rates in rupees, per gram / ml / piece.
-  const purchases = [
+/** The demo sandbox: a home bakery in Bengaluru, with a week of trading. */
+export const BAKERY: KitchenCatalogue = {
+  name: 'Stockpot Demo Kitchen',
+  address: '14, 80 Feet Road, Indiranagar, Bengaluru 560038',
+  phone: '+91 98450 00199',
+  // Materials: what was bought (opening stock), price, and alert level. Current stock is worked out from what the
+  // production runs used. Prices are typical Indian retail/wholesale rates in rupees, per gram / ml / piece.
+  purchases: [
     { id: 'm_flour', name: 'Maida (All-Purpose Flour)', unit: 'g', bought: 60000, costPerUnit: 0.045, category: 'Raw Materials', threshold: 10000 }, // ₹45/kg
     { id: 'm_atta', name: 'Whole Wheat Atta', unit: 'g', bought: 40000, costPerUnit: 0.048, category: 'Raw Materials', threshold: 5000 }, // ₹48/kg
     { id: 'm_sugar', name: 'Sugar', unit: 'g', bought: 25000, costPerUnit: 0.048, category: 'Raw Materials', threshold: 5000 }, // ₹48/kg
@@ -86,11 +131,9 @@ export function buildDemoData(userId: string, today: string) {
     { id: 'm_oil', name: 'Refined Oil', unit: 'ml', bought: 2000, costPerUnit: 0.15, category: 'Raw Materials', threshold: 400 }, // ₹150/litre
     { id: 'm_cream', name: 'Whipping Cream', unit: 'g', bought: 4000, costPerUnit: 0.4, category: 'Raw Materials', threshold: 1000 }, // ₹400/kg
     { id: 'm_pineapple', name: 'Pineapple (tinned)', unit: 'g', bought: 3000, costPerUnit: 0.12, category: 'Raw Materials', threshold: 500 }, // ₹120/kg
-  ];
-
-
-  // ── Menu: recipes are per single unit ──────────────────────────────────────
-  const menuBase: (Omit<DemoMenuItem, 'finishedGoodsStock'>)[] = [
+  ],
+  // Menu: recipes are per single unit.
+  menu: [
     {
       id: 'menu_croissant', name: 'Butter Croissant', sellingPrice: 150, emoji: '🥐',
       recipe: [
@@ -138,8 +181,79 @@ export function buildDemoData(userId: string, today: string) {
       ],
       parts: [{ itemId: 'menu_base', quantity: 1 }],
     },
-  ];
+  ],
+  // Hotel Sai Residency orders every other day (6, 4 and 2 days ago), so the Customers panel shows one that is due.
+  // One large café order was given a bulk discount, so the demo shows discounts too.
+  orders: [
+    { item: 'menu_croissant', quantity: 8, daysAgo: 0, customer: 'Priya Sharma', phone: '+91 98450 10101' },
+    { item: 'menu_muffin', quantity: 12, daysAgo: 0, customer: 'Rohan Mehta', phone: '+91 98450 10102' },
+    { item: 'menu_bread', quantity: 4, daysAgo: 0, customer: 'Sunita Iyer', phone: '+91 98450 10103' },
+    { item: 'menu_croissant', quantity: 15, daysAgo: 1, customer: 'Brew & Bite Café', phone: '+91 98860 20201', discount: 150 },
+    { item: 'menu_muffin', quantity: 8, daysAgo: 1, customer: 'Arjun Nair', phone: '+91 98860 20202' },
+    { item: 'menu_bread', quantity: 6, daysAgo: 1, customer: 'Kavita Reddy', phone: '+91 98860 20203' },
+    { item: 'menu_croissant', quantity: 6, daysAgo: 2, customer: 'Hotel Sai Residency', phone: '+91 99001 30301' },
+    { item: 'menu_muffin', quantity: 10, daysAgo: 2, customer: 'Tapri Corner Café', phone: '+91 99001 30302' },
+    { item: 'menu_bread', quantity: 8, daysAgo: 3, customer: 'Imran Qureshi', phone: '+91 99720 40401' },
+    { item: 'menu_croissant', quantity: 12, daysAgo: 3, customer: 'Neha Gupta', phone: '+91 99720 40402' },
+    { item: 'menu_muffin', quantity: 14, daysAgo: 4, customer: 'Vikram Singh', phone: '+91 97420 50501' },
+    { item: 'menu_croissant', quantity: 5, daysAgo: 4, customer: 'Hotel Sai Residency', phone: '+91 99001 30301' },
+    { item: 'menu_bread', quantity: 10, daysAgo: 5, customer: 'Daily Fresh Grocers', phone: '+91 90350 60601' },
+    { item: 'menu_croissant', quantity: 10, daysAgo: 5, customer: 'Hotel Udupi Grand', phone: '+91 90350 60602' },
+    { item: 'menu_muffin', quantity: 15, daysAgo: 6, customer: 'Greenfield School Fete', phone: '+91 80410 70701' },
+    { item: 'menu_bread', quantity: 5, daysAgo: 6, customer: 'Hotel Sai Residency', phone: '+91 99001 30301' },
+    // Made when ordered: the cream and pineapple came out of materials, and the bases off the base shelf.
+    { item: 'menu_pinecake', quantity: 2, daysAgo: 1, customer: 'Ananya Rao', phone: '+91 98450 10104' },
+  ],
+  runs: [
+    ['run_1', 'menu_croissant', 30, undefined, 6, 2],
+    ['run_2', 'menu_muffin', 30, undefined, 6, 3],
+    ['run_3', 'menu_bread', 15, undefined, 6, 2],
+    ['run_4', 'menu_croissant', 20, undefined, 4, 2],
+    ['run_5', 'menu_muffin', 20, 19, 4, 3], // one muffin lost at the bench
+    ['run_6', 'menu_bread', 15, undefined, 4, 2],
+    ['run_7', 'menu_croissant', 25, undefined, 1, 2],
+    ['run_8', 'menu_muffin', 25, undefined, 2, 3],
+    ['run_9', 'menu_bread', 15, undefined, 2, 2],
+    ['run_10', 'menu_base', 9, 8, 2, 4, 2], // two batches of sponge base, one short of the 9 planned
+  ],
+  customerOrderRuns: ['run_7'],
+  // Butter, eggs, chocolate chips and yeast were topped up later at a different price.
+  topUps: {
+    m_butter: { share: 0.4, openedAt: 0.92, daysAgo: 12 },   // butter got dearer
+    m_eggs: { share: 0.4, openedAt: 0.9, daysAgo: 9 },       // so did eggs
+    m_chips: { share: 0.35, openedAt: 0.95, daysAgo: 16 },
+    m_yeast: { share: 0.3, openedAt: 1.1, daysAgo: 7 },      // yeast got cheaper
+  },
+  experiments: [
+    {
+      id: 'exp_1',
+      name: 'Atta Croissant Trial',
+      daysAgo: 2,
+      materials: [
+        { materialId: 'm_atta', amount: 200, unit: 'g' },
+        { materialId: 'm_sugar', amount: 20, unit: 'g' },
+        { materialId: 'm_butter', amount: 80, unit: 'g' },
+      ],
+      notes: 'Tried replacing maida with whole wheat atta. Layers did not separate well and the crumb was dense. Tastes good but the texture is off.',
+    },
+  ],
+  // Typical monthly overheads for a home bakery, sized so that the week of orders covers them: the demo shows a business
+  // that makes money, as most visitors' will.
+  fixedCosts: [
+    { id: 'fc_power', name: 'Gas & electricity', monthlyAmount: 2500 },
+    { id: 'fc_helper', name: 'Part-time helper', monthlyAmount: 6000 },
+    { id: 'fc_phone', name: 'Phone & internet', monthlyAmount: 800 },
+  ],
+};
 
+export function buildDemoData(userId: string, today: string) {
+  return buildKitchenData(BAKERY, userId, today);
+}
+
+/** Everything a sample kitchen holds, worked out from its catalogue; `email` is what its settings show (bills carry it). */
+export function buildKitchenData(kitchen: KitchenCatalogue, userId: string, today: string, email = `${userId}@demo.stockpot.app`) {
+  const at = (daysAgo: number) => dayOffset(today, daysAgo);
+  const { purchases, menu: menuBase, runs: runRows } = kitchen;
 
   // What one of an item costs in materials, its parts' recipes included (the cream cake counts its base).
   const recipeUnitCost = (menuId: string): number => {
@@ -159,65 +273,30 @@ export function buildDemoData(userId: string, today: string) {
     });
     return {
       materials,
-      parts: (item.parts ?? []).map(p => ({ itemId: p.itemId, quantity: p.quantity * quantity })),
+      parts: (item.parts ?? []).map(p => ({ itemId: p.itemId, quantity: round4(p.quantity * quantity) })),
       cost: round2(materials.reduce((sum, m) => sum + m.amount * purchases.find(x => x.id === m.materialId)!.costPerUnit, 0)),
     };
   };
 
   // ── Orders (one per customer) ──────────────────────────────────────────────
-  const orderRows: [string, number, number, string, string][] = [
-    // [menu item, quantity, days ago, customer, phone]
-    // Hotel Sai Residency orders every other day (6, 4 and 2 days ago), so the Customers panel shows one that is due.
-    ['menu_croissant', 8, 0, 'Priya Sharma', '+91 98450 10101'],
-    ['menu_muffin', 12, 0, 'Rohan Mehta', '+91 98450 10102'],
-    ['menu_bread', 4, 0, 'Sunita Iyer', '+91 98450 10103'],
-    ['menu_croissant', 15, 1, 'Brew & Bite Café', '+91 98860 20201'],
-    ['menu_muffin', 8, 1, 'Arjun Nair', '+91 98860 20202'],
-    ['menu_bread', 6, 1, 'Kavita Reddy', '+91 98860 20203'],
-    ['menu_croissant', 6, 2, 'Hotel Sai Residency', '+91 99001 30301'],
-    ['menu_muffin', 10, 2, 'Tapri Corner Café', '+91 99001 30302'],
-    ['menu_bread', 8, 3, 'Imran Qureshi', '+91 99720 40401'],
-    ['menu_croissant', 12, 3, 'Neha Gupta', '+91 99720 40402'],
-    ['menu_muffin', 14, 4, 'Vikram Singh', '+91 97420 50501'],
-    ['menu_croissant', 5, 4, 'Hotel Sai Residency', '+91 99001 30301'],
-    ['menu_bread', 10, 5, 'Daily Fresh Grocers', '+91 90350 60601'],
-    ['menu_croissant', 10, 5, 'Hotel Udupi Grand', '+91 90350 60602'],
-    ['menu_muffin', 15, 6, 'Greenfield School Fete', '+91 80410 70701'],
-    ['menu_bread', 5, 6, 'Hotel Sai Residency', '+91 99001 30301'],
-    // Made when ordered: the cream and pineapple came out of materials, and the bases off the base shelf.
-    ['menu_pinecake', 2, 1, 'Ananya Rao', '+91 98450 10104'],
-  ];
   // Each order is stamped with what its item sold for and cost to make, as the app does when an
   // order is created, so the demo's figures are exact rather than "estimated".
-  // Orders are paid in a mix of ways, each carrying the fee rate in force (see DEMO_FEE_RATES), and one
-  // large café order was given a bulk discount, so the demo shows payment fees and discounts too.
+  // Orders are paid in a mix of ways, each carrying the fee rate in force (see DEMO_FEE_RATES); a row may name its own.
   const methods: PaymentMethod[] = ['upi', 'cash', 'upi', 'card', 'upi', 'cash'];
-  const FIRST_ORDER_DAYS_AGO = Math.max(...orderRows.map(r => r[2]));
-  const orders: DemoOrderWithStamp[] = orderRows.map(([menuItemId, quantity, daysAgo, customerName, customerPhone], i) => {
-    const paymentMethod = methods[i % methods.length];
+  const FIRST_ORDER_DAYS_AGO = Math.max(...kitchen.orders.map(r => r.daysAgo));
+  const orders: DemoOrderWithStamp[] = kitchen.orders.map((row, i) => {
+    const paymentMethod = row.method ?? methods[i % methods.length];
+    const item = menuBase.find(m => m.id === row.item)!;
     return {
-      id: `ord_${i + 1}`, menuItemId, quantity, date: at(daysAgo), customerName, customerPhone,
-      fulfilled: daysAgo > 0,
-      ...stampFor(costView(menuBase.find(m => m.id === menuItemId)!, menuBase), purchases),
+      id: `ord_${i + 1}`, menuItemId: row.item, quantity: row.quantity, date: at(row.daysAgo), customerName: row.customer, customerPhone: row.phone,
+      fulfilled: row.daysAgo > 0,
+      ...stampFor(costView(item, menuBase), purchases),
       paymentMethod, paymentFeeRate: DEMO_FEE_RATES[paymentMethod] ?? 0,
-      ...(customerName === 'Brew & Bite Café' && { discount: 150 }),
-      ...(menuBase.find(m => m.id === menuItemId)!.madeToOrder && { taken: takenBy(menuItemId, quantity) }),
+      ...(row.discount && { discount: row.discount }),
+      ...(item.madeToOrder && { taken: takenBy(row.item, row.quantity) }),
+      ...(row.delivery && { deliveryMethod: 'third_party' as const, deliveryCharge: row.delivery.charge, deliveryFee: row.delivery.fee }),
     };
   });
-
-  // ── Production runs: [id, recipe, produced, sellable (if it differed), days ago, shelf life in days, batches] ──
-  const runRows: [string, string, number, number | undefined, number, number, number?][] = [
-    ['run_1', 'menu_croissant', 30, undefined, 6, 2],
-    ['run_2', 'menu_muffin', 30, undefined, 6, 3],
-    ['run_3', 'menu_bread', 15, undefined, 6, 2],
-    ['run_4', 'menu_croissant', 20, undefined, 4, 2],
-    ['run_5', 'menu_muffin', 20, 19, 4, 3], // one muffin lost at the bench
-    ['run_6', 'menu_bread', 15, undefined, 4, 2],
-    ['run_7', 'menu_croissant', 25, undefined, 1, 2],
-    ['run_8', 'menu_muffin', 25, undefined, 2, 3],
-    ['run_9', 'menu_bread', 15, undefined, 2, 2],
-    ['run_10', 'menu_base', 9, 8, 2, 4, 2], // two batches of sponge base, one short of the 9 planned
-  ];
 
   // Units ordered per item are taken from the oldest batches first (FIFO); so are the parts later runs used (bases).
   const orderedByItem = new Map<string, number>();
@@ -241,7 +320,7 @@ export function buildDemoData(userId: string, today: string) {
       const yieldUnits = sellable ?? produced;
       const taken = Math.min(yieldUnits, toTake);
       toTake -= taken;
-      remainingByRun.set(id, yieldUnits - taken);
+      remainingByRun.set(id, round4(yieldUnits - taken));
     }
   }
 
@@ -257,16 +336,10 @@ export function buildDemoData(userId: string, today: string) {
     remainingQuantity: remainingByRun.get(id)!,
     date: at(daysAgo),
     expiryDate: at(daysAgo - shelfLife),
-    purpose: id === 'run_7' ? 'customer_order' : 'market_stock',
+    purpose: kitchen.customerOrderRuns?.includes(id) ? 'customer_order' : 'market_stock',
     // Snapshot of the material cost of everything produced, as the app records it.
     costTotal: round2(produced * recipeUnitCost(recipeId)),
     createdAt: Date.parse(today + 'T12:00:00Z') - daysAgo * DAY_MS,
-  }));
-
-  const menu: DemoMenuItem[] = menuBase.map(item => ({
-    ...item,
-    // What is on the shelf: the batches' unsold units.
-    finishedGoodsStock: productionRuns.filter(r => r.recipeId === item.id).reduce((s, r) => s + r.remainingQuantity, 0),
   }));
 
   // Ingredients each run used up (the app deducts for everything produced).
@@ -279,71 +352,48 @@ export function buildDemoData(userId: string, today: string) {
       usedByMaterial.set(mat.id, (usedByMaterial.get(mat.id) ?? 0) + used);
     }
   }
-  // And what made-to-order sales took.
+  // And what made-to-order sales took, and what was thrown away.
   for (const o of orders) for (const t of o.taken?.materials ?? []) usedByMaterial.set(t.materialId, (usedByMaterial.get(t.materialId) ?? 0) + t.amount);
+  for (const w of kitchen.wastage ?? []) usedByMaterial.set(w.materialId, (usedByMaterial.get(w.materialId) ?? 0) + w.quantity);
   const materials: DemoMaterial[] = purchases.map(({ bought, ...m }) => ({
     ...m,
     initialStock: round4(bought - (usedByMaterial.get(m.id) ?? 0)),
     dateAdded: at(30),
   }));
 
-  const experiments = [
-    {
-      id: 'exp_1',
-      name: 'Atta Croissant Trial',
-      date: at(2),
-      materials: [
-        { materialId: 'm_atta', amount: 200, unit: 'g' },
-        { materialId: 'm_sugar', amount: 20, unit: 'g' },
-        { materialId: 'm_butter', amount: 80, unit: 'g' },
-      ],
-      notes: 'Tried replacing maida with whole wheat atta. Layers did not separate well and the crumb was dense. Tastes good but the texture is off.',
-    },
-  ];
-
+  const experiments = kitchen.experiments.map(({ daysAgo, ...exp }) => ({ id: exp.id, name: exp.name, date: at(daysAgo), materials: exp.materials, ...(exp.notes && { notes: exp.notes }) }));
 
   const settings = {
-    name: 'Stockpot Demo Kitchen',
+    name: kitchen.name,
     logo: '',
     primaryColor: '#00797B',
-    address: '14, 80 Feet Road, Indiranagar, Bengaluru 560038',
-    phone: '+91 98450 00199',
-    email: `${userId}@demo.stockpot.app`,
+    address: kitchen.address,
+    phone: kitchen.phone,
+    email,
     currency: { code: 'INR', symbol: '₹' },
     categories: ['Raw Materials', 'Packaging Materials'],
     paymentFeeRates: DEMO_FEE_RATES,
-    // Typical monthly overheads for a home bakery, so the dashboard can show a True Profit. They start on the day of the first
-    // order, so months before the demo's week of trading do not show overheads with no sales against them. Sized so that the
-    // week of orders covers them: the demo shows a business that makes money, as most visitors' will.
-    fixedCosts: [
-      { id: 'fc_power', name: 'Gas & electricity', monthlyAmount: 2500, startDate: at(FIRST_ORDER_DAYS_AGO) },
-      { id: 'fc_helper', name: 'Part-time helper', monthlyAmount: 6000, startDate: at(FIRST_ORDER_DAYS_AGO) },
-      { id: 'fc_phone', name: 'Phone & internet', monthlyAmount: 800, startDate: at(FIRST_ORDER_DAYS_AGO) },
-    ],
+    // Monthly overheads, so the dashboard can show a True Profit. They start on the day of the first order, so months
+    // before the sample's trading do not show overheads with no sales against them.
+    fixedCosts: kitchen.fixedCosts.map(fc => ({ ...fc, startDate: at(FIRST_ORDER_DAYS_AGO) })),
   };
 
   // ── Price log: what was paid for each material ────────────────────────────
-  // Everything opened at its price 30 days ago. Butter, eggs, chocolate chips and yeast were topped up
-  // later at a different price, so the history has something to show. The opening and the top-up are
-  // worked out so that the blended average comes out at the material's current cost (what `purchases`
-  // says), the same way a real restock would leave it.
-  const topUps: Record<string, { share: number; openedAt: number; daysAgo: number }> = {
-    m_butter: { share: 0.4, openedAt: 0.92, daysAgo: 12 },   // butter got dearer
-    m_eggs: { share: 0.4, openedAt: 0.9, daysAgo: 9 },       // so did eggs
-    m_chips: { share: 0.35, openedAt: 0.95, daysAgo: 16 },
-    m_yeast: { share: 0.3, openedAt: 1.1, daysAgo: 7 },      // yeast got cheaper
-  };
+  // Everything opened at its price 30 days ago. Materials in `topUps` were topped up later at a different price, so the
+  // history has something to show. The opening and the top-up are worked out so that the blended average comes out at
+  // the material's current cost (what `purchases` says), the same way a real restock would leave it.
   const round6 = (n: number) => Math.round((n + Number.EPSILON) * 1e6) / 1e6;
+  const openingCost = (m: KitchenPurchase) => m.costPerUnit * (kitchen.topUps[m.id]?.openedAt ?? 1);
   const priceLog: PriceLogEntry[] = purchases.flatMap(m => {
     const opened = at(30);
     const entry = (n: number, date: string, unitCost: number, quantity: number, macAfter: number, source: PriceLogEntry['source']): PriceLogEntry => ({
       id: `pl_${m.id}_${n}`, materialId: m.id, date, unit: m.unit, unitCost: round6(unitCost), quantity: round6(quantity),
       macAfter: round6(macAfter), source, createdAt: Date.parse(`${date}T08:00:00Z`) + n,
     });
-    const topUp = topUps[m.id];
+    const topUp = kitchen.topUps[m.id];
     if (!topUp) return [entry(1, opened, m.costPerUnit, m.bought, m.costPerUnit, 'initial')];
     const firstQty = m.bought * (1 - topUp.share);
-    const firstCost = m.costPerUnit * topUp.openedAt;
+    const firstCost = openingCost(m);
     const laterQty = m.bought * topUp.share;
     const laterCost = (m.costPerUnit * m.bought - firstQty * firstCost) / laterQty;
     return [
@@ -352,5 +402,19 @@ export function buildDemoData(userId: string, today: string) {
     ];
   });
 
-  return { settings, materials, menu, orders, productionRuns, experiments, priceLog };
+  // Priced when the materials cost what they opened at: an item whose ingredients got dearer since shows it (utils/pricing).
+  const atOpening = purchases.map(m => ({ id: m.id, unit: m.unit, costPerUnit: round6(openingCost(m)) })) as never;
+  const menu: DemoMenuItem[] = menuBase.map(item => ({
+    ...item,
+    // What is on the shelf: the batches' unsold units.
+    finishedGoodsStock: round4(productionRuns.filter(r => r.recipeId === item.id).reduce((s, r) => s + r.remainingQuantity, 0)),
+    ...(kitchen.pricedDaysAgo !== undefined && item.sellingPrice > 0 && pricingStamp(costView(item, menuBase), atOpening, at(kitchen.pricedDaysAgo))),
+  }));
+
+  const wastageLogs: WastageLog[] = (kitchen.wastage ?? []).map((w, i) => ({
+    id: `waste_${i + 1}`, type: 'material', itemId: w.materialId, quantity: w.quantity,
+    cost: round2(w.quantity * purchases.find(m => m.id === w.materialId)!.costPerUnit), date: at(w.daysAgo), reason: w.reason,
+  }));
+
+  return { settings, materials, menu, orders, productionRuns, experiments, priceLog, wastageLogs };
 }

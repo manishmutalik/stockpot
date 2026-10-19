@@ -15,6 +15,7 @@
     "lint:eslint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "seed:kitchen": "tsx scripts/seedKitchen.ts",
     "test:rules": "npx --yes firebase-tools@15 emulators:exec --only firestore --project demo-stockpot \"vitest run --config vitest.rules.config.ts\""
   },
   "dependencies": {

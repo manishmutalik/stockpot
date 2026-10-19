@@ -1,5 +1,15 @@
 # Changelog
 
+## A sample cloud kitchen, and a script to fill a test account
+
+- `src/utils/cloudKitchenData.ts`: a sample cloud kitchen (Veg Thali, Chicken Biryani and Paneer Butter Masala cooked to
+  order, a Makhani Gravy kept by the kg, an eggless cake), with three weeks of orders, couriers, wastage, overheads and a
+  paneer price rise that shows as a repricing alert. Built for the demo video.
+- `buildKitchenData(catalogue, …)`: the demo-data builder now takes any kitchen's catalogue and works out its costs,
+  stock, stamps and price history; the bakery demo (`BAKERY`) comes out exactly as before.
+- `npm run seed:kitchen -- --email you@example.com [--create] [--kitchen cloud|bakery]`: fills an empty account with a
+  sample kitchen, signed in as that account (so the rules apply), and refuses an account that already has a kitchen.
+
 ## R&D Lab: bases and fillings in a session
 
 - An R&D session can use bases, fillings and other items you keep in stock, beside raw materials: **+ Add a base or
