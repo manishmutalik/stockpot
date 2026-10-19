@@ -10,6 +10,10 @@
 - **Add** adds to the tab you are on: **Add base or filling** makes a new item already off the menu. Turning **Sold on
   the menu** off or on moves an item between the tabs, and the screen follows it.
 - Log Production Run groups the items into Menu and Bases and fillings.
+- The two tabs look like buttons, side by side, the one you are on in teal, with an icon each on wider screens.
+  On a phone the text is a little smaller so both stay on one line.
+- The two tabs look like buttons, side by side, the one you are on in teal, with an icon each on wider screens.
+- The two tabs are large buttons (teal for the one you are on), with an icon each on wider screens.
 
 ## The unit beside One batch makes always works
 
