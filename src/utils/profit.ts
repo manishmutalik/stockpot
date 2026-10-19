@@ -23,11 +23,11 @@
  */
 import type { BakerySettings, FixedCost, MenuItem, Order, ProductionRun, RawMaterial, RecipeExperiment, WastageLog } from '../types';
 import { productionLossForRange, type RunFigures } from './batches';
-import { convertAmount } from './conversions';
 import { splitSaleForGst } from './gstCalculations';
 import { attributeDeliveryFieldByGroup, clusterOrdersByGroup } from './orderClustering';
 import { resolveUnitCosts, resolveUnitPrice } from './orderPricing';
 import { advanceOf, countsAsSale, isOpenPreorder } from './preorders';
+import { experimentCost } from './rndStats';
 
 export { resolveItemName, resolveUnitCosts, resolveUnitPrice, stampFor } from './orderPricing';
 
@@ -381,13 +381,11 @@ export function financialsForRange(input: {
   }
   paymentFees += forfeitedFees;
 
-  // R&D experiments draw on materials at today's cost (they have no sale to stamp) and stay out of profit.
+  // R&D experiments draw on materials, and on bases and fillings at their ingredients' cost, at today's prices (they
+  // have no sale to stamp).
   const experimentExpenses = input.experiments
     .filter(e => e.date >= start && e.date <= last)
-    .reduce((total, exp) => total + exp.materials.reduce((sum, req) => {
-      const mat = materials.find(m => m.id === req.materialId);
-      return mat ? sum + convertAmount(req.amount, req.unit || 'g', mat.unit) * (mat.costPerUnit || 0) : sum;
-    }, 0), 0);
+    .reduce((total, exp) => total + experimentCost(exp, materials, input.menu), 0);
 
   // Wastage is subtracted once, here. It is never split across orders.
   const wastageExpenses = input.wastageLogs

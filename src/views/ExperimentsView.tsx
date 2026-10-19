@@ -4,15 +4,17 @@ import { Beaker, Calendar, Coins, FlaskConical, Plus, Search, Trash2, Wheat, Cal
 import { AppViewProps } from '../types';
 import { MetricCard } from '../components/MetricCard';
 import { convertAmount } from '../utils/conversions';
-import { experimentCost, summarizeExperiments } from '../utils/rndStats';
+import { formatItemQuantity, fromEntry, itemUnit, smallUnit, toEntry, unitWord } from '../utils/itemUnits';
+import { experimentCost, madeItemCost, summarizeExperiments } from '../utils/rndStats';
 
 const selectCls =
   'h-9 rounded-lg bg-stone-50 border border-transparent px-3 text-xs font-semibold text-ink focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none cursor-pointer';
 
 export const ExperimentsView: React.FC<AppViewProps> = (props) => {
   const {
-    materials, experiments, currency, settings, addExperiment, updateExperiment, deleteExperiment,
-    addMaterialToExperiment, updateExperimentMaterial, removeMaterialFromExperiment
+    materials, menu, experiments, currency, settings, addExperiment, updateExperiment, deleteExperiment,
+    addMaterialToExperiment, updateExperimentMaterial, removeMaterialFromExperiment,
+    addPartToExperiment, updateExperimentPart, removePartFromExperiment
   } = props;
 
   const [search, setSearch] = useState('');
@@ -20,7 +22,13 @@ export const ExperimentsView: React.FC<AppViewProps> = (props) => {
   const money = (n: number) =>
     `${currency.symbol}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const today = new Date().toISOString().split('T')[0];
-  const summary = useMemo(() => summarizeExperiments(experiments, materials, today), [experiments, materials, today]);
+  const summary = useMemo(() => summarizeExperiments(experiments, materials, today, menu), [experiments, materials, today, menu]);
+  // Made items an R&D session can draw on: anything kept in finished stock (not made when ordered), bases first.
+  const madeGroups = useMemo(() => {
+    const kept = menu.filter(m => !m.madeToOrder).sort((a, b) => a.name.localeCompare(b.name));
+    return ([['Bases and fillings', kept.filter(m => m.notForSale)], ['Menu', kept.filter(m => !m.notForSale)]] as const)
+      .filter(([, items]) => items.length > 0);
+  }, [menu]);
 
   const q = search.trim().toLowerCase();
   const visible = useMemo(
@@ -136,7 +144,9 @@ export const ExperimentsView: React.FC<AppViewProps> = (props) => {
 
           <div className="grid grid-cols-1 gap-4">
             {visible.map((exp) => {
-              const cost = experimentCost(exp, materials);
+              const cost = experimentCost(exp, materials, menu);
+              const parts = exp.parts ?? [];
+              const partIds = new Set(parts.map(p => p.itemId));
               return (
                 <div key={exp.id} className="surface-card overflow-hidden">
                   <div className="p-4 sm:p-6 flex items-start justify-between gap-3">
@@ -235,6 +245,71 @@ export const ExperimentsView: React.FC<AppViewProps> = (props) => {
                           );
                         })}
                       </div>
+                    )}
+
+                    {madeGroups.length > 0 && (
+                      <>
+                        <div className="flex items-center justify-between gap-3 border-t border-stone-100 pt-4">
+                          <h4 className="font-mono text-[10px] font-semibold text-muted uppercase tracking-wider">
+                            Bases &amp; Fillings Used <span className="text-stone-300">· {parts.length}</span>
+                          </h4>
+                          <select
+                            aria-label="Add a base or filling"
+                            value=""
+                            onChange={(e) => { if (e.target.value) addPartToExperiment(exp.id, e.target.value); }}
+                            className={selectCls}
+                          >
+                            <option value="">+ Add a base or filling</option>
+                            {madeGroups.map(([label, items]) => (
+                              <optgroup key={label} label={label}>
+                                {items.map(m => <option key={m.id} value={m.id} disabled={partIds.has(m.id)}>{m.name}</option>)}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </div>
+                        {parts.length > 0 && (
+                          <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                              {parts.map((part) => {
+                                const item = menu.find(m => m.id === part.itemId);
+                                const unit = itemUnit(item);
+                                const typedIn = smallUnit(unit) ?? unitWord(unit, 2);
+                                const lineCost = item ? madeItemCost(item, menu, materials) * part.quantity : 0;
+                                return (
+                                  <div key={part.itemId} className="flex items-center gap-3 bg-stone-50 p-3 rounded-xl">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-semibold text-ink truncate">{item?.name || 'Unknown'}</div>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <input
+                                          type="number" min={0} step="any"
+                                          aria-label={`Amount of ${item?.name || 'item'}`}
+                                          value={toEntry(unit, part.quantity)}
+                                          onChange={(e) => updateExperimentPart(exp.id, part.itemId, fromEntry(unit, parseFloat(e.target.value) || 0))}
+                                          className="w-20 bg-white border border-transparent hover:border-stone-200 rounded-lg px-2 py-1 text-sm font-mono font-semibold text-ink text-right outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                                        />
+                                        <span className="font-mono text-[10px] font-semibold text-muted uppercase">{typedIn}</span>
+                                        <span className="font-mono text-[11px] text-muted ml-auto">{money(lineCost)}</span>
+                                      </div>
+                                      {item && (
+                                        <div className="mt-1 text-[11px] text-muted">In stock: {formatItemQuantity(unit, item.finishedGoodsStock ?? 0)}</div>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={() => removePartFromExperiment(exp.id, part.itemId)}
+                                      className="text-stone-300 hover:text-coral transition-colors p-2 hover:bg-coral/10 rounded-lg"
+                                      title="Remove"
+                                      aria-label={`Remove ${item?.name || 'item'}`}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <p className="text-xs text-muted">Taken from their stock, at what their ingredients cost. Removing one, or the session, puts it back.</p>
+                          </>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>

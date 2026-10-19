@@ -1,5 +1,16 @@
 # Changelog
 
+## R&D Lab: bases and fillings in a session
+
+- An R&D session can use bases, fillings and other items you keep in stock, beside raw materials: **+ Add a base or
+  filling** (bases and fillings first, then the Menu; items made when ordered have no stock and are left out). The
+  amount is in the item's unit: pieces, or grams (ml) for one made by weight.
+- What is used is taken from the item's stock, as making an item takes its parts; changing the amount takes or gives
+  back the difference, and removing the line or deleting the session puts it all back.
+- It is costed at what its ingredients cost (as on the Menu), in the session's cost, the R&D figures and the R&D
+  expenses on the Dashboard.
+- Data: `RecipeExperiment.parts` (`ItemPart[]`); `experimentCost` takes the menu.
+
 ## A new item opens where you can see it
 
 - **Add Menu Item** and **Add base or filling** put the new item at the top of its tab, opened, scroll to it, and

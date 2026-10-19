@@ -825,7 +825,8 @@ function BakeryApp() {
   const {
     addExperiment, updateExperiment, deleteExperiment,
     addMaterialToExperiment, removeMaterialFromExperiment, updateExperimentMaterial,
-  } = useExperimentActions(experiments, materials);
+    addPartToExperiment, updateExperimentPart, removePartFromExperiment,
+  } = useExperimentActions(experiments, materials, menu);
 
   // ── Wastage / Discard Actions ────────────────────────────────────────────────
   // Extracted to src/hooks/useWastageActions.ts as part of the Phase 4 breakup.
@@ -1344,7 +1345,7 @@ function BakeryApp() {
     refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
     addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder, setCountedIn,
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
-    removeMaterialFromExperiment, copyMenuItem, addIngredientToRecipe,
+    removeMaterialFromExperiment, addPartToExperiment, updateExperimentPart, removePartFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
     deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
     addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders, saveSettings,
