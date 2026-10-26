@@ -17,11 +17,12 @@
  *   AI_QUICK_DAILY_LIMIT         phone-app voice/text readings per user per day (default 60)
  *   AI_RECIPE_DAILY_LIMIT        recipes read per user per day (default 15; a page of 4 recipes counts 4)
  *   AI_RECIPE_MONTHLY_LIMIT      recipes read per user per calendar month (default 75)
+ *   AI_PROMOTE_DAILY_LIMIT       photos made into posts (Promote) per user per day (default 15)
  *   AI_GLOBAL_DAILY_LIMIT        model calls across everyone per day (default 1500; a recipe reading counts RECIPE_GLOBAL_WEIGHT)
  */
 
-export type AiFeature = 'briefing' | 'chat' | 'parse' | 'quick' | 'recipe';
-export const AI_FEATURES: AiFeature[] = ['briefing', 'chat', 'parse', 'quick', 'recipe'];
+export type AiFeature = 'briefing' | 'chat' | 'parse' | 'quick' | 'recipe' | 'promote';
+export const AI_FEATURES: AiFeature[] = ['briefing', 'chat', 'parse', 'quick', 'recipe', 'promote'];
 
 export interface AiConfig {
   enabled: boolean;
@@ -44,10 +45,15 @@ export const AI_MODEL = 'claude-haiku-4-5';
  * dearer model costs little in total (docs/developer-guide/06-ai.md). Every other feature stays on AI_MODEL.
  */
 export const RECIPE_AI_MODEL = 'claude-opus-5-5';
+/**
+ * Promote writes captions customers read, so it uses a model that writes well; it looks at one 1024 px photo and writes
+ * a few lines, about 1.5 US cents a post (docs/developer-guide/06-ai.md).
+ */
+export const PROMOTE_AI_MODEL = 'claude-sonnet-5-5';
 /** A recipe reading costs about four ordinary readings, so it uses up four of the global daily count. */
 export const RECIPE_GLOBAL_WEIGHT = 4;
 
-export const DEFAULT_LIMITS: Record<AiFeature, number> = { chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15 };
+export const DEFAULT_LIMITS: Record<AiFeature, number> = { chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15, promote: 15 };
 export const DEFAULT_RECIPE_MONTHLY_LIMIT = 75;
 export const DEFAULT_GLOBAL_LIMIT = 1500;
 const MAX_LIMIT = 100_000;
@@ -73,6 +79,7 @@ export function readAiConfig(env: Record<string, string | undefined> = process.e
       parse: parseLimit(env.AI_PARSE_DAILY_LIMIT, DEFAULT_LIMITS.parse),
       quick: parseLimit(env.AI_QUICK_DAILY_LIMIT, DEFAULT_LIMITS.quick),
       recipe: parseLimit(env.AI_RECIPE_DAILY_LIMIT, DEFAULT_LIMITS.recipe),
+      promote: parseLimit(env.AI_PROMOTE_DAILY_LIMIT, DEFAULT_LIMITS.promote),
     },
     recipeMonthlyLimit: parseLimit(env.AI_RECIPE_MONTHLY_LIMIT, DEFAULT_RECIPE_MONTHLY_LIMIT),
     globalLimit: parseLimit(env.AI_GLOBAL_DAILY_LIMIT, DEFAULT_GLOBAL_LIMIT),

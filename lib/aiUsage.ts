@@ -113,7 +113,7 @@ export async function peekAiUsage(uid: string, userDay: string, globalDayKey: st
   const [userSnap, monthSnap, globalSnap] = await Promise.all([userUsageDoc(uid, userDay).get(), userUsageDoc(uid, userDay.slice(0, 7)).get(), globalUsageDoc(globalDayKey).get()]);
   const data = userSnap.data() ?? {};
   return {
-    byFeature: { chat: Number(data.chat ?? 0), briefing: Number(data.briefing ?? 0), parse: Number(data.parse ?? 0), quick: Number(data.quick ?? 0), recipe: Number(data.recipe ?? 0) },
+    byFeature: { chat: Number(data.chat ?? 0), briefing: Number(data.briefing ?? 0), parse: Number(data.parse ?? 0), quick: Number(data.quick ?? 0), recipe: Number(data.recipe ?? 0), promote: Number(data.promote ?? 0) },
     recipeMonth: Number(monthSnap.data()?.recipe ?? 0),
     global: Number(globalSnap.data()?.total ?? 0),
   };

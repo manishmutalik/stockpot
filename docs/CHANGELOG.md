@@ -1,5 +1,19 @@
 # Changelog
 
+## Promote: posts for Instagram from a photo of your food
+
+- A new section, **Promote**, on the website (in the sidebar; the megaphone at the top on a phone browser) and in
+  Stockpot Quick (a tab). Take or choose a photo of something you make: it comes back brighter and with the colour
+  cast of the kitchen light mostly taken out, with a caption and 8 to 12 hashtags, in English or Hinglish.
+- Choose **Post** (4:5), **Square** or **Story** (9:16, also right for WhatsApp Status); the crop keeps the food in
+  frame. **Before** shows the photo as taken. Edit the caption, tap a hashtag to leave it out, and add or leave out
+  "Order on WhatsApp" with the business's phone number.
+- **Share** opens the share sheet with the photo and copies the caption to paste in Instagram; **Save photo** on a
+  computer. **Write another caption** asks again.
+- The food is never redrawn: the model only reads the photo and writes the text, and the photo is improved by code.
+  Photos are not kept. 15 a day (`AI_PROMOTE_DAILY_LIMIT`); captions by Claude Sonnet 5.5, about 1.5 US cents a post.
+- The phone app needs a new build (it adds `expo-sharing`, `expo-clipboard` and `expo-file-system`).
+
 ## R&D Lab: bases and fillings in a session
 
 - An R&D session can use bases, fillings and other items you keep in stock, beside raw materials: **+ Add a base or

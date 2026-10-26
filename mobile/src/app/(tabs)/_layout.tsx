@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, fonts } from '../../theme';
+import { PROMOTE_LABEL } from '../../../../src/utils/promote';
 
 type Icon = React.ComponentProps<typeof MaterialIcons>['name'];
 const tab = (title: string, icon: Icon) => ({
@@ -26,6 +27,7 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={tab('Today', 'receipt-long')} />
       <Tabs.Screen name="upcoming" options={tab('Upcoming', 'event')} />
+      <Tabs.Screen name="promote" options={tab(PROMOTE_LABEL, 'campaign')} />
       <Tabs.Screen name="settings" options={tab('Settings', 'settings')} />
     </Tabs>
   );
