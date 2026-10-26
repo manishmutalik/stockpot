@@ -61,7 +61,8 @@ import {
   Home,
   Gift,
   LayoutDashboard,
-  BookOpen
+  BookOpen,
+  Megaphone
 } from 'lucide-react';
 import Papa from 'papaparse';
 import { apiFetch } from './utils/apiClient';
@@ -89,6 +90,7 @@ const SummaryView = React.lazy(() => import('./views/SummaryView').then(m => ({ 
 const WastageView = React.lazy(() => import('./views/WastageView').then(m => ({ default: m.WastageView })));
 const SettingsView = React.lazy(() => import('./views/SettingsView').then(m => ({ default: m.SettingsView })));
 const HelpView = React.lazy(() => import('./views/HelpView').then(m => ({ default: m.HelpView })));
+const PromoteView = React.lazy(() => import('./views/PromoteView').then(m => ({ default: m.PromoteView })));
 
 import { IngredientSelectorModal } from './components/IngredientSelectorModal';
 import { ProductionRunModal, ProductionRun } from './components/ProductionRunModal';
@@ -331,6 +333,8 @@ import { useOrderParser } from './hooks/useOrderParser';
 import { useProductionParser } from './hooks/useProductionParser';
 import { useRecipeReader } from './hooks/useRecipeReader';
 import { useAiBlocked } from './hooks/useAiBlocked';
+import { usePromote } from './hooks/usePromote';
+import { PROMOTE_LABEL } from './utils/promote';
 import { needsEmailVerification } from './utils/aiAccess';
 import type { VerificationSent } from './components/EmailVerificationNotice';
 import { RecipeReaderModal } from './components/RecipeReaderModal';
@@ -363,7 +367,7 @@ export default function App() {
   );
 }
 
-export type TabId = 'inventory' | 'menu' | 'orders' | 'experiments' | 'production' | 'summary' | 'settings' | 'wastage' | 'help';
+export type TabId = 'inventory' | 'menu' | 'orders' | 'experiments' | 'production' | 'summary' | 'settings' | 'wastage' | 'help' | 'promote';
 
 /**
  * Renders a styled sidebar tab navigation button; the active tab is a solid
@@ -905,6 +909,9 @@ function BakeryApp() {
   const [recipeReaderFor, setRecipeReaderFor] = useState<{ menuItemId?: string } | null>(null);
   // Where AI is not available but the owner can do something about it, the AI features stay in view and say why.
   const aiBlocked = useAiBlocked({ signedIn: !!user, dataReady, unverified: needsEmailVerification(user) });
+  // Promote is shown where AI is available, or where the owner can do something to make it so (as the other AI features).
+  const promoter = usePromote({ signedIn: !!user, dataReady });
+  const showPromote = !!promoter || !!aiBlocked;
   const openRecipeReader = recipeReader
     ? (menuItemId?: string) => setRecipeReaderFor({ menuItemId })
     : aiBlocked ? () => showAlert('Read a recipe', aiBlocked) : undefined;
@@ -1385,6 +1392,7 @@ function BakeryApp() {
             <SidebarTabButton id="menu" label="Recipes & Menus" icon={BookOpen} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
             <SidebarTabButton id="experiments" label="R&D Lab" icon={FlaskConical} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
             <SidebarTabButton id="wastage" label="Wastage" icon={Trash2} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={lowStockItems.length > 0 && !isAlertDismissed} />
+            {showPromote && <SidebarTabButton id="promote" label={PROMOTE_LABEL} icon={Megaphone} activeTab={activeTab} setActiveTab={setActiveTab} hasLowStockAlert={false} />}
           </nav>
         </div>
 
@@ -1596,6 +1604,17 @@ function BakeryApp() {
                   <span className="text-xs font-semibold text-ink truncate max-w-[10rem]">{user?.name}</span>
                   <span className="font-mono text-[11px] text-muted truncate max-w-[10rem]">{user?.email}</span>
                 </div>
+                {/* Promote, like Help: in the sidebar on a wide screen, here on a phone. */}
+                {showPromote && (
+                  <button
+                    onClick={() => setActiveTab('promote')}
+                    aria-label={PROMOTE_LABEL}
+                    title={PROMOTE_LABEL}
+                    className={`md:hidden flex items-center justify-center w-8 h-8 rounded-lg transition-colors ${activeTab === 'promote' ? 'bg-primary/10 text-primary' : 'text-muted hover:bg-stone-100 hover:text-ink'}`}
+                  >
+                    <Megaphone size={18} />
+                  </button>
+                )}
                 {/* Help: in the sidebar on a wide screen; here on a phone, where the bottom bar has no room for it. It takes
                     the sign-out button's place there (sign out is in More › User Account), so the bar is no fuller. */}
                 <button
@@ -1635,6 +1654,7 @@ function BakeryApp() {
               {activeTab === 'wastage' && <WastageView key="wastage" {...appProps} />}
               {activeTab === 'settings' && <SettingsView key="settings" {...appProps} />}
               {activeTab === 'help' && <HelpView key="help" businessName={settings.name} />}
+              {activeTab === 'promote' && <PromoteView key="promote" promoter={promoter} aiBlocked={aiBlocked} businessName={settings.name} />}
           </AnimatePresence>
         </React.Suspense>
       

@@ -35,6 +35,9 @@ import { createProductionParseHandler } from "./lib/productionParseRoutes";
 import { createRecipeParseHandler } from "./lib/recipeParseRoutes";
 import { createQuickRecipeSaveHandler, createQuickRecipeSetupHandler } from "./lib/quickRecipes";
 import { createRecipeParseModel } from "./lib/recipeParseModel";
+import { createPromoteHandler, promoteContextFrom } from "./lib/promoteRoutes";
+import { createPromoteModel } from "./lib/promoteModel";
+import { improvePhoto } from "./lib/promoteImage";
 import { createProductionParseModel } from "./lib/productionParseModel";
 import { createBriefingModel } from "./lib/briefingModel";
 import { beginGeneration, clearGeneration, getBriefing, saveBriefing } from "./lib/briefingStore";
@@ -109,11 +112,11 @@ async function startServer() {
   // scoped to just this one path.
   app.post("/api/billing/webhook", express.raw({ type: "application/json" }), createWebhookHandler(billingDeps));
 
-  // Recipe photos need a larger body than anything else (up to three shrunk photos, as base64); every other route keeps
-  // express's 100 kb default, so a large body is refused before it is read.
+  // Photos need a larger body than anything else (up to three shrunk recipe photos, or one photo to promote, as base64);
+  // every other route keeps express's 100 kb default, so a large body is refused before it is read.
   const recipeJson = express.json({ limit: "10mb" });
   const defaultJson = express.json();
-  const RECIPE_PATHS = new Set(["/api/ai/parse-recipe", "/api/mobile/recipes/read"]);
+  const RECIPE_PATHS = new Set(["/api/ai/parse-recipe", "/api/mobile/recipes/read", "/api/ai/promote", "/api/mobile/promote"]);
   app.use((req, res, next) => (RECIPE_PATHS.has(req.path) ? recipeJson : defaultJson)(req, res, next));
   app.use(cookieParser());
 
@@ -218,6 +221,14 @@ async function startServer() {
   api.get("/mobile/recipes/setup", quickGate, createQuickRecipeSetupHandler(quickDeps));
   api.post("/mobile/recipes/read", quickGate, recipeParseHandler);
   api.post("/mobile/recipes", quickGate, createQuickRecipeSaveHandler(quickDeps));
+  // Promote, shared by the web (POST /ai/promote) and the phone, with the same limits. Made here because it reads the
+  // business's settings and menu through quickDb.
+  const promoteHandler = createPromoteHandler({
+    ...aiGuardDeps, model: createPromoteModel(), improve: improvePhoto,
+    context: uid => quickDb.run(uid, async tx => promoteContextFrom((await tx.get("settings", "bakery")) ?? {}, await tx.all("menu"))),
+  });
+  api.post("/ai/promote", requireCsrf, promoteHandler);
+  api.post("/mobile/promote", quickGate, promoteHandler);
   api.get("/mobile/payment-setup", quickGate, createQuickPaymentSetupHandler(quickDeps));
   api.get("/mobile/payments-due", quickGate, createQuickPaymentsDueHandler(quickDeps));
   api.get("/mobile/today", quickGate, createQuickTodayHandler(quickDeps));

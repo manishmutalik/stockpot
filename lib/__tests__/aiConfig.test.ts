@@ -8,7 +8,7 @@ describe('readAiConfig', () => {
     expect(c.keyConfigured).toBe(false);
     expect(c.allowedEmails).toEqual([]);
     expect(c.allowedUids).toEqual([]);
-    expect(c.limits).toEqual({ chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15 });
+    expect(c.limits).toEqual({ chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15, promote: 15 });
     expect(c.recipeMonthlyLimit).toBe(75);
     expect(c.globalLimit).toBe(1500);
     expect(DEFAULT_LIMITS.chat).toBe(30);

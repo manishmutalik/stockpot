@@ -80,6 +80,7 @@ Nothing is required to *boot*; each row says what breaks without it.
 | `AI_ALLOWED_EMAILS`, `AI_ALLOWED_UIDS` | Limit AI to listed accounts | While in trial |
 | `AI_CHAT_DAILY_LIMIT`, `AI_BRIEFING_DAILY_LIMIT`, `AI_PARSE_DAILY_LIMIT`, `AI_QUICK_DAILY_LIMIT`, `AI_GLOBAL_DAILY_LIMIT` | AI caps | Defaults 30, 4, 30, 60, 1500 |
 | `AI_RECIPE_DAILY_LIMIT`, `AI_RECIPE_MONTHLY_LIMIT` | Recipe reader caps | Defaults 15 a day, 75 a month (recipes, not readings) |
+| `AI_PROMOTE_DAILY_LIMIT` | Promote cap | Default 15 posts a day |
 | `NOTIFICATIONS_CRON_SECRET` | Phone notifications job | 16+ characters; also set on the Render Cron Job |
 | `EXPO_ACCESS_TOKEN` | Expo push | Only if "enhanced push security" is on |
 | `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` | Shopify import | App-wide credentials (each store owner still authorises their own store) |

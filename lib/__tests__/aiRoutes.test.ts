@@ -25,7 +25,8 @@ describe('GET /ai/status', () => {
       available: true,
       limits: { briefing: { used: 1, limit: 4, remaining: 3 }, chat: { used: 12, limit: 30, remaining: 18 }, parse: { used: 0, limit: 30, remaining: 30 }, quick: { used: 0, limit: 60, remaining: 60 },
         // Recipes: 12 left today, but only 5 this month
-        recipe: { used: 3, limit: 15, monthUsed: 70, monthLimit: 75, remaining: 5 } },
+        recipe: { used: 3, limit: 15, monthUsed: 70, monthLimit: 75, remaining: 5 },
+        promote: { used: 0, limit: 15, remaining: 15 } },
     });
     expect(d.peek).toHaveBeenCalledWith('u1', '2026-06-30', '2026-06-30');
   });

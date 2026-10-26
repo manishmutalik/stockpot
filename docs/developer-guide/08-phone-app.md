@@ -30,6 +30,7 @@ mobile/
       capture.tsx           Write/say → questions → confirm → saved
       (tabs)/index.tsx      Today
       (tabs)/upcoming.tsx   Upcoming pre-orders and Payments due
+      (tabs)/promote.tsx    Promote: a photo of food made into an Instagram post (see 06-ai.md)
       (tabs)/settings.tsx   Account, notification choices, voice, sign out
     components/             Cards, buttons, sheets (HandOverSheet, PaymentDueCard, ToCollectCard, confirm.tsx, QuestionCard...)
     lib/                    Plain logic with no React Native, unit tested; plus the hooks that run it

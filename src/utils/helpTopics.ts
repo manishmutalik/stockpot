@@ -11,7 +11,7 @@
 
 export type HelpApp = 'web' | 'phone';
 
-export type HelpSectionId = 'start' | 'stock' | 'recipes' | 'orders' | 'money' | 'production' | 'settings' | 'phone' | 'questions';
+export type HelpSectionId = 'start' | 'stock' | 'recipes' | 'orders' | 'money' | 'production' | 'promote' | 'settings' | 'phone' | 'questions';
 
 export const HELP_SECTIONS: { id: HelpSectionId; title: string }[] = [
   { id: 'start', title: 'Getting started' },
@@ -21,6 +21,7 @@ export const HELP_SECTIONS: { id: HelpSectionId; title: string }[] = [
   { id: 'production', title: 'Production and wastage' },
   { id: 'orders', title: 'Orders, bills and payments' },
   { id: 'money', title: 'Profit and costs' },
+  { id: 'promote', title: 'Promote: posts for Instagram' },
   { id: 'settings', title: 'Settings and your account' },
   { id: 'questions', title: 'Common questions' },
 ];
@@ -563,6 +564,45 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
   },
 
+  // ── Promote ──────────────────────────────────────────────────────────────
+  {
+    id: 'promote-web', section: 'promote', apps: ['web'],
+    title: 'Making a post from a photo of your food',
+    summary: 'A brighter photo, cropped for Instagram, with a caption and hashtags.',
+    keywords: ['promote', 'instagram', 'insta', 'post', 'caption', 'hashtag', 'social media', 'marketing', 'photo', 'reel', 'whatsapp status'],
+    body: [
+      steps(
+        'Click **Promote** (on a phone browser, the megaphone at the top).',
+        'Choose **English** or **Hinglish** for the caption, then **Take a photo** or **Choose a photo** of something you make.',
+        'In a few seconds it comes back brighter, with a caption and hashtags. Tap **Before** to compare with your photo.',
+        'Choose the shape: **Post** (what Instagram shows largest), **Square**, or **Story** (also right for WhatsApp Status).',
+        'Change the caption as you like. Tap a hashtag to leave it out.',
+        'Click **Share** and choose Instagram (on a phone), or **Save photo** on a computer. The caption is copied: paste it in Instagram.',
+      ),
+      points(
+        'The food is never changed or redrawn: only the light, colour and framing are improved.',
+        'With your phone number in **Settings › Business Profile**, "Order on WhatsApp" and your number are added under the caption. Untick it to leave it out.',
+        'You can make 15 posts a day; **Write another caption** uses one.',
+        'Photos are not kept.',
+      ),
+    ],
+  },
+  {
+    id: 'promote-phone', section: 'promote', apps: ['phone'],
+    title: 'Making a post from a photo of your food',
+    summary: 'A brighter photo, cropped for Instagram, with a caption and hashtags.',
+    keywords: ['promote', 'instagram', 'insta', 'post', 'caption', 'hashtag', 'social media', 'marketing', 'photo', 'reel', 'whatsapp status'],
+    body: [
+      steps(
+        'Tap **Promote** at the bottom.',
+        'Choose **English** or **Hinglish**, then **Take a photo** or **Choose a photo**.',
+        'It comes back brighter, with a caption and hashtags. Tap **Before** to compare.',
+        'Choose **Post**, **Square** or **Story**, change the caption if you like, and tap a hashtag to leave it out.',
+        'Tap **Share** and choose Instagram (or WhatsApp). The caption is copied: paste it when Instagram asks for one.',
+      ),
+      text('The food is never changed, only the light, colour and framing. You can make 15 posts a day, and photos are not kept.'),
+    ],
+  },
   // ── Settings ─────────────────────────────────────────────────────────────
   {
     id: 'business-profile', section: 'settings', apps: ['web'],
