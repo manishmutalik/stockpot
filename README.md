@@ -80,6 +80,8 @@ enabled), a Razorpay account.
 | `EXPO_ACCESS_TOKEN` | No | Only if the Expo project has "enhanced push security" switched on; sent when pushing through Expo. |
 | `AI_QUICK_DAILY_LIMIT` | No | Voice/text readings per user per day for the phone app (default 60), separate from the web's `AI_PARSE_DAILY_LIMIT`. |
 | `AI_PROMOTE_DAILY_LIMIT` | No | Photos made into posts (Promote) per user per day (default 15). Promote uses Claude Sonnet 5.5. |
+| `PHOTOROOM_API_KEY` | No | Photoroom's API key, for Promote's backgrounds. Without it there are none. A `sandbox_` key is free and watermarks the images. |
+| `AI_CUTOUT_DAILY_LIMIT` / `AI_SCENE_DAILY_LIMIT` / `AI_SCENE_MONTHLY_LIMIT` | No | Promote background caps per user: cut-outs a day (default 20), AI scenes a day and a month (defaults 8 and 8). |
 | `AI_RECIPE_DAILY_LIMIT` / `AI_RECIPE_MONTHLY_LIMIT` | No | Recipes the recipe reader may read per user per day and per calendar month (defaults 15 and 75). A page of several recipes counts each one. The recipe reader uses Claude Opus 5.5; every other AI feature uses Claude Haiku 4.5. |
 | `COOKIE_SECRET` | No | Reserved for future cookie signing; currently only the CSRF token cookie is set, and it isn't signed. |
 | `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` | No | Only needed if you want to enable the Shopify order-import integration. |

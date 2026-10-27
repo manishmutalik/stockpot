@@ -31,6 +31,17 @@ describe('GET /ai/status', () => {
     expect(d.peek).toHaveBeenCalledWith('u1', '2026-06-30', '2026-06-30');
   });
 
+  it('lists the background allowances only when the server has a Photoroom key', async () => {
+    const limits = (body: unknown) => (body as { limits: Record<string, unknown> }).limits;
+    expect(Object.keys(limits((await call(deps())).body))).not.toContain('scene');
+    const d = deps({ env: { PHOTOROOM_API_KEY: 'sandbox_x' } });
+    vi.mocked(d.peek).mockResolvedValue({ byFeature: { scene: 1, cutout: 2 }, recipeMonth: 0, sceneMonth: 6, global: 3 });
+    const r = await call(d);
+    expect(limits(r.body).cutout).toEqual({ used: 2, limit: 20, remaining: 18 });
+    // 7 left today, but only 2 this month
+    expect(limits(r.body).scene).toEqual({ used: 1, limit: 8, monthUsed: 6, monthLimit: 8, remaining: 2 });
+  });
+
   it('never shows a negative remaining after a limit was lowered', async () => {
     const r = await call(deps({ env: { AI_CHAT_DAILY_LIMIT: '10' } }));
     expect((r.body as any).limits.chat).toEqual({ used: 12, limit: 10, remaining: 0 });

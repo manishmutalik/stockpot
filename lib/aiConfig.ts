@@ -18,11 +18,15 @@
  *   AI_RECIPE_DAILY_LIMIT        recipes read per user per day (default 15; a page of 4 recipes counts 4)
  *   AI_RECIPE_MONTHLY_LIMIT      recipes read per user per calendar month (default 75)
  *   AI_PROMOTE_DAILY_LIMIT       photos made into posts (Promote) per user per day (default 15)
+ *   AI_CUTOUT_DAILY_LIMIT        food cut out of a photo for a new background (Photoroom) per user per day (default 20)
+ *   AI_SCENE_DAILY_LIMIT         AI scene backgrounds (Photoroom) per user per day (default 8)
+ *   AI_SCENE_MONTHLY_LIMIT       AI scene backgrounds per user per calendar month (default 8)
+ *   PHOTOROOM_API_KEY            Photoroom's API key; without it Promote has no background choices
  *   AI_GLOBAL_DAILY_LIMIT        model calls across everyone per day (default 1500; a recipe reading counts RECIPE_GLOBAL_WEIGHT)
  */
 
-export type AiFeature = 'briefing' | 'chat' | 'parse' | 'quick' | 'recipe' | 'promote';
-export const AI_FEATURES: AiFeature[] = ['briefing', 'chat', 'parse', 'quick', 'recipe', 'promote'];
+export type AiFeature = 'briefing' | 'chat' | 'parse' | 'quick' | 'recipe' | 'promote' | 'cutout' | 'scene';
+export const AI_FEATURES: AiFeature[] = ['briefing', 'chat', 'parse', 'quick', 'recipe', 'promote', 'cutout', 'scene'];
 
 export interface AiConfig {
   enabled: boolean;
@@ -33,6 +37,10 @@ export interface AiConfig {
   limits: Record<AiFeature, number>;
   /** Recipes read per user per calendar month (the recipe reader also has its daily limit in `limits`). */
   recipeMonthlyLimit: number;
+  /** AI scene backgrounds per user per calendar month (they also have a daily limit in `limits`). */
+  sceneMonthlyLimit: number;
+  /** Whether PHOTOROOM_API_KEY is set: Promote's backgrounds need it. */
+  photoroomConfigured: boolean;
   /** Across all users per day. */
   globalLimit: number;
 }
@@ -53,8 +61,9 @@ export const PROMOTE_AI_MODEL = 'claude-sonnet-5-5';
 /** A recipe reading costs about four ordinary readings, so it uses up four of the global daily count. */
 export const RECIPE_GLOBAL_WEIGHT = 4;
 
-export const DEFAULT_LIMITS: Record<AiFeature, number> = { chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15, promote: 15 };
+export const DEFAULT_LIMITS: Record<AiFeature, number> = { chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15, promote: 15, cutout: 20, scene: 8 };
 export const DEFAULT_RECIPE_MONTHLY_LIMIT = 75;
+export const DEFAULT_SCENE_MONTHLY_LIMIT = 8;
 export const DEFAULT_GLOBAL_LIMIT = 1500;
 const MAX_LIMIT = 100_000;
 
@@ -80,8 +89,12 @@ export function readAiConfig(env: Record<string, string | undefined> = process.e
       quick: parseLimit(env.AI_QUICK_DAILY_LIMIT, DEFAULT_LIMITS.quick),
       recipe: parseLimit(env.AI_RECIPE_DAILY_LIMIT, DEFAULT_LIMITS.recipe),
       promote: parseLimit(env.AI_PROMOTE_DAILY_LIMIT, DEFAULT_LIMITS.promote),
+      cutout: parseLimit(env.AI_CUTOUT_DAILY_LIMIT, DEFAULT_LIMITS.cutout),
+      scene: parseLimit(env.AI_SCENE_DAILY_LIMIT, DEFAULT_LIMITS.scene),
     },
     recipeMonthlyLimit: parseLimit(env.AI_RECIPE_MONTHLY_LIMIT, DEFAULT_RECIPE_MONTHLY_LIMIT),
+    sceneMonthlyLimit: parseLimit(env.AI_SCENE_MONTHLY_LIMIT, DEFAULT_SCENE_MONTHLY_LIMIT),
+    photoroomConfigured: !!env.PHOTOROOM_API_KEY && env.PHOTOROOM_API_KEY.trim() !== '',
     globalLimit: parseLimit(env.AI_GLOBAL_DAILY_LIMIT, DEFAULT_GLOBAL_LIMIT),
   };
 }
