@@ -569,7 +569,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: 'promote-web', section: 'promote', apps: ['web'],
     title: 'Making a post from a photo of your food',
     summary: 'A brighter photo, cropped for Instagram, with a caption and hashtags.',
-    keywords: ['promote', 'instagram', 'insta', 'post', 'caption', 'hashtag', 'social media', 'marketing', 'photo', 'reel', 'whatsapp status', 'background', 'backdrop'],
+    keywords: ['promote', 'instagram', 'insta', 'post', 'caption', 'hashtag', 'social media', 'marketing', 'photo', 'reel', 'whatsapp status', 'background', 'style', 'styled', 'ai photo', 'edit photo'],
     body: [
       steps(
         'Click **Promote** (on a phone browser, the megaphone at the top).',
@@ -579,10 +579,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         'Change the caption as you like. Tap a hashtag to leave it out.',
         'Click **Share** and choose Instagram (on a phone), or **Save photo** on a computer. The caption is copied: paste it in Instagram.',
       ),
-      text('To change what is behind the food, choose a **Background**: a plain colour, or an **AI scene** such as **Wooden table** or **Festive**. The food stays exactly as in your photo; only what is around it changes. Tap the picture icon to go back to the photo as it was.'),
+      text('For a photo that looks professionally shot, choose a style under **Style with AI**, such as **Rustic table**, **Café** or **Festive**. AI puts the plate in that setting with better light and touches up the food (colour, sheen, sharpness), without adding, removing or changing any of it. **As taken** goes back to your photo.'),
       points(
-        'The food is never changed or redrawn: only the light, colour and framing are improved, and a new background goes behind it.',
-        'Plain colours can be used as often as you like. AI scenes take longer and you can make 8 a month; the screen says how many are left.',
+        'Look at a styled photo before you post it: what you post should be what your customer gets.',
+        'Styling takes 10 to 20 seconds, and you can style 8 photos a month; the screen says how many are left. Going back to a style you already made is free.',
         'With your phone number in **Settings › Business Profile**, "Order on WhatsApp" and your number are added under the caption. Untick it to leave it out.',
         'You can make 15 posts a day; **Write another caption** uses one.',
         'Photos are not kept.',
@@ -593,17 +593,17 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: 'promote-phone', section: 'promote', apps: ['phone'],
     title: 'Making a post from a photo of your food',
     summary: 'A brighter photo, cropped for Instagram, with a caption and hashtags.',
-    keywords: ['promote', 'instagram', 'insta', 'post', 'caption', 'hashtag', 'social media', 'marketing', 'photo', 'reel', 'whatsapp status', 'background', 'backdrop'],
+    keywords: ['promote', 'instagram', 'insta', 'post', 'caption', 'hashtag', 'social media', 'marketing', 'photo', 'reel', 'whatsapp status', 'background', 'style', 'styled', 'ai photo', 'edit photo'],
     body: [
       steps(
         'Tap **Promote** at the bottom.',
         'Choose **English** or **Hinglish**, then **Take a photo** or **Choose a photo**.',
         'It comes back brighter, with a caption and hashtags. Tap **Before** to compare.',
-        'Choose **Post**, **Square** or **Story**, and if you like a **Background**: a plain colour, or an **AI scene** such as **Wooden table**. The food itself is never changed.',
+        'Choose **Post**, **Square** or **Story**, and if you like a style under **Style with AI**, such as **Rustic table**: AI sets the plate in that scene with better light, without changing the food.',
         'Change the caption if you like, and tap a hashtag to leave it out.',
         'Tap **Share** and choose Instagram (or WhatsApp). The caption is copied: paste it when Instagram asks for one.',
       ),
-      text('The food is never changed, only the light, colour, framing and what is behind it. You can make 15 posts a day and 8 AI scenes a month, and photos are not kept.'),
+      text('Check a styled photo before you post it. You can make 15 posts a day and style 8 photos a month, and photos are not kept.'),
     ],
   },
   // ── Settings ─────────────────────────────────────────────────────────────

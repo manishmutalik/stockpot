@@ -10,29 +10,30 @@
  */
 import type { RecipePhoto } from '../../../src/utils/recipeParse';
 import { PROMOTE_LABEL, type PromoteLanguage, type PromoteResult } from '../../../src/utils/promote';
-import type { BackgroundResult } from '../../../src/utils/promoteBackdrops';
+import type { PromoteShapeId } from '../../../src/utils/promote';
+import type { StyleResult } from '../../../src/utils/promoteStyles';
 import { ApiError, describeApiError, type Api } from './api';
 import { AI_STATUS_PATH } from './recipeReader';
 
 export const PROMOTE_PATH = '/api/mobile/promote';
-export const PROMOTE_BACKGROUND_PATH = '/api/mobile/promote/background';
+export const PROMOTE_STYLE_PATH = '/api/mobile/promote/style';
 /** The server gives the model a minute; a photo takes a while to send, and to come back, on a slow connection too. */
 export const PROMOTE_TIMEOUT_MS = 120_000;
 
 export type PromoteAvailability =
-  /** `backgrounds` is null when the server has none; otherwise how many AI scenes are left this month. */
-  | { available: true; remaining: number | null; backgrounds: { scenesLeft: number | null } | null }
+  /** `styling` is null when the server has no Styled photo; otherwise how many are left this month. */
+  | { available: true; remaining: number | null; styling: { left: number | null } | null }
   | { available: false; message: string };
 
 /** Whether this account can promote photos (GET /api/ai/status), and how many more today. */
 export function promoteAvailability(status: unknown): PromoteAvailability {
-  const s = status as { available?: boolean; reason?: string; limits?: { promote?: { remaining?: number }; cutout?: object; scene?: { remaining?: number } } } | null;
+  const s = status as { available?: boolean; reason?: string; limits?: { promote?: { remaining?: number }; style?: { remaining?: number } } } | null;
   if (s?.available === true && s.limits?.promote) {
-    const scene = s.limits.scene;
+    const style = s.limits.style;
     return {
       available: true,
       remaining: typeof s.limits.promote.remaining === 'number' ? s.limits.promote.remaining : null,
-      backgrounds: scene && s.limits.cutout ? { scenesLeft: typeof scene.remaining === 'number' ? scene.remaining : null } : null,
+      styling: style ? { left: typeof style.remaining === 'number' ? style.remaining : null } : null,
     };
   }
   const reason = s?.reason;
@@ -69,22 +70,21 @@ export async function promotePhoto(api: Pick<Api, 'post'>, photo: RecipePhoto, l
   }
 }
 
-export type BackgroundOutcome = { ok: true; result: BackgroundResult } | { ok: false; message: string; scenesLeft?: number };
+export type StyleOutcome = { ok: true; result: StyleResult } | { ok: false; message: string; left?: number };
 
-/** Puts the food on a backdrop (`mask`: the one the first background of this photo sent back). Never throws. */
-export async function placeBackground(api: Pick<Api, 'post'>, image: string, mask: string | null, backdrop: string): Promise<BackgroundOutcome> {
+/** Restyles the improved photo with AI in a style, at the shape chosen. Never throws. */
+export async function stylePhoto(api: Pick<Api, 'post'>, image: string, style: string, shape: PromoteShapeId): Promise<StyleOutcome> {
   try {
-    const res = await api.post<{ result?: BackgroundResult; error?: string }>(
-      PROMOTE_BACKGROUND_PATH,
-      { image: { mediaType: 'image/jpeg', data: image }, ...(mask && { mask: { mediaType: 'image/png', data: mask } }), backdrop },
-      { timeoutMs: PROMOTE_TIMEOUT_MS },
+    const res = await api.post<{ result?: StyleResult; error?: string }>(
+      PROMOTE_STYLE_PATH, { image: { mediaType: 'image/jpeg', data: image }, style, shape }, { timeoutMs: PROMOTE_TIMEOUT_MS },
     );
-    return res.result ? { ok: true, result: res.result } : { ok: false, message: res.error || 'The background could not be made. Please try again.' };
+    return res.result ? { ok: true, result: res.result } : { ok: false, message: res.error || 'The photo could not be styled. Please try again.' };
   } catch (err) {
     if (err instanceof ApiError && err.status === 0 && err.code === 'timeout') return { ok: false, message: 'That took too long. Please try again.' };
-    if (err instanceof ApiError && err.status === 429 && err.code === 'monthly_limit') return { ok: false, message: err.message, scenesLeft: 0 };
-    // This route's own messages say what happened (no food found, Photoroom busy); others are said the usual way.
-    if (err instanceof ApiError && ['no_subject', 'background_failed', 'backgrounds_unavailable', 'daily_limit'].includes(err.code)) return { ok: false, message: err.message };
+    const left = err instanceof ApiError && typeof (err.body as { stylesLeft?: unknown })?.stylesLeft === 'number' ? (err.body as { stylesLeft: number }).stylesLeft : undefined;
+    if (err instanceof ApiError && err.status === 429 && err.code === 'monthly_limit') return { ok: false, message: err.message, left: 0 };
+    // This route's own messages say what happened (declined, busy); others are said the usual way.
+    if (err instanceof ApiError && ['style_declined', 'style_busy', 'style_failed', 'style_unavailable', 'daily_limit'].includes(err.code)) return { ok: false, message: err.message, ...(left !== undefined && { left }) };
     return { ok: false, message: describeApiError(err) };
   }
 }

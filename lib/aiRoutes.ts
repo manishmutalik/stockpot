@@ -32,8 +32,8 @@ export function createAiStatusHandler(deps: AiStatusDeps) {
       }
       const config = deps.config();
       const usage = await deps.peek(req.uid!, await deps.usageDay(req.uid!), deps.globalDay());
-      // Promote's backgrounds are listed only when the server has a Photoroom key, so the app offers them only then.
-      const features = AI_FEATURES.filter(f => config.photoroomConfigured || (f !== 'cutout' && f !== 'scene'));
+      // Promote's Styled photo is listed only when the server has a Gemini key, so the app offers it only then.
+      const features = AI_FEATURES.filter(f => config.geminiConfigured || f !== 'style');
       const limits = Object.fromEntries(features.map((f: AiFeature) => {
         const limit = config.limits[f];
         const used = usage.byFeature[f] ?? 0;
@@ -43,10 +43,10 @@ export function createAiStatusHandler(deps: AiStatusDeps) {
           const monthUsed = usage.recipeMonth ?? 0;
           return [f, { used, limit, monthUsed, monthLimit, remaining: Math.max(Math.min(limit - used, monthLimit - monthUsed), 0) }];
         }
-        if (f === 'scene') {
-          // AI scenes too: what is left is the smaller of today's and this month's.
-          const monthLimit = config.sceneMonthlyLimit;
-          const monthUsed = usage.sceneMonth ?? 0;
+        if (f === 'style') {
+          // AI-styled photos too: what is left is the smaller of today's and this month's.
+          const monthLimit = config.styleMonthlyLimit;
+          const monthUsed = usage.styleMonth ?? 0;
           return [f, { used, limit, monthUsed, monthLimit, remaining: Math.max(Math.min(limit - used, monthLimit - monthUsed), 0) }];
         }
         return [f, { used, limit, remaining: Math.max(limit - used, 0) }];
