@@ -8,11 +8,21 @@ describe('readAiConfig', () => {
     expect(c.keyConfigured).toBe(false);
     expect(c.allowedEmails).toEqual([]);
     expect(c.allowedUids).toEqual([]);
-    expect(c.limits).toEqual({ chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15, promote: 15 });
+    expect(c.limits).toEqual({ chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15, promote: 15, cutout: 20, scene: 8 });
     expect(c.recipeMonthlyLimit).toBe(75);
+    expect(c.sceneMonthlyLimit).toBe(8);
+    expect(c.photoroomConfigured).toBe(false);
     expect(c.globalLimit).toBe(1500);
     expect(DEFAULT_LIMITS.chat).toBe(30);
     expect(DEFAULT_GLOBAL_LIMIT).toBe(1500);
+  });
+
+  it('reads the Photoroom key and the background limits', () => {
+    const c = readAiConfig({ PHOTOROOM_API_KEY: 'sandbox_x', AI_SCENE_MONTHLY_LIMIT: '20', AI_CUTOUT_DAILY_LIMIT: '5' });
+    expect(c.photoroomConfigured).toBe(true);
+    expect(c.sceneMonthlyLimit).toBe(20);
+    expect(c.limits.cutout).toBe(5);
+    expect(readAiConfig({ PHOTOROOM_API_KEY: '  ' }).photoroomConfigured).toBe(false);
   });
 
   it('is on only for exactly "true"', () => {

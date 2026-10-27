@@ -38,6 +38,8 @@ import { createRecipeParseModel } from "./lib/recipeParseModel";
 import { createPromoteHandler, promoteContextFrom } from "./lib/promoteRoutes";
 import { createPromoteModel } from "./lib/promoteModel";
 import { improvePhoto } from "./lib/promoteImage";
+import { createPromoteBackgroundHandler } from "./lib/promoteBackgroundRoutes";
+import { createPhotoroom } from "./lib/photoroom";
 import { createProductionParseModel } from "./lib/productionParseModel";
 import { createBriefingModel } from "./lib/briefingModel";
 import { beginGeneration, clearGeneration, getBriefing, saveBriefing } from "./lib/briefingStore";
@@ -112,11 +114,11 @@ async function startServer() {
   // scoped to just this one path.
   app.post("/api/billing/webhook", express.raw({ type: "application/json" }), createWebhookHandler(billingDeps));
 
-  // Photos need a larger body than anything else (up to three shrunk recipe photos, or one photo to promote, as base64);
+  // Photos need a larger body than anything else (up to three shrunk recipe photos, or one photo to promote and its mask, as base64);
   // every other route keeps express's 100 kb default, so a large body is refused before it is read.
   const recipeJson = express.json({ limit: "10mb" });
   const defaultJson = express.json();
-  const RECIPE_PATHS = new Set(["/api/ai/parse-recipe", "/api/mobile/recipes/read", "/api/ai/promote", "/api/mobile/promote"]);
+  const RECIPE_PATHS = new Set(["/api/ai/parse-recipe", "/api/mobile/recipes/read", "/api/ai/promote", "/api/mobile/promote", "/api/ai/promote/background", "/api/mobile/promote/background"]);
   app.use((req, res, next) => (RECIPE_PATHS.has(req.path) ? recipeJson : defaultJson)(req, res, next));
   app.use(cookieParser());
 
@@ -229,6 +231,12 @@ async function startServer() {
   });
   api.post("/ai/promote", requireCsrf, promoteHandler);
   api.post("/mobile/promote", quickGate, promoteHandler);
+  // Promote's backgrounds (Photoroom, PHOTOROOM_API_KEY), the same for the web and the phone.
+  const promoteBackgroundHandler = createPromoteBackgroundHandler({
+    ...aiGuardDeps, reserveScene: reserveRecipeUse, photoroom: createPhotoroom({ apiKey: () => process.env.PHOTOROOM_API_KEY }),
+  });
+  api.post("/ai/promote/background", requireCsrf, promoteBackgroundHandler);
+  api.post("/mobile/promote/background", quickGate, promoteBackgroundHandler);
   api.get("/mobile/payment-setup", quickGate, createQuickPaymentSetupHandler(quickDeps));
   api.get("/mobile/payments-due", quickGate, createQuickPaymentsDueHandler(quickDeps));
   api.get("/mobile/today", quickGate, createQuickTodayHandler(quickDeps));

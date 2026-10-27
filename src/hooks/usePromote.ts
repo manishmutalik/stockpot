@@ -4,18 +4,26 @@
  * Promote on the website: a photo of a dish is shrunk on this device (to PROMOTE_PHOTO_MAX_SIDE, as JPEG), sent to
  * POST /api/ai/promote, and comes back improved with a caption and hashtags (utils/promote). Offered only to accounts
  * AI is available to (never the demo). Nothing is kept: the photo lives in this page until the owner leaves it.
+ *
+ * Backgrounds (utils/promoteBackdrops) are offered when the server has them (its AI status lists `scene`): the improved
+ * photo goes to POST /api/ai/promote/background with a backdrop's id, and the mask the first one makes is sent with the
+ * rest, so the food is cut out once per photo.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch } from '../utils/apiClient';
 import { cropRect, PROMOTE_PHOTO_MAX_SIDE, type Focus, type PromoteLanguage, type PromoteResult, type PromoteShape } from '../utils/promote';
+import type { BackgroundResult } from '../utils/promoteBackdrops';
 import { shrinkPhoto } from './useRecipeReader';
 
 export type PromoteOutcome = { ok: true; result: PromoteResult } | { ok: false; message: string };
+export type BackgroundOutcome = { ok: true; result: BackgroundResult } | { ok: false; message: string };
 
 export interface Promoter {
   /** Photos that can still be promoted today, as of the last check. */
   remaining: number | null;
   promote: (photo: File, language: PromoteLanguage) => Promise<PromoteOutcome>;
+  /** Null when the server has no backgrounds. */
+  backgrounds: { scenesLeft: number | null; place: (image: string, mask: string | null, backdrop: string) => Promise<BackgroundOutcome> } | null;
 }
 
 /** The improved photo cut to a shape (a post or a story) around the food, at the shape's size, as a JPEG file. */
@@ -39,6 +47,8 @@ export async function cropToShape(imageBase64: string, shape: PromoteShape, focu
 export function usePromote(input: { signedIn: boolean; dataReady: boolean }): Promoter | null {
   const [available, setAvailable] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [hasBackgrounds, setHasBackgrounds] = useState(false);
+  const [scenesLeft, setScenesLeft] = useState<number | null>(null);
   const asked = useRef(false);
   const alive = useRef(true);
   useEffect(() => {
@@ -57,6 +67,10 @@ export function usePromote(input: { signedIn: boolean; dataReady: boolean }): Pr
         if (!alive.current || status.available !== true || !status.limits?.promote) return;
         setAvailable(true);
         if (typeof status.limits.promote.remaining === 'number') setRemaining(status.limits.promote.remaining);
+        if (status.limits.scene && status.limits.cutout) {
+          setHasBackgrounds(true);
+          if (typeof status.limits.scene.remaining === 'number') setScenesLeft(status.limits.scene.remaining);
+        }
       } catch {
         // Not reachable: the section simply does not appear.
       }
@@ -87,5 +101,25 @@ export function usePromote(input: { signedIn: boolean; dataReady: boolean }): Pr
     return { ok: false, message: typeof body.error === 'string' ? body.error : 'That post could not be made right now.' };
   }, []);
 
-  return available ? { remaining, promote } : null;
+  const place = useCallback(async (image: string, mask: string | null, backdrop: string): Promise<BackgroundOutcome> => {
+    let body: Record<string, unknown>;
+    let status: number;
+    try {
+      const res = await apiFetch('/api/ai/promote/background', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: { mediaType: 'image/jpeg', data: image }, ...(mask && { mask: { mediaType: 'image/png', data: mask } }), backdrop }),
+      });
+      status = res.status;
+      body = await res.json().catch(() => ({}));
+    } catch {
+      return { ok: false, message: 'The background could not be made. Please try again.' };
+    }
+    const result = body.result as BackgroundResult | undefined;
+    if (typeof result?.scenesLeft === 'number' && alive.current) setScenesLeft(result.scenesLeft);
+    if (status === 429 && body.code === 'monthly_limit' && alive.current) setScenesLeft(0);
+    if (status >= 200 && status < 300 && result) return { ok: true, result };
+    return { ok: false, message: typeof body.error === 'string' ? body.error : 'The background could not be made. Please try again.' };
+  }, []);
+
+  return available ? { remaining, promote, backgrounds: hasBackgrounds ? { scenesLeft, place } : null } : null;
 }

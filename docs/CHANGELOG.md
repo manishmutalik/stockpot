@@ -1,5 +1,21 @@
 # Changelog
 
+## Promote: backgrounds
+
+- Under the photo, **Background**: six plain colours (white, cream, blush, sage, sky, charcoal), drawn as a soft
+  gradient with a gentle shadow under the food, and six **AI scenes** (wooden table, marble, café, festive, banana leaf,
+  outdoors) painted by Photoroom. The picture icon goes back to the photo as it was.
+- The food is always the photo's own: Photoroom cuts it out and paints the scene, and the server lays the original
+  food back on top, so only what is around it changes.
+- The food is cut out once per photo (the mask is reused for every other background), and each background made is kept
+  while you are on the screen, so switching between them is free.
+- Limits: 20 cut-outs a day (`AI_CUTOUT_DAILY_LIMIT`), and 8 AI scenes a day and 8 a month (`AI_SCENE_DAILY_LIMIT`,
+  `AI_SCENE_MONTHLY_LIMIT`); the screen says how many scenes are left. Plain colours use no allowance once the food is
+  cut out.
+- Needs `PHOTOROOM_API_KEY` on the server; without it there are no background choices. A free `sandbox_` key works and
+  watermarks the images.
+- The phone app needs a new build to show the choices (no new native modules).
+
 ## Promote: posts for Instagram from a photo of your food
 
 - A new section, **Promote**, on the website (in the sidebar; the megaphone at the top on a phone browser) and in

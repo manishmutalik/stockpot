@@ -81,12 +81,12 @@ describe('peekAiUsage', () => {
   it('reports what has been used without using any', async () => {
     await reserveAiUse(base); await reserveAiUse(base); await reserveAiUse({ ...base, feature: 'briefing' });
     const before = JSON.stringify([...store.entries()]);
-    expect(await peekAiUsage('u1', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 2, briefing: 1, parse: 0, quick: 0, recipe: 0, promote: 0 }, recipeMonth: 0, global: 3 });
+    expect(await peekAiUsage('u1', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 2, briefing: 1, parse: 0, quick: 0, recipe: 0, promote: 0, cutout: 0, scene: 0 }, recipeMonth: 0, sceneMonth: 0, global: 3 });
     expect(JSON.stringify([...store.entries()])).toBe(before);
   });
 
   it('is all zero for a user with no use', async () => {
-    expect(await peekAiUsage('nobody', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 0, briefing: 0, parse: 0, quick: 0, recipe: 0, promote: 0 }, recipeMonth: 0, global: 0 });
+    expect(await peekAiUsage('nobody', '2026-06-30', '2026-06-30')).toEqual({ byFeature: { chat: 0, briefing: 0, parse: 0, quick: 0, recipe: 0, promote: 0, cutout: 0, scene: 0 }, recipeMonth: 0, sceneMonth: 0, global: 0 });
   });
 });
 
@@ -135,6 +135,14 @@ describe('recipe readings', () => {
     store.set('aiUsageGlobal/2026-10-12', { total: 97 });
     expect(await reserveRecipeUse(recipe)).toEqual({ ok: false, reason: 'global_limit' });
     expect(store.get('users/u1/aiUsage/2026-10-12')).toBeUndefined();
+  });
+
+  it('counts AI scenes the same way, in their own field', async () => {
+    store.set('users/u1/aiUsage/2026-10', { recipe: 75, scene: 7 });
+    expect(await reserveRecipeUse({ ...recipe, feature: 'scene', monthlyLimit: 8, globalWeight: 1 })).toEqual({ ok: true, day: 1, month: 8 });
+    expect(store.get('users/u1/aiUsage/2026-10')).toEqual({ recipe: 75, scene: 8 });
+    expect(await reserveRecipeUse({ ...recipe, feature: 'scene', monthlyLimit: 8, globalWeight: 1 })).toEqual({ ok: false, reason: 'month_limit' });
+    expect((await peekAiUsage('u1', '2026-10-12', '2026-10-12')).sceneMonth).toBe(8);
   });
 
   it('shows the day and the month in the usage peek', async () => {

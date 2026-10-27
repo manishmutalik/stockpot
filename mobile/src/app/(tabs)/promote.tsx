@@ -3,8 +3,9 @@ import { ActivityIndicator, Image, KeyboardAvoidingView, Platform, Pressable, Sc
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { postText, PROMOTE_LABEL, PROMOTE_LANGUAGES, PROMOTE_SHAPES, shapeOf, type PromoteLanguage, type PromoteResult, type PromoteShapeId } from '../../../../src/utils/promote';
+import { PLAIN_BACKDROPS, SCENE_BACKDROPS } from '../../../../src/utils/promoteBackdrops';
 import { useAuth } from '../../auth/AuthContext';
-import { loadPromoteAvailability, promotePhoto, promoteWorkingLabel, type PromoteAvailability } from '../../lib/promote';
+import { loadPromoteAvailability, placeBackground, promotePhoto, promoteWorkingLabel, type PromoteAvailability } from '../../lib/promote';
 import { copyCaption, cropForShare, forget, keepImproved, pickPromotePhoto, sharePost, type PickedPromotePhoto } from '../../lib/promotePhoto';
 import { noOutline } from '../../lib/webInput';
 import { Button } from '../../components/Button';
@@ -48,6 +49,12 @@ export default function Promote() {
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Backgrounds: the one chosen ('original' is the improved photo), each made so far (going back to one is free), and
+  // the mask the first one made, sent with the rest.
+  const [backdrop, setBackdrop] = useState('original');
+  const [variants, setVariants] = useState<Record<string, string>>({});
+  const [mask, setMask] = useState<string | null>(null);
+  const [making, setMaking] = useState<string | null>(null);
   const files = useRef<string[]>([]);
   const elapsed = useElapsed(stage === 'working');
 
@@ -58,16 +65,17 @@ export default function Promote() {
     return clearFiles;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const shownUri = variants[backdrop] ?? improvedUri;
   // The improved photo cut to the chosen shape, made again whenever the shape or the photo changes.
   useEffect(() => {
-    if (!result || !improvedUri) return;
+    if (!result || !shownUri) return;
     let cancelled = false;
     setCropped(null);
-    cropForShare(improvedUri, result, shapeOf(shape), result.reading.focus)
+    cropForShare(shownUri, result, shapeOf(shape), result.reading.focus)
       .then(uri => { track(uri); if (!cancelled) setCropped(uri); })
       .catch(() => { if (!cancelled) setError('That photo could not be cropped. Please try again.'); });
     return () => { cancelled = true; };
-  }, [result, improvedUri, shape]);
+  }, [result, shownUri, shape]);
 
   const remaining = availability?.available ? availability.remaining : null;
 
@@ -81,6 +89,7 @@ export default function Promote() {
     } catch {
       setError('That photo could not be kept on this phone. Please try again.'); setStage('pick'); return;
     }
+    setBackdrop('original'); setVariants({}); setMask(null);
     setResult(outcome.result);
     setCaption(outcome.result.reading.caption);
     setTags(outcome.result.reading.hashtags.map(tag => ({ tag, on: true })));
@@ -99,6 +108,28 @@ export default function Promote() {
   const startAgain = () => {
     clearFiles();
     setPicked(null); setResult(null); setImprovedUri(null); setCropped(null); setError(null); setNote(null); setStage('pick');
+    setBackdrop('original'); setVariants({}); setMask(null);
+  };
+
+  const backgrounds = availability?.available ? availability.backgrounds : null;
+  const chooseBackdrop = async (id: string) => {
+    setError(null);
+    if (id === 'original' || variants[id]) { setBackdrop(id); return; }
+    if (!result || making) return;
+    setMaking(id);
+    const outcome = await placeBackground(api, result.image, mask, id);
+    setMaking(null);
+    const left = outcome.ok ? outcome.result.scenesLeft : outcome.scenesLeft;
+    if (left !== undefined) setAvailability(a => (a?.available && a.backgrounds ? { ...a, backgrounds: { scenesLeft: left } } : a));
+    if (outcome.ok === false) { setError(outcome.message); return; }
+    try {
+      const uri = track(keepImproved(outcome.result.image));
+      if (outcome.result.mask) setMask(outcome.result.mask);
+      setVariants(v => ({ ...v, [id]: uri }));
+      setBackdrop(id);
+    } catch {
+      setError('That photo could not be kept on this phone. Please try again.');
+    }
   };
 
   const text = result ? postText(caption, tags.filter(t => t.on).map(t => t.tag), withOrder ? result.orderLine : null) : '';
@@ -174,6 +205,40 @@ export default function Promote() {
                   </Pressable>
                 )}
               </View>
+              {backgrounds && (
+                <View style={{ gap: 10 }}>
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.ink }}>Background</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="As taken" accessibilityState={{ selected: backdrop === 'original' }} onPress={() => void chooseBackdrop('original')}
+                      style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: backdrop === 'original' ? colors.primary : colors.outline, backgroundColor: colors.inputFill, alignItems: 'center', justifyContent: 'center' }}>
+                      <MaterialIcons name="image" size={18} color={colors.grey} />
+                    </Pressable>
+                    {PLAIN_BACKDROPS.map(b => (
+                      <Pressable key={b.id} accessibilityRole="button" accessibilityLabel={b.label} accessibilityState={{ selected: backdrop === b.id, disabled: !!making }} disabled={!!making} onPress={() => void chooseBackdrop(b.id)}
+                        style={{ width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: backdrop === b.id ? colors.primary : colors.outline, backgroundColor: b.colour, alignItems: 'center', justifyContent: 'center' }}>
+                        {making === b.id && <ActivityIndicator size="small" color={colors.primary} />}
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={{ fontFamily: fonts.semibold, fontSize: 14, color: colors.ink }}>
+                    AI scenes{backgrounds.scenesLeft !== null && <Text style={{ fontFamily: fonts.regular, color: colors.grey }}> ({backgrounds.scenesLeft} left this month)</Text>}
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {SCENE_BACKDROPS.map(b => {
+                      const on = backdrop === b.id;
+                      const off = !!making || (backgrounds.scenesLeft === 0 && !variants[b.id]);
+                      return (
+                        <Pressable key={b.id} accessibilityRole="button" accessibilityState={{ selected: on, disabled: off }} disabled={off} onPress={() => void chooseBackdrop(b.id)}
+                          style={{ minHeight: 36, paddingHorizontal: 12, borderRadius: radius.full, justifyContent: 'center', borderWidth: 1, borderColor: on ? colors.primary : colors.outline, backgroundColor: on ? `${colors.primary}14` : colors.white, opacity: off && !on ? 0.5 : 1 }}>
+                          {making === b.id ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={{ fontFamily: fonts.semibold, fontSize: 13, color: on ? colors.primary : colors.ink }}>{b.label}</Text>}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {making && <Text style={{ fontFamily: fonts.regular, fontSize: 13, color: colors.grey }}>Making the background… the food stays exactly as it is.</Text>}
+                  {error && !making && <Text accessibilityRole="alert" style={{ fontFamily: fonts.semibold, fontSize: 13, color: colors.coral }}>{error}</Text>}
+                </View>
+              )}
             </Card>
 
             <Card style={{ gap: 12 }}>
