@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { AlertTriangle, Camera, Check, Copy, Download, Image as ImageIcon, ImagePlus, Loader2, Megaphone, RefreshCw, Share2, Sparkles, Wand2 } from 'lucide-react';
+import { AlertTriangle, Camera, Check, Copy, Download, ImagePlus, Loader2, Megaphone, RefreshCw, Share2, Sparkles, Wand2 } from 'lucide-react';
 import { AiBlockedNote } from '../components/AiBlockedNote';
 import { cropToShape, type Promoter } from '../hooks/usePromote';
 import { postText, PROMOTE_LABEL, PROMOTE_LANGUAGES, PROMOTE_SHAPES, shapeOf, type PromoteLanguage, type PromoteResult, type PromoteShapeId } from '../utils/promote';
-import { PLAIN_BACKDROPS, SCENE_BACKDROPS } from '../utils/promoteBackdrops';
+import { PROMOTE_STYLES } from '../utils/promoteStyles';
 import { saveFile, shareFileViaSystem } from '../utils/shareFile';
 
 interface PromoteViewProps {
@@ -32,13 +32,12 @@ export const PromoteView: React.FC<PromoteViewProps> = ({ promoter, aiBlocked, b
   const [showBefore, setShowBefore] = useState(false);
   const [cropped, setCropped] = useState<{ file: File; url: string } | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  // Backgrounds: the one chosen ('original' is the improved photo as it is), each made so far (so going back to one
-  // is free), and the mask the first one made, sent with the rest.
-  const [backdrop, setBackdrop] = useState('original');
-  const [variants, setVariants] = useState<Record<string, string>>({});
-  const [mask, setMask] = useState<string | null>(null);
-  const [making, setMaking] = useState<string | null>(null);
-  const [bgError, setBgError] = useState<string | null>(null);
+  // Styled photo: the style chosen ('original' is the improved photo as it is), and each made so far, so going back to
+  // one is free. A styled photo is centred on the plate, so it is cropped around the middle.
+  const [look, setLook] = useState('original');
+  const [styled, setStyled] = useState<Record<string, string>>({});
+  const [styling, setStyling] = useState<string | null>(null);
+  const [styleError, setStyleError] = useState<string | null>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
   const galleryInput = useRef<HTMLInputElement>(null);
 
@@ -46,13 +45,14 @@ export const PromoteView: React.FC<PromoteViewProps> = ({ promoter, aiBlocked, b
   useEffect(() => () => { if (originalUrl) URL.revokeObjectURL(originalUrl); }, [originalUrl]);
 
   const result = stage.kind === 'done' ? stage.result : null;
-  const shown = result ? (variants[backdrop] ?? result.image) : null;
-  // The photo cut to the chosen shape, made again whenever the shape, the background or the photo changes.
+  const shown = result ? (styled[look] ?? result.image) : null;
+  const focus = result ? (styled[look] ? { x: 0.5, y: 0.5 } : result.reading.focus) : null;
+  // The photo cut to the chosen shape, made again whenever the shape, the style or the photo changes.
   useEffect(() => {
-    if (!result || !shown) return;
+    if (!result || !shown || !focus) return;
     let cancelled = false;
     let url: string | null = null;
-    cropToShape(shown, shapeOf(shape), result.reading.focus, `promote-${shape}.jpg`)
+    cropToShape(shown, shapeOf(shape), focus, `promote-${shape}.jpg`)
       .then(f => {
         if (cancelled) return;
         url = URL.createObjectURL(f);
@@ -60,14 +60,14 @@ export const PromoteView: React.FC<PromoteViewProps> = ({ promoter, aiBlocked, b
       })
       .catch(() => { if (!cancelled) setCropped(null); });
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
-  }, [result, shown, shape]);
+  }, [result, shown, shape]); // eslint-disable-line react-hooks/exhaustive-deps -- focus follows `shown`
 
   const run = async (photo: File) => {
     if (!promoter) return;
     setStage({ kind: 'working' });
     setNote(null);
     setShowBefore(false);
-    setBackdrop('original'); setVariants({}); setMask(null); setBgError(null);
+    setLook('original'); setStyled({}); setStyleError(null);
     const outcome = await promoter.promote(photo, language);
     if (outcome.ok === false) { setStage({ kind: 'failed', message: outcome.message }); return; }
     setCaption(outcome.result.reading.caption);
@@ -85,20 +85,19 @@ export const PromoteView: React.FC<PromoteViewProps> = ({ promoter, aiBlocked, b
 
   const startAgain = () => {
     setStage({ kind: 'pick' }); setFile(null); setCropped(null); setNote(null);
-    setBackdrop('original'); setVariants({}); setMask(null); setBgError(null);
+    setLook('original'); setStyled({}); setStyleError(null);
   };
 
-  const chooseBackdrop = async (id: string) => {
-    setBgError(null);
-    if (id === 'original' || variants[id]) { setBackdrop(id); return; }
-    if (!result || !promoter?.backgrounds || making) return;
-    setMaking(id);
-    const outcome = await promoter.backgrounds.place(result.image, mask, id);
-    setMaking(null);
-    if (outcome.ok === false) { setBgError(outcome.message); return; }
-    if (outcome.result.mask) setMask(outcome.result.mask);
-    setVariants(v => ({ ...v, [id]: outcome.result.image }));
-    setBackdrop(id);
+  const chooseLook = async (id: string) => {
+    setStyleError(null);
+    if (id === 'original' || styled[id]) { setLook(id); return; }
+    if (!result || !promoter?.styling || styling) return;
+    setStyling(id);
+    const outcome = await promoter.styling.style(result.image, id, shape);
+    setStyling(null);
+    if (outcome.ok === false) { setStyleError(outcome.message); return; }
+    setStyled(v => ({ ...v, [id]: outcome.result.image }));
+    setLook(id);
   };
 
   const text = result ? postText(caption, tags.filter(t => t.on).map(t => t.tag), withOrder ? result.orderLine : null) : '';
@@ -217,10 +216,10 @@ export const PromoteView: React.FC<PromoteViewProps> = ({ promoter, aiBlocked, b
                 </button>
               )}
             </div>
-            {promoter.backgrounds && (
-              <BackdropPicker
-                chosen={backdrop} making={making} made={variants} scenesLeft={promoter.backgrounds.scenesLeft}
-                error={bgError} onChoose={id => void chooseBackdrop(id)}
+            {promoter.styling && (
+              <StylePicker
+                chosen={look} styling={styling} made={styled} left={promoter.styling.left}
+                error={styleError} onChoose={id => void chooseLook(id)}
               />
             )}
           </div>
@@ -303,49 +302,30 @@ export const PromoteView: React.FC<PromoteViewProps> = ({ promoter, aiBlocked, b
   );
 };
 
-const swatch = (on: boolean) => `relative w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 transition-shadow ${on ? 'border-primary ring-2 ring-primary/30' : 'border-white shadow-sm hover:ring-2 hover:ring-stone-200'}`;
-
-/** The backgrounds: the photo as it is, plain colours, and AI scenes with how many are left this month. */
-const BackdropPicker: React.FC<{
-  chosen: string; making: string | null; made: Record<string, string>; scenesLeft: number | null;
+/** Styled photo: the photo as it is, or restyled by AI in one of the styles, with how many are left this month. */
+const StylePicker: React.FC<{
+  chosen: string; styling: string | null; made: Record<string, string>; left: number | null;
   error: string | null; onChoose: (id: string) => void;
-}> = ({ chosen, making, made, scenesLeft, error, onChoose }) => {
-  const spinner = <Loader2 size={16} className="absolute inset-0 m-auto animate-spin text-primary" />;
-  return (
-    <div className="space-y-3 pt-1">
-      <div>
-        <span className="block text-sm font-semibold text-ink mb-1.5">Background</span>
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2" role="group" aria-label="Background">
-          <button onClick={() => onChoose('original')} aria-pressed={chosen === 'original'} title="As taken" aria-label="As taken"
-            className={`${swatch(chosen === 'original')} bg-stone-100 flex items-center justify-center`}>
-            <ImageIcon size={16} className="text-muted" />
-          </button>
-          {PLAIN_BACKDROPS.map(b => (
-            <button key={b.id} onClick={() => onChoose(b.id)} disabled={!!making} aria-pressed={chosen === b.id} title={b.label} aria-label={b.label}
-              className={swatch(chosen === b.id)} style={{ background: b.colour }}>
-              {making === b.id && spinner}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <span className="flex items-center gap-1.5 text-sm font-semibold text-ink mb-1.5">
-          <Wand2 size={14} className="text-primary" /> AI scenes
-          {typeof scenesLeft === 'number' && <span className="font-normal text-muted">({scenesLeft} left this month)</span>}
-        </span>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="AI scenes">
-          {SCENE_BACKDROPS.map(b => (
-            <button key={b.id} onClick={() => onChoose(b.id)} aria-pressed={chosen === b.id}
-              disabled={!!making || (scenesLeft === 0 && !made[b.id])}
-              className={`${chip(chosen === b.id)} relative disabled:opacity-50`}>
-              <span className={making === b.id ? 'invisible' : ''}>{b.label}</span>
-              {making === b.id && spinner}
-            </button>
-          ))}
-        </div>
-      </div>
-      {making && <p className="text-xs text-muted">Making the background… the food stays exactly as it is.</p>}
-      {error && <p role="alert" className="text-sm text-coral">{error}</p>}
+}> = ({ chosen, styling, made, left, error, onChoose }) => (
+  <div className="space-y-2 pt-1">
+    <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+      <Wand2 size={14} className="text-primary" /> Style with AI
+      {typeof left === 'number' && <span className="font-normal text-muted">({left} left this month)</span>}
+    </span>
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Style with AI">
+      <button onClick={() => onChoose('original')} aria-pressed={chosen === 'original'} className={chip(chosen === 'original')}>As taken</button>
+      {PROMOTE_STYLES.map(s => (
+        <button key={s.id} onClick={() => onChoose(s.id)} aria-pressed={chosen === s.id}
+          disabled={!!styling || (left === 0 && !made[s.id])}
+          className={`${chip(chosen === s.id)} relative disabled:opacity-50`}>
+          <span className={styling === s.id ? 'invisible' : ''}>{s.label}</span>
+          {styling === s.id && <Loader2 size={16} className="absolute inset-0 m-auto animate-spin text-primary" />}
+        </button>
+      ))}
     </div>
-  );
-};
+    {styling
+      ? <p className="text-xs text-muted">Styling your photo… this takes about 10 to 20 seconds.</p>
+      : <p className="text-xs text-muted">AI changes the setting and light, and touches up the food without changing it. Check the photo before you post it.</p>}
+    {error && <p role="alert" className="text-sm text-coral">{error}</p>}
+  </div>
+);

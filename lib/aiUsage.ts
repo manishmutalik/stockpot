@@ -7,7 +7,7 @@
  * the default-deny covers.
  *
  *   users/{uid}/aiUsage/{YYYY-MM-DD}   { chat: n, briefing: n, parse: n, quick: n, recipe: n }   the user's own day
- *   users/{uid}/aiUsage/{YYYY-MM}      { recipe: n, scene: n }                             the user's month (recipes and AI scenes)
+ *   users/{uid}/aiUsage/{YYYY-MM}      { recipe: n, style: n }                             the user's month (recipes and AI-styled photos)
  *   aiUsageGlobal/{YYYY-MM-DD}         { total: n }                                        UTC day, all users
  *
  * A call is reserved *before* the model is called, in one transaction that
@@ -61,12 +61,12 @@ export async function reserveAiUse(input: {
 /**
  * The recipe reader's reservation: one recipe against the day and the month, and `globalWeight` model calls against
  * the global day (a recipe reading costs several ordinary readings). A page often holds several recipes; they are
- * counted after the reading with `addRecipeUse`, since how many there are is only known then. Promote's AI scenes
- * (`feature: 'scene'`) have a day and a month too, and are reserved the same way.
+ * counted after the reading with `addRecipeUse`, since how many there are is only known then. Promote's AI-styled
+ * photos (`feature: 'style'`) have a day and a month too, and are reserved the same way.
  */
 export async function reserveRecipeUse(input: {
   uid: string;
-  feature?: 'recipe' | 'scene';
+  feature?: 'recipe' | 'style';
   userDay: string;
   globalDayKey: string;
   dailyLimit: number;
@@ -112,13 +112,13 @@ export async function addRecipeUse(input: { uid: string; userDay: string; count:
 export type RecipeReserveResult = { ok: true; day: number; month: number } | { ok: false; reason: 'user_limit' | 'month_limit' | 'global_limit' };
 
 /** What has been used today, without using any. */
-export async function peekAiUsage(uid: string, userDay: string, globalDayKey: string): Promise<{ byFeature: Partial<Record<AiFeature, number>>; recipeMonth: number; sceneMonth: number; global: number }> {
+export async function peekAiUsage(uid: string, userDay: string, globalDayKey: string): Promise<{ byFeature: Partial<Record<AiFeature, number>>; recipeMonth: number; styleMonth: number; global: number }> {
   const [userSnap, monthSnap, globalSnap] = await Promise.all([userUsageDoc(uid, userDay).get(), userUsageDoc(uid, userDay.slice(0, 7)).get(), globalUsageDoc(globalDayKey).get()]);
   const data = userSnap.data() ?? {};
   return {
-    byFeature: { chat: Number(data.chat ?? 0), briefing: Number(data.briefing ?? 0), parse: Number(data.parse ?? 0), quick: Number(data.quick ?? 0), recipe: Number(data.recipe ?? 0), promote: Number(data.promote ?? 0), cutout: Number(data.cutout ?? 0), scene: Number(data.scene ?? 0) },
+    byFeature: { chat: Number(data.chat ?? 0), briefing: Number(data.briefing ?? 0), parse: Number(data.parse ?? 0), quick: Number(data.quick ?? 0), recipe: Number(data.recipe ?? 0), promote: Number(data.promote ?? 0), style: Number(data.style ?? 0) },
     recipeMonth: Number(monthSnap.data()?.recipe ?? 0),
-    sceneMonth: Number(monthSnap.data()?.scene ?? 0),
+    styleMonth: Number(monthSnap.data()?.style ?? 0),
     global: Number(globalSnap.data()?.total ?? 0),
   };
 }

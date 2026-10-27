@@ -14,7 +14,7 @@ const result: PromoteResult = {
   image: 'aW1n', width: 2048, height: 1536, remaining: 14, orderLine: 'Order on WhatsApp: 98765 43210',
   reading: { isFood: true, menuItemId: 'm1', dishName: 'Butter Chicken', focus: { x: 0.5, y: 0.5 }, caption: 'Rich and creamy. DM to order!', hashtags: ['#butterchicken', '#indianfood', '#punefoodie'] },
 };
-const promoter = (over: Partial<Promoter> = {}): Promoter => ({ remaining: 15, promote: vi.fn().mockResolvedValue({ ok: true, result }), backgrounds: null, ...over });
+const promoter = (over: Partial<Promoter> = {}): Promoter => ({ remaining: 15, promote: vi.fn().mockResolvedValue({ ok: true, result }), styling: null, ...over });
 const pick = (container: HTMLElement) => {
   const input = container.querySelector('input[capture]') as HTMLInputElement;
   fireEvent.change(input, { target: { files: [new File(['photo'], 'dish.jpg', { type: 'image/jpeg' })] } });
@@ -95,49 +95,49 @@ describe('PromoteView', () => {
     expect(await screen.findByText(/does not look like food/)).toBeTruthy();
   });
 
-  describe('backgrounds', () => {
-    const withBackgrounds = (place = vi.fn(), scenesLeft: number | null = 3) => promoter({ backgrounds: { scenesLeft, place } });
+  describe('Style with AI', () => {
+    const withStyling = (style = vi.fn(), left: number | null = 3) => promoter({ styling: { left, style } });
     const done = async (p: Promoter) => {
       const { container } = render(<PromoteView promoter={p} aiBlocked={null} businessName="Food Haven" />);
       pick(container);
       await screen.findByDisplayValue('Rich and creamy. DM to order!');
     };
+    const pressed = (name: string) => screen.getByRole('button', { name }).getAttribute('aria-pressed');
 
-    it('are not offered when the server has none', async () => {
+    it('is not offered when the server has none', async () => {
       await done(promoter());
-      expect(screen.queryByRole('group', { name: 'Background' })).toBeNull();
+      expect(screen.queryByRole('group', { name: 'Style with AI' })).toBeNull();
     });
 
-    it('cut the food out once: the mask from the first is sent with the next, and going back costs nothing', async () => {
-      const place = vi.fn()
-        .mockResolvedValueOnce({ ok: true, result: { image: 'c2FnZQ', width: 2048, height: 1536, mask: 'bWFzaw' } })
-        .mockResolvedValueOnce({ ok: true, result: { image: 'd29vZA', width: 2048, height: 1536, scenesLeft: 2 } });
-      await done(withBackgrounds(place));
+    it('styles the photo in the shape chosen, and going back to one already made costs nothing', async () => {
+      const style = vi.fn()
+        .mockResolvedValueOnce({ ok: true, result: { image: 'cnVzdGlj', width: 768, height: 1024, stylesLeft: 2 } })
+        .mockResolvedValueOnce({ ok: true, result: { image: 'Y2FmZQ', width: 768, height: 1024, stylesLeft: 1 } });
+      await done(withStyling(style));
       expect(screen.getByText('(3 left this month)')).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: 'Sage' }));
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Sage' }).getAttribute('aria-pressed')).toBe('true'));
-      expect(place).toHaveBeenLastCalledWith('aW1n', null, 'sage');
-      fireEvent.click(screen.getByRole('button', { name: 'Wooden table' }));
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Wooden table' }).getAttribute('aria-pressed')).toBe('true'));
-      expect(place).toHaveBeenLastCalledWith('aW1n', 'bWFzaw', 'wood');
-      fireEvent.click(screen.getByRole('button', { name: 'Sage' }));
+      fireEvent.click(screen.getByRole('button', { name: /Story/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Rustic table' }));
+      await waitFor(() => expect(pressed('Rustic table')).toBe('true'));
+      expect(style).toHaveBeenLastCalledWith('aW1n', 'rustic', 'story');
+      fireEvent.click(screen.getByRole('button', { name: 'Café' }));
+      await waitFor(() => expect(pressed('Café')).toBe('true'));
+      fireEvent.click(screen.getByRole('button', { name: 'Rustic table' }));
       fireEvent.click(screen.getByRole('button', { name: 'As taken' }));
-      expect(screen.getByRole('button', { name: 'As taken' }).getAttribute('aria-pressed')).toBe('true');
-      expect(place).toHaveBeenCalledTimes(2);
+      expect(pressed('As taken')).toBe('true');
+      expect(style).toHaveBeenCalledTimes(2);
     });
 
-    it('says why a background could not be made, and keeps the photo as it was', async () => {
-      const place = vi.fn().mockResolvedValue({ ok: false, message: 'You have made all 8 AI backgrounds for this month.' });
-      await done(withBackgrounds(place));
+    it('says why a photo could not be styled, and keeps it as it was', async () => {
+      await done(withStyling(vi.fn().mockResolvedValue({ ok: false, message: 'You have styled all 8 photos for this month.' })));
       fireEvent.click(screen.getByRole('button', { name: 'Festive' }));
-      expect(await screen.findByText(/all 8 AI backgrounds/)).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'As taken' }).getAttribute('aria-pressed')).toBe('true');
+      expect(await screen.findByText(/all 8 photos for this month/)).toBeTruthy();
+      expect(pressed('As taken')).toBe('true');
     });
 
-    it('turns the AI scenes off when none are left this month, but not the plain ones', async () => {
-      await done(withBackgrounds(vi.fn(), 0));
+    it('turns the styles off when none are left this month', async () => {
+      await done(withStyling(vi.fn(), 0));
       expect((screen.getByRole('button', { name: 'Café' }) as HTMLButtonElement).disabled).toBe(true);
-      expect((screen.getByRole('button', { name: 'Cream' }) as HTMLButtonElement).disabled).toBe(false);
+      expect((screen.getByRole('button', { name: 'As taken' }) as HTMLButtonElement).disabled).toBe(false);
     });
   });
 });

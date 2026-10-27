@@ -8,21 +8,23 @@ describe('readAiConfig', () => {
     expect(c.keyConfigured).toBe(false);
     expect(c.allowedEmails).toEqual([]);
     expect(c.allowedUids).toEqual([]);
-    expect(c.limits).toEqual({ chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15, promote: 15, cutout: 20, scene: 8 });
+    expect(c.limits).toEqual({ chat: 30, briefing: 4, parse: 30, quick: 60, recipe: 15, promote: 15, style: 8 });
     expect(c.recipeMonthlyLimit).toBe(75);
-    expect(c.sceneMonthlyLimit).toBe(8);
-    expect(c.photoroomConfigured).toBe(false);
+    expect(c.styleMonthlyLimit).toBe(8);
+    expect(c.geminiConfigured).toBe(false);
+    expect(c.geminiImageModel).toBe('gemini-3.1-flash-image');
     expect(c.globalLimit).toBe(1500);
     expect(DEFAULT_LIMITS.chat).toBe(30);
     expect(DEFAULT_GLOBAL_LIMIT).toBe(1500);
   });
 
-  it('reads the Photoroom key and the background limits', () => {
-    const c = readAiConfig({ PHOTOROOM_API_KEY: 'sandbox_x', AI_SCENE_MONTHLY_LIMIT: '20', AI_CUTOUT_DAILY_LIMIT: '5' });
-    expect(c.photoroomConfigured).toBe(true);
-    expect(c.sceneMonthlyLimit).toBe(20);
-    expect(c.limits.cutout).toBe(5);
-    expect(readAiConfig({ PHOTOROOM_API_KEY: '  ' }).photoroomConfigured).toBe(false);
+  it('reads the Gemini key, model and the Styled photo limits', () => {
+    const c = readAiConfig({ GEMINI_API_KEY: 'g-key', GEMINI_IMAGE_MODEL: ' gemini-3.1-flash-lite-image ', AI_STYLE_MONTHLY_LIMIT: '20', AI_STYLE_DAILY_LIMIT: '5' });
+    expect(c.geminiConfigured).toBe(true);
+    expect(c.geminiImageModel).toBe('gemini-3.1-flash-lite-image');
+    expect(c.styleMonthlyLimit).toBe(20);
+    expect(c.limits.style).toBe(5);
+    expect(readAiConfig({ GEMINI_API_KEY: '  ' }).geminiConfigured).toBe(false);
   });
 
   it('is on only for exactly "true"', () => {

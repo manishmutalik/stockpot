@@ -1,5 +1,18 @@
 # Changelog
 
+## Promote: Styled photo (Gemini), in place of backgrounds
+
+- **Style with AI** replaces the backgrounds. Choose a style (rustic table, bright and clean, café, festive, dark and
+  moody, outdoors) and Google's Gemini image model turns the photo into a professionally shot one: the plate in that
+  setting, better light, the food touched up (colour, sheen, detail), with nothing added, removed or reshaped. **As
+  taken** goes back to the photo. The app asks the owner to check a styled photo before posting.
+- 8 styled photos a day and 8 a month (`AI_STYLE_DAILY_LIMIT`, `AI_STYLE_MONTHLY_LIMIT`); the screen says how many are
+  left, and going back to one already made is free. The style is made in the shape chosen.
+- Needs `GEMINI_API_KEY` on the server. `GEMINI_IMAGE_MODEL` picks the model (default `gemini-3.1-flash-image`, about
+  6.7 US cents a photo).
+- Photoroom is removed: `PHOTOROOM_API_KEY` and the cut-out and scene limits are no longer read.
+- The phone app needs a new build to show it (no new native modules).
+
 ## Promote: backgrounds
 
 - Under the photo, **Background**: six plain colours (white, cream, blush, sage, sky, charcoal), drawn as a soft

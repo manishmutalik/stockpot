@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, type Api } from '../api';
-import { loadPromoteAvailability, placeBackground, promoteAvailability, promotePhoto, promoteWorkingLabel, PROMOTE_BACKGROUND_PATH, PROMOTE_PATH, PROMOTE_TIMEOUT_MS } from '../promote';
+import { loadPromoteAvailability, promoteAvailability, promotePhoto, promoteWorkingLabel, PROMOTE_PATH, PROMOTE_STYLE_PATH, PROMOTE_TIMEOUT_MS, stylePhoto } from '../promote';
 import type { PromoteResult } from '../../../../src/utils/promote';
 
 const photo = { mediaType: 'image/jpeg' as const, data: '/9j/abc' };
@@ -12,10 +12,10 @@ const poster = (post: Api['post']) => ({ post }) as Pick<Api, 'post'>;
 
 describe('promoteAvailability', () => {
   it('reads what is left today', () => {
-    expect(promoteAvailability({ available: true, limits: { promote: { remaining: 12 } } })).toEqual({ available: true, remaining: 12, backgrounds: null });
-    expect(promoteAvailability({ available: true, limits: { promote: {} } })).toEqual({ available: true, remaining: null, backgrounds: null });
-    expect(promoteAvailability({ available: true, limits: { promote: { remaining: 12 }, cutout: { remaining: 20 }, scene: { remaining: 5 } } }))
-      .toEqual({ available: true, remaining: 12, backgrounds: { scenesLeft: 5 } });
+    expect(promoteAvailability({ available: true, limits: { promote: { remaining: 12 } } })).toEqual({ available: true, remaining: 12, styling: null });
+    expect(promoteAvailability({ available: true, limits: { promote: {} } })).toEqual({ available: true, remaining: null, styling: null });
+    expect(promoteAvailability({ available: true, limits: { promote: { remaining: 12 }, style: { remaining: 5 } } }))
+      .toEqual({ available: true, remaining: 12, styling: { left: 5 } });
   });
 
   it('says why it is not available', () => {
@@ -58,20 +58,18 @@ describe('promoteWorkingLabel', () => {
   });
 });
 
-describe('placeBackground', () => {
-  it('sends the photo, the mask once there is one, and the backdrop', async () => {
-    const post = vi.fn().mockResolvedValue({ result: { image: 'b', width: 10, height: 8, scenesLeft: 4 } });
-    expect(await placeBackground(poster(post), 'img', null, 'sage')).toMatchObject({ ok: true, result: { scenesLeft: 4 } });
-    expect(post).toHaveBeenCalledWith(PROMOTE_BACKGROUND_PATH, { image: { mediaType: 'image/jpeg', data: 'img' }, backdrop: 'sage' }, { timeoutMs: PROMOTE_TIMEOUT_MS });
-    await placeBackground(poster(post), 'img', 'msk', 'wood');
-    expect(post.mock.calls[1][1]).toEqual({ image: { mediaType: 'image/jpeg', data: 'img' }, mask: { mediaType: 'image/png', data: 'msk' }, backdrop: 'wood' });
+describe('stylePhoto', () => {
+  it('sends the photo, the style and the shape, with a longer wait', async () => {
+    const post = vi.fn().mockResolvedValue({ result: { image: 'b', width: 768, height: 1024, stylesLeft: 4 } });
+    expect(await stylePhoto(poster(post), 'img', 'rustic', 'story')).toMatchObject({ ok: true, result: { stylesLeft: 4 } });
+    expect(post).toHaveBeenCalledWith(PROMOTE_STYLE_PATH, { image: { mediaType: 'image/jpeg', data: 'img' }, style: 'rustic', shape: 'story' }, { timeoutMs: PROMOTE_TIMEOUT_MS });
   });
 
-  it('passes on what the server said, and that the month is used up', async () => {
-    const fail = (e: unknown) => placeBackground(poster(vi.fn().mockRejectedValue(e)), 'img', null, 'wood');
-    expect(await fail(new ApiError(429, 'monthly_limit', 'You have made all 8 AI backgrounds for this month.'))).toEqual({ ok: false, message: 'You have made all 8 AI backgrounds for this month.', scenesLeft: 0 });
-    expect(await fail(new ApiError(422, 'no_subject', 'The food could not be picked out of this photo.'))).toMatchObject({ message: /could not be picked out/ });
-    expect(await fail(new ApiError(502, 'background_failed', 'That background could not be made.'))).toMatchObject({ message: /could not be made/ });
+  it('passes on what the server said, and how many are left', async () => {
+    const fail = (e: unknown) => stylePhoto(poster(vi.fn().mockRejectedValue(e)), 'img', 'cafe', 'post');
+    expect(await fail(new ApiError(429, 'monthly_limit', 'You have styled all 8 photos for this month.'))).toEqual({ ok: false, message: 'You have styled all 8 photos for this month.', left: 0 });
+    expect(await fail(new ApiError(422, 'style_declined', 'This photo could not be styled.', { stylesLeft: 3 }))).toEqual({ ok: false, message: 'This photo could not be styled.', left: 3 });
+    expect(await fail(new ApiError(503, 'style_busy', 'Styling is very busy right now.'))).toMatchObject({ message: /very busy/ });
     expect(await fail(new ApiError(0, 'timeout', 'No connection.'))).toMatchObject({ message: /took too long/ });
   });
 });
