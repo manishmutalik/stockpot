@@ -91,7 +91,7 @@ enabled), a Razorpay account.
 ### Billing setup
 
 1. In the [Razorpay Dashboard](https://dashboard.razorpay.com), switch to
-   **Test Mode** and create a monthly **Plan** at ₹1,200 (INR). Copy its ID
+   **Test Mode** and create a monthly **Plan** at ₹2,400 (INR), the price on the landing page. Copy its ID
    (`plan_...`) into `RAZORPAY_PLAN_ID`.
 2. Copy the Test Mode **Key Id** and **Key Secret** (Account & Settings → API
    Keys) into `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET`.

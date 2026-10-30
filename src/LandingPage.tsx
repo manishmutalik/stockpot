@@ -16,7 +16,7 @@ import { OrderJourneyGraphic, PriceCreepGraphic, WhereMoneyGoesGraphic, Workflow
  * Razorpay collects a payment mandate to start it, so the copy says a card is
  * required and never "no credit card". The monthly price is defined once here;
  * it must equal the amount of the Razorpay plan in RAZORPAY_PLAN_ID (in INR).
- * It does not say whether the price includes GST: the plan is to make ₹1,200
+ * It does not say whether the price includes GST: the plan is to make the price
  * inclusive once the business is GST-registered (see docs/PROJECT_STATE.md);
  * add that here on that day, not before.
  *
@@ -37,7 +37,15 @@ import { OrderJourneyGraphic, PriceCreepGraphic, WhereMoneyGoesGraphic, Workflow
  * reveal, a little parallax, a tilt on two cards) is switched off for visitors
  * who ask for reduced motion.
  */
-const PRICE = { symbol: '₹', amount: '1,200', period: 'month' };
+const PRICE = { symbol: '₹', amount: '2,400', period: 'month' };
+
+/**
+ * Before launch the trial is not offered: every "start your free trial" becomes a "Launching soon" that leads nowhere,
+ * and the page says nothing about a trial or a card. Signing in and the demo kitchen still work. Set to false on launch
+ * day to bring the trial copy and buttons back as they were.
+ */
+const LAUNCHING_SOON = true;
+const SOON = 'Launching soon';
 
 /** The strip of four facts under the hero photo. Each one is a feature that is live. */
 const HERO_FACTS = [
@@ -60,6 +68,8 @@ const EYEBROW = `${MONO} text-[11px] sm:text-xs font-semibold uppercase tracking
 const CARD = 'bg-white rounded-2xl border border-[#D0E4E2]/70 shadow-[0_2px_6px_rgba(43,49,61,0.04)]';
 const CARD_LIFT = `${CARD} landing-lift`;
 const BTN_PRIMARY = 'landing-shimmer whitespace-nowrap inline-flex items-center justify-center gap-2 h-12 px-7 rounded-xl bg-primary hover:bg-primary-dark text-white font-semibold shadow-md shadow-primary/20 transition-colors active:scale-[0.98]';
+/** In place of a sign-up button before launch: looks like a button, does nothing. */
+const BTN_SOON = 'whitespace-nowrap inline-flex items-center justify-center gap-2 h-12 px-7 rounded-xl bg-[#EAF4F3] text-primary font-semibold border border-primary/20 cursor-default select-none';
 const BTN_SECONDARY = 'whitespace-nowrap inline-flex items-center justify-center gap-2 h-12 px-7 rounded-xl bg-white hover:bg-[#f1ebe1] text-ink font-semibold border border-[#D0E4E2] shadow-sm transition-all hover:-translate-y-0.5 active:translate-y-0';
 
 const FAQS: { q: string; a: string }[] = [
@@ -77,7 +87,9 @@ const FAQS: { q: string; a: string }[] = [
   { q: 'Can I cancel anytime?', a: 'Yes, from Settings → User Account → Manage Billing. No lock-in.' },
   {
     q: 'Can I try it before I pay?',
-    a: `Yes. The ${TRIAL_DAYS}-day trial is free: a card is required to start, and you won't be charged if you cancel before it ends. You can also explore the demo kitchen from the sign-in screen without signing up.`,
+    a: LAUNCHING_SOON
+      ? 'Stockpot is launching soon. Until then you can explore the demo kitchen from the sign-in screen, without signing up.'
+      : `Yes. The ${TRIAL_DAYS}-day trial is free: a card is required to start, and you won't be charged if you cancel before it ends. You can also explore the demo kitchen from the sign-in screen without signing up.`,
   },
 ];
 
@@ -235,10 +247,16 @@ const LandingPage: React.FC = () => {
               <span className="sm:hidden">Log In</span>
               <span className="hidden sm:inline">Sign In / Demo</span>
             </Link>
-            <Link to="/app" className="landing-shimmer whitespace-nowrap inline-flex items-center justify-center h-10 px-4 sm:px-5 rounded-full bg-primary hover:bg-primary-dark text-white text-sm font-bold shadow-sm hover:shadow-md transition-colors active:scale-95">
-              <span className="hidden sm:inline">Start Free Trial</span>
-              <span className="sm:hidden">Start Free</span>
-            </Link>
+            {LAUNCHING_SOON ? (
+              <span className="whitespace-nowrap inline-flex items-center justify-center h-10 px-4 sm:px-5 rounded-full bg-[#EAF4F3] text-primary border border-primary/20 text-sm font-bold cursor-default select-none">
+                {SOON}
+              </span>
+            ) : (
+              <Link to="/app" className="landing-shimmer whitespace-nowrap inline-flex items-center justify-center h-10 px-4 sm:px-5 rounded-full bg-primary hover:bg-primary-dark text-white text-sm font-bold shadow-sm hover:shadow-md transition-colors active:scale-95">
+                <span className="hidden sm:inline">Start Free Trial</span>
+                <span className="sm:hidden">Start Free</span>
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -294,21 +312,29 @@ const LandingPage: React.FC = () => {
               transition={{ duration: 0.5, delay: 0.18 }}
               className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full sm:w-auto"
             >
-              <Link to="/app" className={`${BTN_PRIMARY} w-full sm:w-auto`}>
-                Start your {TRIAL_DAYS}-day free trial
-              </Link>
+              {LAUNCHING_SOON ? (
+                <span className={`${BTN_SOON} w-full sm:w-auto`}>{SOON}</span>
+              ) : (
+                <Link to="/app" className={`${BTN_PRIMARY} w-full sm:w-auto`}>
+                  Start your {TRIAL_DAYS}-day free trial
+                </Link>
+              )}
               <a href="#how" className={`${BTN_SECONDARY} w-full sm:w-auto`}>
                 See how it works <ArrowRight size={16} />
               </a>
             </motion.div>
             <p className={`${MONO} mt-4 mb-12 sm:mb-16 flex flex-col sm:flex-row items-center justify-center gap-x-2 gap-y-1 text-xs md:text-sm text-muted`}>
-              <span><span className="font-semibold text-ink">{PRICE.symbol}{PRICE.amount}</span>/{PRICE.period} after the trial</span>
+              <span><span className="font-semibold text-ink">{PRICE.symbol}{PRICE.amount}</span>/{PRICE.period}{LAUNCHING_SOON ? '' : ' after the trial'}</span>
               <span className="hidden sm:inline text-[#D0E4E2]" aria-hidden="true">•</span>
-              <span className="inline-flex items-center gap-2">
-                Card required to start
-                <span className="text-[#D0E4E2]" aria-hidden="true">•</span>
-                Cancel anytime
-              </span>
+              {LAUNCHING_SOON ? (
+                <span>Explore the demo kitchen while you wait</span>
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  Card required to start
+                  <span className="text-[#D0E4E2]" aria-hidden="true">•</span>
+                  Cancel anytime
+                </span>
+              )}
             </p>
 
             {/* The bakery counter, with the tablet that runs the kitchen */}
@@ -490,7 +516,7 @@ const LandingPage: React.FC = () => {
             <Reveal className="text-center max-w-xl mx-auto mb-12 sm:mb-14">
               <span className={`${EYEBROW} block mb-2`}>Honest and simple</span>
               <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] mb-3">One plan. Everything included.</h2>
-              <p className="text-lg text-muted">Try it free for {TRIAL_DAYS} days.</p>
+              <p className="text-lg text-muted">{LAUNCHING_SOON ? `${SOON}.` : `Try it free for ${TRIAL_DAYS} days.`}</p>
             </Reveal>
             <Reveal className="max-w-lg mx-auto">
               <Tilt max={4.5}>
@@ -501,7 +527,7 @@ const LandingPage: React.FC = () => {
                       <h3 className="text-2xl font-bold">Stockpot Pro</h3>
                       <p className="text-sm text-muted mt-0.5">All features, unlimited access</p>
                     </div>
-                    <span className={`${MONO} px-3 py-1 rounded-full bg-[#EAF4F3] border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-[0.08em] whitespace-nowrap`}>{TRIAL_DAYS}-day free trial</span>
+                    <span className={`${MONO} px-3 py-1 rounded-full bg-[#EAF4F3] border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-[0.08em] whitespace-nowrap`}>{LAUNCHING_SOON ? SOON : `${TRIAL_DAYS}-day free trial`}</span>
                   </div>
                   <div className="relative mb-6 pb-6 border-b border-[#D0E4E2] flex items-baseline gap-1.5">
                     <span className={`${MONO} text-4xl sm:text-5xl font-extrabold tracking-tight tabular-nums`}>{PRICE.symbol}{PRICE.amount}</span>
@@ -515,8 +541,17 @@ const LandingPage: React.FC = () => {
                       </li>
                     ))}
                   </ul>
-                  <Link to="/app" className={`${BTN_PRIMARY} relative w-full`}>Start your free trial</Link>
-                  <p className="relative text-center text-xs text-muted mt-3">Card required to start. You won&apos;t be charged if you cancel before the trial ends.</p>
+                  {LAUNCHING_SOON ? (
+                    <>
+                      <span className={`${BTN_SOON} relative w-full`}>{SOON}</span>
+                      <p className="relative text-center text-xs text-muted mt-3">Sign-ups open soon. Until then, explore the demo kitchen from <Link to="/app" className="text-primary font-semibold hover:underline">Sign In / Demo</Link>.</p>
+                    </>
+                  ) : (
+                    <>
+                      <Link to="/app" className={`${BTN_PRIMARY} relative w-full`}>Start your free trial</Link>
+                      <p className="relative text-center text-xs text-muted mt-3">Card required to start. You won&apos;t be charged if you cancel before the trial ends.</p>
+                    </>
+                  )}
                 </div>
               </Tilt>
             </Reveal>
@@ -574,10 +609,12 @@ const LandingPage: React.FC = () => {
           <Reveal className={`${WRAP} relative max-w-4xl text-center text-white flex flex-col items-center`}>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-[-0.02em] leading-tight mb-4">Know exactly how much money your food business makes.</h2>
             <p className="text-lg text-white/90 mb-8 max-w-xl">
-              Start your {TRIAL_DAYS}-day free trial and see your true profit by tomorrow morning.
+              {LAUNCHING_SOON
+                ? 'Stockpot is launching soon. Explore the demo kitchen today and see what your true profit could look like.'
+                : `Start your ${TRIAL_DAYS}-day free trial and see your true profit by tomorrow morning.`}
             </p>
             <Link to="/app" className="landing-shimmer inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl bg-white text-primary font-bold hover:bg-[#EAF4F3] transition-colors shadow-xl">
-              Start your free trial <ArrowRight size={18} />
+              {LAUNCHING_SOON ? 'Explore the demo kitchen' : 'Start your free trial'} <ArrowRight size={18} />
             </Link>
           </Reveal>
         </section>

@@ -8,7 +8,8 @@ session is compacted or handed over. Last updated after True Profit part 3.
 
 A bakery and kitchen inventory and margin app, India-first: the default
 currency is INR, the demo is an Indian bakery with GST switched off, and the
-landing page price is ₹1,200 a month.
+landing page price is ₹2,400 a month. Before launch the landing page offers no trial: its sign-up buttons say
+"Launching soon" (`LAUNCHING_SOON` in `src/LandingPage.tsx`).
 
 Stack: React 18, Vite, TypeScript, Tailwind v4, motion/react, lucide-react,
 react-router-dom, Firebase Auth and Firestore, an Express `server.ts` using
@@ -321,7 +322,7 @@ Nothing is queued. The AI list in the handoff is complete.
 
 - **Razorpay is built and tested only against mocks.** The account was under review, so
   nothing has run against Razorpay itself yet. When it is live the owner posts the Test Mode
-  Key Id, Key Secret, a ₹1,200 monthly Plan id and a webhook secret (set as Render
+  Key Id, Key Secret, a ₹2,400 monthly Plan id and a webhook secret (set as Render
   environment variables, never in chat). Then, in Test Mode: run a full checkout, check the
   webhook arrives, and confirm Razorpay accepts a first charge 45 days ahead (the trial). The
   paywall is off for everyone until the server turns it on: `BILLING_ENFORCED_EMAILS` (only
@@ -329,7 +330,7 @@ Nothing is queued. The AI list in the handoff is complete.
   turning it on for everyone is the last step. Stripe is gone from the code (no
   existing Stripe subscribers: the paywall was never on).
 - **Trial and price decisions.** The free trial is 45 days (`src/utils/trial.ts`, shared by the
-  landing page, paywall, Terms and server). ₹1,200 a month becomes GST-inclusive once the
+  landing page, paywall, Terms and server). ₹2,400 a month becomes GST-inclusive once the
   business has a GST number (about ₹1,016.95 before GST, ₹183.05 of GST); until then the page
   makes no GST claim and none is charged. On registration: set the page wording, and make the
   Razorpay plan amount match what is intended.

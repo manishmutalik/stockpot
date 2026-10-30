@@ -14,13 +14,24 @@ beforeAll(() => {
 const renderPage = () => render(<MemoryRouter><LandingPage /></MemoryRouter>);
 
 describe('LandingPage', () => {
-  it('sends every sign-up / log-in call to action to the app', () => {
+  it('sends sign-in and the demo to the app', () => {
     renderPage();
-    for (const name of [/sign in \/ demo/i, /start free trial/i, /start your 45-day free trial/i, /start your free trial/i]) {
+    for (const name of [/sign in \/ demo/i, /explore the demo kitchen/i]) {
       const links = screen.getAllByRole('link', { name });
       expect(links.length).toBeGreaterThan(0);
       links.forEach(l => expect(l.getAttribute('href')).toBe('/app'));
     }
+  });
+
+  it('offers no trial before launch: each sign-up button says Launching soon and leads nowhere', () => {
+    const { container } = renderPage();
+    const text = container.textContent ?? '';
+    expect(screen.queryAllByRole('link', { name: /free trial|start free/i })).toHaveLength(0);
+    expect(text).not.toMatch(/free trial|after the trial|card required/i);
+    expect(text).not.toContain(`${TRIAL_DAYS}-day`);
+    const soon = screen.getAllByText('Launching soon');
+    expect(soon.length).toBeGreaterThanOrEqual(3);
+    soon.forEach(el => expect(el.closest('a, button')).toBeNull());
   });
 
   it('links the nav and footer to the sections of the page', () => {
@@ -40,7 +51,8 @@ describe('LandingPage', () => {
   it('shows the monthly price in rupees without claiming anything about GST on it', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
-    expect(text).toContain('₹1,200');
+    expect(text).toContain('₹2,400/month');
+    expect(container.querySelector('#pricing')!.textContent).toContain('₹2,400/ month');
     expect(text).toContain('/ month');
     expect(text).not.toMatch(/\$\d/);
     expect(text).not.toMatch(/₹499/);
@@ -54,11 +66,9 @@ describe('LandingPage', () => {
     expect(text).not.toMatch(/-22%|4\.2h|\b12% waste/i);
   });
 
-  it('is honest that a card is required for the trial', () => {
+  it('never says no credit card is needed', () => {
     const { container } = renderPage();
-    const text = container.textContent ?? '';
-    expect(text).not.toMatch(/no credit card/i);
-    expect(text).toMatch(/card required/i);
+    expect(container.textContent ?? '').not.toMatch(/no credit card/i);
   });
 
   it('only shows screenshots and photos that ship with the app, each described', () => {
@@ -130,7 +140,7 @@ describe('LandingPage', () => {
     expect(container.querySelector('section#features .ig-title')!.textContent).toBe('From a WhatsApp message to paid in full');
   });
 
-  it('shows the hero promise, the trial terms and four quick facts', () => {
+  it('shows the hero promise, the price and four quick facts', () => {
     const { container } = renderPage();
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('The CFO of your food business');
     const text = container.textContent ?? '';
@@ -139,18 +149,18 @@ describe('LandingPage', () => {
     expect(text).toContain('For home bakers, home chefs, tiffin services and small cloud kitchens');
     expect(text).toContain('Stockpot tracks your ingredients, orders and costs, and shows what every order actually earns you');
     expect(text).toContain('Busy every day. Still not sure what you made?');
-    expect(text).toMatch(/after the trial/);
+    expect(text).toContain('₹2,400/month');
     for (const fact of ['Per-dish', 'UPI + QR', 'Auto-fill', 'Live Alerts']) expect(text).toContain(fact);
     expect(text).toContain('₹743.04');
     expect(screen.getByRole('link', { name: /see how it works/i }).getAttribute('href')).toBe('#how');
   });
 
-  it('closes on the same promise, and says the trial length from the one shared setting', () => {
+  it('closes on the same promise, pointing to the demo while sign-ups are not open', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
     expect(container.querySelector('section.bg-ink h2')!.textContent).toBe('Know exactly how much money your food business makes.');
-    expect(text).toContain(`Start your ${TRIAL_DAYS}-day free trial and see your true profit by tomorrow morning.`);
-    expect(text).toContain(`Try it free for ${TRIAL_DAYS} days.`);
+    expect(text).toContain('Stockpot is launching soon. Explore the demo kitchen today');
+    expect(text).toContain('Can I try it before I pay?Stockpot is launching soon.');
     // the content plan was written for a 14-day trial; the server's is TRIAL_DAYS, and the page must match checkout
     if ((TRIAL_DAYS as number) !== 14) expect(text).not.toMatch(/\b14-day|\b14 days/);
   });
