@@ -4,7 +4,7 @@ There are **two completely separate money flows** in this codebase. Do not confu
 
 | | Stockpot's own subscription | Owner's customer payments |
 |---|---|---|
-| Who pays whom | The owner pays **Stockpot** ₹1,200/month | The owner's **customer** pays the **owner** for an order |
+| Who pays whom | The owner pays **Stockpot** ₹2,400/month | The owner's **customer** pays the **owner** for an order |
 | Gateway account | Stockpot's one Razorpay account (env vars) | The owner's own Razorpay or Cashfree account (keys saved by the owner in Settings) |
 | Code | `lib/razorpay.ts`, `lib/billingRoutes.ts`, `lib/subscriptionStore.ts`, `src/hooks/useBilling.ts` | `lib/payOnline.ts`, `lib/gateways/*`, `lib/gatewayRoutes.ts`, `lib/gatewayStore.ts`, `lib/secretBox.ts` |
 | State lives in | `users/{uid}.billing` | `users/{uid}/paymentGateway/active`, `bills/{token}.payment`, and the orders' `paymentStatus` |
@@ -16,7 +16,7 @@ There are **two completely separate money flows** in this codebase. Do not confu
 
 ### The model
 
-One plan: ₹1,200 a month (`RAZORPAY_PLAN_ID`), with a free trial of `TRIAL_DAYS` days (`src/utils/trial.ts`, currently 45; shared by
+One plan: ₹2,400 a month (`RAZORPAY_PLAN_ID`; the Razorpay plan's amount must match the landing page's `PRICE`), with a free trial of `TRIAL_DAYS` days (`src/utils/trial.ts`, currently 45; shared by
 the landing page, paywall and server). The owner approves a payment mandate (card or UPI AutoPay) when they start; the first
 charge is taken when the trial ends. Cancelling and re-subscribing never grants a second trial (`billing.trialUsed`).
 There are no tiers; `docs/PROJECT_STATE.md` explains the GST decision (₹1,200 becomes GST-inclusive once the business has a GST number).

@@ -1,5 +1,13 @@
 # Changelog
 
+## Landing page: ₹2,400 a month, launching soon
+
+- The price is ₹2,400 a month.
+- No trial is offered on the landing page for now: every sign-up button (top bar, hero, pricing card) says
+  **Launching soon** and leads nowhere, and the page no longer mentions a trial or a card. The closing button and the
+  FAQ point to the demo kitchen instead; **Sign In / Demo** still works. `LAUNCHING_SOON` in `src/LandingPage.tsx`
+  brings the trial back on launch day.
+
 ## Promote: Styled photo (Gemini), in place of backgrounds
 
 - **Style with AI** replaces the backgrounds. Choose a style (rustic table, bright and clean, café, festive, dark and
