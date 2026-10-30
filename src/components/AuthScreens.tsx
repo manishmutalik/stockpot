@@ -189,6 +189,35 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   </AuthShell>
 );
 
+/**
+ * Before launch, what the landing page's demo links open (/app?demo): the demo kitchen and nothing else, with no sign-in
+ * or sign-up. The demo is a throwaway account filled with a sample kitchen (App's handleDemoLogin).
+ */
+export const DemoOnlyScreen: React.FC<{ error: string | null; isDemoLoading: boolean; onDemo: () => void }> = ({ error, isDemoLoading, onDemo }) => (
+  <AuthShell className="text-center">
+    <img src="/logo-full.png" alt="Stockpot" className="h-14 w-auto mx-auto mb-4" />
+    <h1 className="text-xl font-bold tracking-tight text-ink">Explore the demo kitchen</h1>
+    <p className="text-sm text-muted mt-1 mb-6">
+      A sample bakery with stock, recipes, orders and profit already filled in. Look around and try anything: it is your own
+      copy, separate from everyone else's. Stockpot is launching soon.
+    </p>
+    {error && (
+      <div role="alert" className="mb-5 p-3 bg-coral/10 text-coral text-sm rounded-xl font-semibold">{error}</div>
+    )}
+    <button
+      onClick={onDemo}
+      disabled={isDemoLoading}
+      className="w-full h-12 flex items-center justify-center gap-3 bg-primary hover:bg-primary-dark text-white text-sm font-semibold rounded-xl shadow-md shadow-primary/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      <Sparkles size={18} className={isDemoLoading ? 'animate-spin' : ''} />
+      {isDemoLoading ? 'Setting up the demo kitchen…' : 'Open the demo kitchen'}
+    </button>
+    <a href="/" className="inline-flex items-center gap-1.5 mt-5 text-sm text-muted font-medium hover:text-ink">
+      <ArrowLeft size={14} /> Back to Stockpot
+    </a>
+  </AuthShell>
+);
+
 /** Signed in but without an active or trialing subscription. */
 export const PaywallScreen: React.FC<{
   /** The account has used its free trial: its subscription ended or a payment failed. */

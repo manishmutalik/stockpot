@@ -1,5 +1,13 @@
 # Changelog
 
+## Landing page: the demo kitchen only, before launch
+
+- **Sign In / Demo** is now **Try the demo** (and "Demo" on a phone). It, the footer link, the closing button and the
+  pricing card's link all open a screen with one button, **Open the demo kitchen**, and no sign-in, sign-up or Google
+  (`/app?demo`, `DemoOnlyScreen`). The page links nowhere else in the app.
+- Owners who already have an account still sign in at `/app`, which is unchanged but no longer linked from the page.
+- On launch day, `LAUNCHING_SOON = false` in `src/LandingPage.tsx` brings back Sign In / Demo with the trial.
+
 ## Landing page: ₹2,400 a month, launching soon
 
 - The price is ₹2,400 a month.

@@ -94,7 +94,7 @@ const PromoteView = React.lazy(() => import('./views/PromoteView').then(m => ({ 
 
 import { IngredientSelectorModal } from './components/IngredientSelectorModal';
 import { ProductionRunModal, ProductionRun } from './components/ProductionRunModal';
-import { AuthScreen, LoadingScreen, PaywallScreen } from './components/AuthScreens';
+import { AuthScreen, DemoOnlyScreen, LoadingScreen, PaywallScreen } from './components/AuthScreens';
 import { describeAuthError } from './utils/authErrors';
 import { buildDemoData } from './utils/demoData';
 import { newPriceLogEntry } from './utils/priceLog';
@@ -1257,6 +1257,10 @@ function BakeryApp() {
   // If auth is ready but no user is signed in, render the login / sign-up card.
   // Supports Google OAuth popup and email/password auth modes.
   if (!user) {
+    // The landing page's demo links (/app?demo) open the demo kitchen alone, with no sign-in or sign-up.
+    if (new URLSearchParams(window.location.search).has('demo')) {
+      return <DemoOnlyScreen error={authError} isDemoLoading={isDemoLoading} onDemo={handleDemoLogin} />;
+    }
     return (
       <AuthScreen
         mode={authMode}
