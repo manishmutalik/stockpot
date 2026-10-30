@@ -46,6 +46,12 @@ const PRICE = { symbol: '₹', amount: '2,400', period: 'month' };
  */
 const LAUNCHING_SOON = true;
 const SOON = 'Launching soon';
+/**
+ * Where the page sends visitors into the app. Before launch, only to the demo: /app?demo shows nothing but the demo
+ * kitchen's button (App's DemoOnlyScreen), so the page offers no sign-in or sign-up. Owners already signed up use /app.
+ */
+const DEMO_LINK = '/app?demo';
+const APP_LINK = LAUNCHING_SOON ? DEMO_LINK : '/app';
 
 /** The strip of four facts under the hero photo. Each one is a feature that is live. */
 const HERO_FACTS = [
@@ -88,7 +94,7 @@ const FAQS: { q: string; a: string }[] = [
   {
     q: 'Can I try it before I pay?',
     a: LAUNCHING_SOON
-      ? 'Stockpot is launching soon. Until then you can explore the demo kitchen from the sign-in screen, without signing up.'
+      ? 'Stockpot is launching soon. Until then, Try the demo at the top of this page opens a demo kitchen to explore, with nothing to sign up for.'
       : `Yes. The ${TRIAL_DAYS}-day trial is free: a card is required to start, and you won't be charged if you cancel before it ends. You can also explore the demo kitchen from the sign-in screen without signing up.`,
   },
 ];
@@ -243,9 +249,18 @@ const LandingPage: React.FC = () => {
             ))}
           </nav>
           <div className="flex items-center gap-1 sm:gap-3">
-            <Link to="/app" className="whitespace-nowrap text-sm font-semibold text-muted hover:text-primary hover:bg-[#EAF4F3] rounded-lg transition-colors px-2 sm:px-3 py-2">
-              <span className="sm:hidden">Log In</span>
-              <span className="hidden sm:inline">Sign In / Demo</span>
+            <Link to={APP_LINK} className="whitespace-nowrap text-sm font-semibold text-muted hover:text-primary hover:bg-[#EAF4F3] rounded-lg transition-colors px-2 sm:px-3 py-2">
+              {LAUNCHING_SOON ? (
+                <>
+                  <span className="sm:hidden">Demo</span>
+                  <span className="hidden sm:inline">Try the demo</span>
+                </>
+              ) : (
+                <>
+                  <span className="sm:hidden">Log In</span>
+                  <span className="hidden sm:inline">Sign In / Demo</span>
+                </>
+              )}
             </Link>
             {LAUNCHING_SOON ? (
               <span className="whitespace-nowrap inline-flex items-center justify-center h-10 px-4 sm:px-5 rounded-full bg-[#EAF4F3] text-primary border border-primary/20 text-sm font-bold cursor-default select-none">
@@ -327,7 +342,7 @@ const LandingPage: React.FC = () => {
               <span><span className="font-semibold text-ink">{PRICE.symbol}{PRICE.amount}</span>/{PRICE.period}{LAUNCHING_SOON ? '' : ' after the trial'}</span>
               <span className="hidden sm:inline text-[#D0E4E2]" aria-hidden="true">•</span>
               {LAUNCHING_SOON ? (
-                <span>Explore the demo kitchen while you wait</span>
+                <Link to={DEMO_LINK} className="text-primary font-semibold hover:underline">Explore the demo kitchen while you wait</Link>
               ) : (
                 <span className="inline-flex items-center gap-2">
                   Card required to start
@@ -544,7 +559,7 @@ const LandingPage: React.FC = () => {
                   {LAUNCHING_SOON ? (
                     <>
                       <span className={`${BTN_SOON} relative w-full`}>{SOON}</span>
-                      <p className="relative text-center text-xs text-muted mt-3">Sign-ups open soon. Until then, explore the demo kitchen from <Link to="/app" className="text-primary font-semibold hover:underline">Sign In / Demo</Link>.</p>
+                      <p className="relative text-center text-xs text-muted mt-3">Sign-ups open soon. Until then, <Link to={DEMO_LINK} className="text-primary font-semibold hover:underline">try the demo kitchen</Link>.</p>
                     </>
                   ) : (
                     <>
@@ -613,7 +628,7 @@ const LandingPage: React.FC = () => {
                 ? 'Stockpot is launching soon. Explore the demo kitchen today and see what your true profit could look like.'
                 : `Start your ${TRIAL_DAYS}-day free trial and see your true profit by tomorrow morning.`}
             </p>
-            <Link to="/app" className="landing-shimmer inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl bg-white text-primary font-bold hover:bg-[#EAF4F3] transition-colors shadow-xl">
+            <Link to={APP_LINK} className="landing-shimmer inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl bg-white text-primary font-bold hover:bg-[#EAF4F3] transition-colors shadow-xl">
               {LAUNCHING_SOON ? 'Explore the demo kitchen' : 'Start your free trial'} <ArrowRight size={18} />
             </Link>
           </Reveal>
@@ -638,7 +653,7 @@ const LandingPage: React.FC = () => {
                 <li><a href="#faq" className="inline-block text-[#bdc9c8] hover:text-primary-light hover:translate-x-1 transition-all">FAQ</a></li>
               </ul>
               <ul className="space-y-3">
-                <li><Link to="/app" className="inline-block text-[#bdc9c8] hover:text-primary-light hover:translate-x-1 transition-all">Log in</Link></li>
+                <li><Link to={APP_LINK} className="inline-block text-[#bdc9c8] hover:text-primary-light hover:translate-x-1 transition-all">{LAUNCHING_SOON ? 'Try the demo' : 'Log in'}</Link></li>
                 <li><Link to="/terms" className="inline-block text-[#bdc9c8] hover:text-primary-light hover:translate-x-1 transition-all">Terms of Service</Link></li>
                 <li><Link to="/privacy" className="inline-block text-[#bdc9c8] hover:text-primary-light hover:translate-x-1 transition-all">Privacy Policy</Link></li>
               </ul>

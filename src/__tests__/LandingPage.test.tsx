@@ -14,13 +14,18 @@ beforeAll(() => {
 const renderPage = () => render(<MemoryRouter><LandingPage /></MemoryRouter>);
 
 describe('LandingPage', () => {
-  it('sends sign-in and the demo to the app', () => {
-    renderPage();
-    for (const name of [/sign in \/ demo/i, /explore the demo kitchen/i]) {
+  it('sends visitors only to the demo kitchen: no sign-in or log-in link before launch', () => {
+    const { container } = renderPage();
+    for (const name of [/try the demo/i, /explore the demo kitchen/i]) {
       const links = screen.getAllByRole('link', { name });
       expect(links.length).toBeGreaterThan(0);
-      links.forEach(l => expect(l.getAttribute('href')).toBe('/app'));
+      links.forEach(l => expect(l.getAttribute('href')).toBe('/app?demo'));
     }
+    expect(screen.queryAllByRole('link', { name: /sign in|log in/i })).toHaveLength(0);
+    // Every way into the app is the demo
+    const appLinks = [...container.querySelectorAll('a[href^="/app"]')];
+    expect(appLinks.length).toBeGreaterThan(0);
+    appLinks.forEach(a => expect(a.getAttribute('href')).toBe('/app?demo'));
   });
 
   it('offers no trial before launch: each sign-up button says Launching soon and leads nowhere', () => {
@@ -214,7 +219,7 @@ describe('LandingPage', () => {
   it('puts every footer link in the footer nav, and keeps the copyright', () => {
     const { container } = renderPage();
     const nav = container.querySelector('footer nav[aria-label="Footer"]')!;
-    expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Features', 'Pricing', 'FAQ', 'Log in', 'Terms of Service', 'Privacy Policy']);
+    expect([...nav.querySelectorAll('a')].map(a => a.textContent)).toEqual(['Features', 'Pricing', 'FAQ', 'Try the demo', 'Terms of Service', 'Privacy Policy']);
     expect(container.querySelector('footer')!.textContent).toContain(`© ${new Date().getFullYear()} Stockpot. All rights reserved.`);
   });
 });

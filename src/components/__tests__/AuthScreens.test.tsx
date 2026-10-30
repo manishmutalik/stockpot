@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { AuthScreen, LoadingScreen, PaywallScreen } from '../AuthScreens';
+import { AuthScreen, DemoOnlyScreen, LoadingScreen, PaywallScreen } from '../AuthScreens';
 
 function setup(over: Record<string, any> = {}) {
   const props = {
@@ -68,6 +68,25 @@ describe('AuthScreen', () => {
   it('shows Processing while signing in', () => {
     setup({ mode: 'login', isAuthenticating: true });
     expect((screen.getByRole('button', { name: 'Processing...' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe('DemoOnlyScreen', () => {
+  it('offers only the demo kitchen: no sign-in, sign-up or Google', () => {
+    const onDemo = vi.fn();
+    render(<DemoOnlyScreen error={null} isDemoLoading={false} onDemo={onDemo} />);
+    fireEvent.click(screen.getByRole('button', { name: /open the demo kitchen/i }));
+    expect(onDemo).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.queryByText(/sign in|sign up|google|create account/i)).toBeNull();
+    expect(screen.getByRole('link', { name: /back to stockpot/i }).getAttribute('href')).toBe('/');
+  });
+
+  it('says it is setting up while the demo is made, and shows an error', () => {
+    render(<DemoOnlyScreen error="The demo could not be opened." isDemoLoading onDemo={vi.fn()} />);
+    expect((screen.getByRole('button') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/setting up the demo kitchen/i)).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toContain('could not be opened');
   });
 });
 

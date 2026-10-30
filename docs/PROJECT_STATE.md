@@ -9,7 +9,8 @@ session is compacted or handed over. Last updated after True Profit part 3.
 A bakery and kitchen inventory and margin app, India-first: the default
 currency is INR, the demo is an Indian bakery with GST switched off, and the
 landing page price is ₹2,400 a month. Before launch the landing page offers no trial: its sign-up buttons say
-"Launching soon" (`LAUNCHING_SOON` in `src/LandingPage.tsx`).
+"Launching soon" (`LAUNCHING_SOON` in `src/LandingPage.tsx`), and its only way into the app is the demo kitchen
+(`/app?demo`, which shows nothing but the demo's button). Existing owners sign in at `/app`.
 
 Stack: React 18, Vite, TypeScript, Tailwind v4, motion/react, lucide-react,
 react-router-dom, Firebase Auth and Firestore, an Express `server.ts` using
