@@ -40,7 +40,8 @@ import { createPromoteModel } from "./lib/promoteModel";
 import { improvePhoto } from "./lib/promoteImage";
 import { createPromoteStyleHandler } from "./lib/promoteStyleRoutes";
 import { createGeminiImage } from "./lib/geminiImage";
-import { createAdminWaitlistStore, createWaitlistHandler } from "./lib/waitlistRoutes";
+import { createAdminWaitlistStore, createWaitlistHandler, waitlistEmail } from "./lib/waitlistRoutes";
+import { createEmailSender } from "./lib/email";
 import { createProductionParseModel } from "./lib/productionParseModel";
 import { createBriefingModel } from "./lib/briefingModel";
 import { beginGeneration, clearGeneration, getBriefing, saveBriefing } from "./lib/briefingStore";
@@ -124,7 +125,12 @@ async function startServer() {
   app.use(cookieParser());
 
   // The landing page's waitlist, before launch. Public (no sign-in, no CSRF: it sets no session); see lib/waitlistRoutes.ts.
-  app.post("/api/waitlist", createWaitlistHandler({ store: createAdminWaitlistStore(), now: () => Date.now() }));
+  // A new sign-up is emailed to WAITLIST_NOTIFY_TO (default stockpot.app@gmail.com) through Resend (lib/email.ts).
+  const sendEmail = createEmailSender({ apiKey: () => process.env.RESEND_API_KEY, from: () => process.env.EMAIL_FROM });
+  app.post("/api/waitlist", createWaitlistHandler({
+    store: createAdminWaitlistStore(), now: () => Date.now(),
+    notify: (entry, info) => sendEmail({ to: process.env.WAITLIST_NOTIFY_TO?.trim() || "stockpot.app@gmail.com", ...waitlistEmail(entry, info) }),
+  }));
 
   // --- Session / CSRF bootstrap ---
   // The client calls this once on load to get a CSRF token, then echoes it

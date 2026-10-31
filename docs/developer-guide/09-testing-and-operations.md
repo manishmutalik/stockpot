@@ -83,6 +83,7 @@ Nothing is required to *boot*; each row says what breaks without it.
 | `AI_PROMOTE_DAILY_LIMIT` | Promote cap | Default 15 posts a day |
 | `GEMINI_API_KEY`, `GEMINI_IMAGE_MODEL` | Promote's Styled photo | Off without the key; model default `gemini-3.1-flash-image` |
 | `AI_STYLE_DAILY_LIMIT`, `AI_STYLE_MONTHLY_LIMIT` | Styled photo caps | Defaults 8 a day and 8 a month |
+| `RESEND_API_KEY`, `WAITLIST_NOTIFY_TO`, `EMAIL_FROM` | Waitlist emails to the owner | Off without the key; default to `stockpot.app@gmail.com` from `onboarding@resend.dev` |
 | `NOTIFICATIONS_CRON_SECRET` | Phone notifications job | 16+ characters; also set on the Render Cron Job |
 | `EXPO_ACCESS_TOKEN` | Expo push | Only if "enhanced push security" is on |
 | `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET` | Shopify import | App-wide credentials (each store owner still authorises their own store) |

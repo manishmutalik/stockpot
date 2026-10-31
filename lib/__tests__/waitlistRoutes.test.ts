@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Request, Response } from 'express';
-import { createWaitlistHandler, WAITLIST_LIMIT, waitlistId, type WaitlistStore } from '../waitlistRoutes';
+import { createWaitlistHandler, WAITLIST_LIMIT, waitlistEmail, waitlistId, type WaitlistStore } from '../waitlistRoutes';
+import { createEmailSender, DEFAULT_EMAIL_FROM, RESEND_URL } from '../email';
 
 interface Answer { code: number; body: Record<string, unknown> }
 const res = () => {
@@ -9,7 +10,7 @@ const res = () => {
   r.json = b => { r.body = b; return r; };
   return r;
 };
-const store = (created = true) => ({ save: vi.fn<WaitlistStore['save']>().mockResolvedValue({ created }) });
+const store = (created = true) => ({ save: vi.fn<WaitlistStore['save']>().mockResolvedValue({ created, total: 12 }) });
 const good = { name: 'Asha Rao', contact: '+91 98765 43210', business: 'Tiffin service', city: 'Pune' };
 const send = async (handler: ReturnType<typeof createWaitlistHandler>, body: unknown, ip = '1.2.3.4') => {
   const r = res();
@@ -64,5 +65,72 @@ describe('POST /api/waitlist', () => {
     expect(r.code).toBe(500);
     expect(JSON.stringify(r.body)).not.toContain('firestore');
     err.mockRestore();
+  });
+});
+
+describe('the email to the owner', () => {
+  const entry = { name: 'Asha Rao', contact: '9876543210', contactType: 'whatsapp' as const, business: 'Tiffin service' as const, city: 'Pune' };
+
+  it('is sent for a new sign-up, after answering, with the number on the list', async () => {
+    const notify = vi.fn().mockResolvedValue('sent');
+    const r = await send(createWaitlistHandler({ store: store(true), now: () => 1_000, notify }), good);
+    expect(r.body).toEqual({ ok: true, created: true });
+    expect(notify).toHaveBeenCalledWith(entry, { total: 12, at: 1_000 });
+  });
+
+  it('is not sent when someone signs up again, or when a bot fills the hidden field', async () => {
+    const notify = vi.fn().mockResolvedValue('sent');
+    await send(createWaitlistHandler({ store: store(false), now: () => 0, notify }), good);
+    await send(createWaitlistHandler({ store: store(true), now: () => 0, notify }), { ...good, website: 'x' });
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it('never stops the sign-up when it fails', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = await send(createWaitlistHandler({ store: store(true), now: () => 0, notify: vi.fn().mockRejectedValue(new Error('mail down')) }), good);
+    expect(r.body).toEqual({ ok: true, created: true });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    err.mockRestore();
+  });
+
+  it('says who, how to reach them on WhatsApp, and how many are on the list', () => {
+    const mail = waitlistEmail(entry, { total: 12, at: Date.UTC(2026, 9, 31, 6, 30) });
+    expect(mail.subject).toBe('New waitlist sign-up: Asha Rao (Tiffin service, Pune)');
+    expect(mail.text).toContain('WhatsApp: +91 98765 43210');
+    expect(mail.text).toContain('https://wa.me/919876543210');
+    expect(mail.text).toContain('12 people are on the waitlist now.');
+    expect(mail.text).toMatch(/Signed up: 31 Oct 2026, 12:00\s?pm IST/i);
+  });
+
+  it('gives an email address as it is, and says what was not given', () => {
+    const mail = waitlistEmail({ name: 'Ravi', contact: 'ravi@example.com', contactType: 'email', business: null, city: null }, { total: 1, at: 0 });
+    expect(mail.subject).toBe('New waitlist sign-up: Ravi');
+    expect(mail.text).toContain('Email: ravi@example.com');
+    expect(mail.text).toContain('Business: not given');
+    expect(mail.text).toContain('1 person is on the waitlist now.');
+  });
+});
+
+describe('createEmailSender', () => {
+  it('sends through Resend with the key on the server', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '' });
+    const send = createEmailSender({ apiKey: () => ' re_key ', fetchImpl: fetchImpl as unknown as typeof fetch });
+    expect(await send({ to: 'stockpot.app@gmail.com', subject: 'Hi', text: 'Body' })).toBe('sent');
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe(RESEND_URL);
+    expect(init.headers.Authorization).toBe('Bearer re_key');
+    expect(JSON.parse(init.body)).toEqual({ from: DEFAULT_EMAIL_FROM, to: ['stockpot.app@gmail.com'], subject: 'Hi', text: 'Body' });
+  });
+
+  it('skips without a key, and reports a refusal without throwing', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchImpl = vi.fn();
+    expect(await createEmailSender({ apiKey: () => undefined, fetchImpl: fetchImpl as unknown as typeof fetch })({ to: 'a@b.co', subject: 's', text: 't' })).toBe('skipped');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    const refused = vi.fn().mockResolvedValue({ ok: false, status: 403, text: async () => 'You can only send testing emails to your own email address' });
+    expect(await createEmailSender({ apiKey: () => 'k', fetchImpl: refused as unknown as typeof fetch })({ to: 'a@b.co', subject: 's', text: 't' })).toBe('failed');
+    expect(await createEmailSender({ apiKey: () => 'k', fetchImpl: vi.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch })({ to: 'a@b.co', subject: 's', text: 't' })).toBe('failed');
+    warn.mockRestore(); err.mockRestore();
   });
 });

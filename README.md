@@ -82,6 +82,8 @@ enabled), a Razorpay account.
 | `AI_PROMOTE_DAILY_LIMIT` | No | Photos made into posts (Promote) per user per day (default 15). Promote uses Claude Sonnet 5.5. |
 | `GEMINI_API_KEY` | No | Google's Gemini API key (Google AI Studio), for Promote's Styled photo. Without it there is none. |
 | `GEMINI_IMAGE_MODEL` | No | The Gemini image model for Styled photo (default `gemini-3.1-flash-image`, about 6.7 US cents an image). |
+| `RESEND_API_KEY` | No | Resend's API key, for the email sent to the owner on each new waitlist sign-up. Without it no email is sent. |
+| `WAITLIST_NOTIFY_TO` / `EMAIL_FROM` | No | Where waitlist emails go (default `stockpot.app@gmail.com`) and the sender (default `Stockpot <onboarding@resend.dev>`). |
 | `AI_STYLE_DAILY_LIMIT` / `AI_STYLE_MONTHLY_LIMIT` | No | Photos styled by AI per user per day and per month (defaults 8 and 8). |
 | `AI_RECIPE_DAILY_LIMIT` / `AI_RECIPE_MONTHLY_LIMIT` | No | Recipes the recipe reader may read per user per day and per calendar month (defaults 15 and 75). A page of several recipes counts each one. The recipe reader uses Claude Opus 5.5; every other AI feature uses Claude Haiku 4.5. |
 | `COOKIE_SECRET` | No | Reserved for future cookie signing; currently only the CSRF token cookie is set, and it isn't signed. |
