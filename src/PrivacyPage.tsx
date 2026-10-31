@@ -51,6 +51,9 @@ const PrivacyPage: React.FC = () => {
 
         <Section title="2. Data We Collect">
           <ul>
+            <li><strong>Waitlist data:</strong> if you join the waitlist on our website before launch, the name,
+              WhatsApp number or email, and (if you give them) the kind of business and city you enter. We use it only
+              to tell you when Stockpot launches and about the founding offer, and delete it if you ask us to.</li>
             <li><strong>Account data:</strong> name, email address, and authentication data,
               collected when you sign up (via email/password or Google sign-in).</li>
             <li><strong>Business data you enter:</strong> inventory items, recipes, orders,

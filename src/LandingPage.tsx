@@ -4,6 +4,8 @@ import { motion } from 'motion/react';
 import { ArrowRight, Boxes, Camera, ChevronDown, CircleCheck, Crop, IndianRupee, Languages, Share2, Sun, Wand2 } from 'lucide-react';
 import { TRIAL_DAYS } from './utils/trial';
 import { OrderJourneyGraphic, PriceCreepGraphic, WhereMoneyGoesGraphic, WorkflowGraphic } from './components/landing/Infographics';
+import { WaitlistForm } from './components/landing/WaitlistForm';
+import { FOUNDING_CUSTOMERS } from './utils/waitlist';
 
 /**
  * The public landing page. Every screenshot below is a real capture of the
@@ -49,6 +51,12 @@ const PRICE = { symbol: '₹', amount: '2,400', period: 'month' };
 const LAUNCHING_SOON = true;
 const SOON = 'Launching soon';
 /**
+ * Whether the page shows PRICE. Hidden before launch: the page says pricing comes at launch, offers the first
+ * FOUNDING_CUSTOMERS a founding discount, and asks visitors to join the waitlist (#waitlist) instead.
+ */
+const SHOW_PRICE = false;
+const FOUNDING_LINE = `The first ${FOUNDING_CUSTOMERS} customers get a special founding discount.`;
+/**
  * Where the page sends visitors into the app. Before launch, only to the demo: /app?demo shows nothing but the demo
  * kitchen's button (App's DemoOnlyScreen), so the page offers no sign-in or sign-up. Owners already signed up use /app.
  */
@@ -76,8 +84,6 @@ const EYEBROW = `${MONO} text-[11px] sm:text-xs font-semibold uppercase tracking
 const CARD = 'bg-white rounded-2xl border border-[#D0E4E2]/70 shadow-[0_2px_6px_rgba(43,49,61,0.04)]';
 const CARD_LIFT = `${CARD} landing-lift`;
 const BTN_PRIMARY = 'landing-shimmer whitespace-nowrap inline-flex items-center justify-center gap-2 h-12 px-7 rounded-xl bg-primary hover:bg-primary-dark text-white font-semibold shadow-md shadow-primary/20 transition-colors active:scale-[0.98]';
-/** In place of a sign-up button before launch: looks like a button, does nothing. */
-const BTN_SOON = 'whitespace-nowrap inline-flex items-center justify-center gap-2 h-12 px-7 rounded-xl bg-[#EAF4F3] text-primary font-semibold border border-primary/20 cursor-default select-none';
 const BTN_SECONDARY = 'whitespace-nowrap inline-flex items-center justify-center gap-2 h-12 px-7 rounded-xl bg-white hover:bg-[#f1ebe1] text-ink font-semibold border border-[#D0E4E2] shadow-sm transition-all hover:-translate-y-0.5 active:translate-y-0';
 
 const FAQS: { q: string; a: string }[] = [
@@ -93,6 +99,10 @@ const FAQS: { q: string; a: string }[] = [
   { q: 'Do I need an accounting background?', a: 'No. If you know what you paid for your ingredients, Stockpot does the rest.' },
   { q: 'Is my data safe?', a: "Your data is stored in Google's Firebase cloud, encrypted in transit and at rest, and each account can only see its own data." },
   { q: 'Can I cancel anytime?', a: 'Yes, from Settings → User Account → Manage Billing. No lock-in.' },
+  ...(LAUNCHING_SOON ? [{
+    q: 'Is there a launch offer?',
+    a: `Yes. The first ${FOUNDING_CUSTOMERS} customers to subscribe when Stockpot launches get a special founding discount. Join the waitlist and you'll hear first.`,
+  }] : []),
   {
     q: 'Can I try it before I pay?',
     a: LAUNCHING_SOON
@@ -318,9 +328,10 @@ const LandingPage: React.FC = () => {
               )}
             </Link>
             {LAUNCHING_SOON ? (
-              <span className="whitespace-nowrap inline-flex items-center justify-center h-10 px-4 sm:px-5 rounded-full bg-[#EAF4F3] text-primary border border-primary/20 text-sm font-bold cursor-default select-none">
-                {SOON}
-              </span>
+              <a href="#waitlist" className="whitespace-nowrap inline-flex items-center justify-center h-10 px-4 sm:px-5 rounded-full bg-[#EAF4F3] hover:bg-primary/15 text-primary border border-primary/20 text-sm font-bold transition-colors">
+                <span className="hidden sm:inline">{SOON} · Join the waitlist</span>
+                <span className="sm:hidden">Join waitlist</span>
+              </a>
             ) : (
               <Link to="/app" className="landing-shimmer whitespace-nowrap inline-flex items-center justify-center h-10 px-4 sm:px-5 rounded-full bg-primary hover:bg-primary-dark text-white text-sm font-bold shadow-sm hover:shadow-md transition-colors active:scale-95">
                 <span className="hidden sm:inline">Start Free Trial</span>
@@ -383,7 +394,7 @@ const LandingPage: React.FC = () => {
               className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full sm:w-auto"
             >
               {LAUNCHING_SOON ? (
-                <span className={`${BTN_SOON} w-full sm:w-auto`}>{SOON}</span>
+                <a href="#waitlist" className={`${BTN_PRIMARY} w-full sm:w-auto`}>Join the waitlist</a>
               ) : (
                 <Link to="/app" className={`${BTN_PRIMARY} w-full sm:w-auto`}>
                   Start your {TRIAL_DAYS}-day free trial
@@ -394,7 +405,9 @@ const LandingPage: React.FC = () => {
               </a>
             </motion.div>
             <p className={`${MONO} mt-4 mb-12 sm:mb-16 flex flex-col sm:flex-row items-center justify-center gap-x-2 gap-y-1 text-xs md:text-sm text-muted`}>
-              <span><span className="font-semibold text-ink">{PRICE.symbol}{PRICE.amount}</span>/{PRICE.period}{LAUNCHING_SOON ? '' : ' after the trial'}</span>
+              {SHOW_PRICE
+                ? <span><span className="font-semibold text-ink">{PRICE.symbol}{PRICE.amount}</span>/{PRICE.period}{LAUNCHING_SOON ? '' : ' after the trial'}</span>
+                : <span>{SOON}. <span className="font-semibold text-ink">{FOUNDING_LINE}</span></span>}
               <span className="hidden sm:inline text-[#D0E4E2]" aria-hidden="true">•</span>
               {LAUNCHING_SOON ? (
                 <Link to={DEMO_LINK} className="text-primary font-semibold hover:underline">Explore the demo kitchen while you wait</Link>
@@ -592,7 +605,7 @@ const LandingPage: React.FC = () => {
             <Reveal className="text-center max-w-xl mx-auto mb-12 sm:mb-14">
               <span className={`${EYEBROW} block mb-2`}>Honest and simple</span>
               <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] mb-3">One plan. Everything included.</h2>
-              <p className="text-lg text-muted">{LAUNCHING_SOON ? `${SOON}.` : `Try it free for ${TRIAL_DAYS} days.`}</p>
+              <p className="text-lg text-muted">{LAUNCHING_SOON ? `${SOON}. Pricing will be announced at launch.` : `Try it free for ${TRIAL_DAYS} days.`}</p>
             </Reveal>
             <Reveal className="max-w-lg mx-auto">
               <Tilt max={4.5}>
@@ -605,10 +618,19 @@ const LandingPage: React.FC = () => {
                     </div>
                     <span className={`${MONO} px-3 py-1 rounded-full bg-[#EAF4F3] border border-primary/20 text-primary text-[11px] font-bold uppercase tracking-[0.08em] whitespace-nowrap`}>{LAUNCHING_SOON ? SOON : `${TRIAL_DAYS}-day free trial`}</span>
                   </div>
-                  <div className="relative mb-6 pb-6 border-b border-[#D0E4E2] flex items-baseline gap-1.5">
-                    <span className={`${MONO} text-4xl sm:text-5xl font-extrabold tracking-tight tabular-nums`}>{PRICE.symbol}{PRICE.amount}</span>
-                    <span className="text-muted font-medium">/ {PRICE.period}</span>
-                  </div>
+                  {SHOW_PRICE ? (
+                    <div className="relative mb-6 pb-6 border-b border-[#D0E4E2] flex items-baseline gap-1.5">
+                      <span className={`${MONO} text-4xl sm:text-5xl font-extrabold tracking-tight tabular-nums`}>{PRICE.symbol}{PRICE.amount}</span>
+                      <span className="text-muted font-medium">/ {PRICE.period}</span>
+                    </div>
+                  ) : (
+                    <div className="relative mb-6 pb-6 border-b border-[#D0E4E2]">
+                      <p className="text-3xl sm:text-4xl font-extrabold tracking-tight">Pricing at launch</p>
+                      <p className="mt-3 inline-flex items-start gap-2 rounded-xl bg-[#FFF4E5] border border-[#F5D9A8] px-3 py-2 text-sm font-semibold text-[#8A5A00]">
+                        <span aria-hidden="true">★</span> Founding offer: the first {FOUNDING_CUSTOMERS} customers get a special discount.
+                      </p>
+                    </div>
+                  )}
                   <ul className="relative space-y-3.5 mb-8">
                     {PLAN_FEATURES.map(f => (
                       <li key={f} className="flex items-start gap-3">
@@ -619,7 +641,7 @@ const LandingPage: React.FC = () => {
                   </ul>
                   {LAUNCHING_SOON ? (
                     <>
-                      <span className={`${BTN_SOON} relative w-full`}>{SOON}</span>
+                      <a href="#waitlist" className={`${BTN_PRIMARY} relative w-full`}>Join the waitlist</a>
                       <p className="relative text-center text-xs text-muted mt-3">Sign-ups open soon. Until then, <Link to={DEMO_LINK} className="text-primary font-semibold hover:underline">try the demo kitchen</Link>.</p>
                     </>
                   ) : (
@@ -633,6 +655,22 @@ const LandingPage: React.FC = () => {
             </Reveal>
           </div>
         </section>
+
+        {/* 5b. Before launch: the waitlist */}
+        {LAUNCHING_SOON && (
+          <section id="waitlist" className={`scroll-mt-20 ${BAND_COOL} ${SECTION}`}>
+            <div className="w-full max-w-2xl mx-auto px-4 sm:px-6">
+              <Reveal className="text-center mb-8">
+                <span className={`${EYEBROW} block mb-2`}>Be first in line</span>
+                <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] mb-3">Join the waitlist</h2>
+                <p className="text-lg text-muted">Stockpot is launching soon. Leave your details and we&apos;ll tell you the day it opens. {FOUNDING_LINE}</p>
+              </Reveal>
+              <Reveal className={`${CARD} p-5 sm:p-8`}>
+                <WaitlistForm />
+              </Reveal>
+            </div>
+          </section>
+        )}
 
         {/* 6. FAQ, in two columns */}
         <section id="faq" className={`scroll-mt-20 ${BAND_WARM} ${SECTION}`}>

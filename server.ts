@@ -40,6 +40,7 @@ import { createPromoteModel } from "./lib/promoteModel";
 import { improvePhoto } from "./lib/promoteImage";
 import { createPromoteStyleHandler } from "./lib/promoteStyleRoutes";
 import { createGeminiImage } from "./lib/geminiImage";
+import { createAdminWaitlistStore, createWaitlistHandler } from "./lib/waitlistRoutes";
 import { createProductionParseModel } from "./lib/productionParseModel";
 import { createBriefingModel } from "./lib/briefingModel";
 import { beginGeneration, clearGeneration, getBriefing, saveBriefing } from "./lib/briefingStore";
@@ -121,6 +122,9 @@ async function startServer() {
   const RECIPE_PATHS = new Set(["/api/ai/parse-recipe", "/api/mobile/recipes/read", "/api/ai/promote", "/api/mobile/promote", "/api/ai/promote/style", "/api/mobile/promote/style"]);
   app.use((req, res, next) => (RECIPE_PATHS.has(req.path) ? recipeJson : defaultJson)(req, res, next));
   app.use(cookieParser());
+
+  // The landing page's waitlist, before launch. Public (no sign-in, no CSRF: it sets no session); see lib/waitlistRoutes.ts.
+  app.post("/api/waitlist", createWaitlistHandler({ store: createAdminWaitlistStore(), now: () => Date.now() }));
 
   // --- Session / CSRF bootstrap ---
   // The client calls this once on load to get a CSRF token, then echoes it

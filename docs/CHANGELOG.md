@@ -1,5 +1,18 @@
 # Changelog
 
+## Landing page: waitlist and founding offer; price hidden until launch
+
+- **Join the waitlist** (`#waitlist`): name, WhatsApp number or email, and optionally the kind of business and city.
+  Checked in the browser and again on the server (`src/utils/waitlist`, `POST /api/waitlist` in `lib/waitlistRoutes.ts`):
+  a hidden field catches simple bots, each address may send 5 in a quarter-hour, and one entry is kept per number or
+  email (signing up again updates it). Entries are in the Firestore `waitlist` collection, which no app can read or
+  write; read them in the Firebase console.
+- The header's **Launching soon**, the hero button and the pricing card's button now go to the waitlist.
+- The price is hidden (`SHOW_PRICE = false` in `src/LandingPage.tsx`): the pricing card says **Pricing at launch** with
+  a **founding offer**: the first 25 customers get a special discount (`FOUNDING_CUSTOMERS`). The FAQ adds "Is there a
+  launch offer?".
+- The privacy policy lists waitlist data.
+
 ## Landing page: Promote
 
 - A fourth feature row, **Turn a photo of your food into a post**: an example post (one of the page's own photos, cropped

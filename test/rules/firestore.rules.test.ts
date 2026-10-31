@@ -30,6 +30,7 @@ const seed = () =>
     await setDoc(doc(db, `users/${OWNER}/aiUsage/2026-06-30`), { chat: 3 });
     await setDoc(doc(db, 'aiUsageGlobal/2026-06-30'), { total: 10 });
     await setDoc(doc(db, 'bills/tok'), { uid: OWNER });
+    await setDoc(doc(db, 'waitlist/abc'), { name: 'Asha', contact: '9876543210' });
     await setDoc(doc(db, 'users/support'), { role: 'admin' });
     await setDoc(doc(db, 'users/plainuser'), { displayName: 'No role here' });
   });
@@ -185,6 +186,16 @@ describe('AI briefings and usage counters are server-only', () => {
     await assertFails(getDoc(doc(as(OWNER), 'aiUsageGlobal/2026-06-30')));
     await assertFails(setDoc(doc(as(OWNER), 'aiUsageGlobal/2026-06-30'), { total: 0 }));
     await assertFails(getDoc(doc(as('support'), 'aiUsageGlobal/2026-06-30')));
+  });
+});
+
+describe('the waitlist is server-only', () => {
+  it('cannot be read, listed or written by a visitor, a signed-in user or an admin', async () => {
+    for (const db of [env.unauthenticatedContext().firestore(), as(OWNER), as('support')]) {
+      await assertFails(getDoc(doc(db, 'waitlist/abc')));
+      await assertFails(getDocs(collection(db, 'waitlist')));
+      await assertFails(setDoc(doc(db, 'waitlist/new'), { name: 'Spam', contact: 'x@y.z' }));
+    }
   });
 });
 
