@@ -28,15 +28,16 @@ describe('LandingPage', () => {
     appLinks.forEach(a => expect(a.getAttribute('href')).toBe('/app?demo'));
   });
 
-  it('offers no trial before launch: each sign-up button says Launching soon and leads nowhere', () => {
+  it('offers no trial before launch: every sign-up button leads to the waitlist instead', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
     expect(screen.queryAllByRole('link', { name: /free trial|start free/i })).toHaveLength(0);
     expect(text).not.toMatch(/free trial|after the trial|card required/i);
     expect(text).not.toContain(`${TRIAL_DAYS}-day`);
-    const soon = screen.getAllByText('Launching soon');
-    expect(soon.length).toBeGreaterThanOrEqual(3);
-    soon.forEach(el => expect(el.closest('a, button')).toBeNull());
+    const join = screen.getAllByRole('link', { name: /join (the )?waitlist/i });
+    expect(join.length).toBeGreaterThanOrEqual(3);
+    join.forEach(a => expect(a.getAttribute('href')).toBe('#waitlist'));
+    expect(container.querySelector('section#waitlist form')).not.toBeNull();
   });
 
   it('links the nav and footer to the sections of the page', () => {
@@ -53,12 +54,15 @@ describe('LandingPage', () => {
     expect(screen.getByRole('link', { name: /privacy policy/i }).getAttribute('href')).toBe('/privacy');
   });
 
-  it('shows the monthly price in rupees without claiming anything about GST on it', () => {
+  it('hides the price before launch, and offers the first 25 customers a founding discount instead', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
-    expect(text).toContain('₹2,400/month');
-    expect(container.querySelector('#pricing')!.textContent).toContain('₹2,400/ month');
-    expect(text).toContain('/ month');
+    expect(text).not.toContain('₹2,400');
+    expect(text).not.toMatch(/\/\s?month/);
+    const pricing = container.querySelector('#pricing')!.textContent ?? '';
+    expect(pricing).toContain('Pricing at launch');
+    expect(pricing).toContain('Founding offer: the first 25 customers get a special discount.');
+    expect(text).toContain('Is there a launch offer?');
     expect(text).not.toMatch(/\$\d/);
     expect(text).not.toMatch(/₹499/);
     expect(text).not.toMatch(/\+\s*18%\s*GST|incl(uding|usive of)\s+GST/i);
@@ -169,7 +173,7 @@ describe('LandingPage', () => {
     expect(text).toContain('For home bakers, home chefs, tiffin services and small cloud kitchens');
     expect(text).toContain('Stockpot tracks your ingredients, orders and costs, and shows what every order actually earns you');
     expect(text).toContain('Busy every day. Still not sure what you made?');
-    expect(text).toContain('₹2,400/month');
+    expect(text).toContain('The first 25 customers get a special founding discount.');
     for (const fact of ['Per-dish', 'UPI + QR', 'Auto-fill', 'Live Alerts']) expect(text).toContain(fact);
     expect(text).toContain('₹743.04');
     expect(screen.getByRole('link', { name: /see how it works/i }).getAttribute('href')).toBe('#how');
@@ -220,11 +224,11 @@ describe('LandingPage', () => {
   it('lays the FAQ out in two columns, in order, with every question present', () => {
     const { container } = renderPage();
     const buttons = [...container.querySelectorAll('section#faq button[aria-expanded]')].map(b => b.textContent);
-    expect(buttons).toHaveLength(10);
+    expect(buttons).toHaveLength(11);
     const columns = [...container.querySelectorAll('section#faq .md\\:grid-cols-2 > div')];
     expect(columns).toHaveLength(2);
     const names = columns.map(col => [...col.querySelectorAll('button[aria-expanded]')].map(b => b.textContent));
-    expect(names[0]).toHaveLength(5);
+    expect(names[0]).toHaveLength(6);
     expect(names[1]).toHaveLength(5);
     expect(names[0][0]).toBe('Do I need a GST number?');
     expect(names[1][4]).toBe('Can I try it before I pay?');
