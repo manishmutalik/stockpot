@@ -1,5 +1,12 @@
 # Changelog
 
+## Waitlist: an email for each new sign-up
+
+- Each new waitlist sign-up is emailed to `stockpot.app@gmail.com` (`WAITLIST_NOTIFY_TO`): the name, a WhatsApp link or
+  the email, the business and city, when, and how many are on the list. Someone signing up again is not emailed again.
+- Sent through Resend (`lib/email.ts`, `RESEND_API_KEY`); without the key nothing is sent. A failed email never stops
+  the sign-up.
+
 ## Landing page: waitlist and founding offer; price hidden until launch
 
 - **Join the waitlist** (`#waitlist`): name, WhatsApp number or email, and optionally the kind of business and city.

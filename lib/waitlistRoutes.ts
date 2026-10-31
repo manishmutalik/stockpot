@@ -9,7 +9,8 @@
  *    hammering the form from one place;
  *  - one entry per contact: the document id is a hash of the number or email, so signing up again updates it.
  * Entries go to the top-level `waitlist` collection, which no app can read or write (firestore.rules); the owner reads them
- * in the Firebase console. Nothing about them is logged.
+ * in the Firebase console. Nothing about them is logged. A new sign-up (not someone signing up again) is also emailed to the
+ * owner (`notify`, lib/email), without holding up the answer: if the email fails, the sign-up still stands.
  */
 import { createHash } from 'node:crypto';
 import type { Request, Response } from 'express';
@@ -19,11 +20,38 @@ import { checkWaitlist, type WaitlistEntry } from '../src/utils/waitlist';
 export const WAITLIST_LIMIT = { count: 5, windowMs: 15 * 60 * 1000 };
 
 export interface WaitlistStore {
-  /** Saves the entry under `id`; resolves whether it was new. */
-  save(id: string, entry: WaitlistEntry, at: number): Promise<{ created: boolean }>;
+  /** Saves the entry under `id`; resolves whether it was new, and how many are on the list now. */
+  save(id: string, entry: WaitlistEntry, at: number): Promise<{ created: boolean; total: number }>;
 }
 
-export interface WaitlistDeps { store: WaitlistStore; now: () => number }
+export interface WaitlistDeps {
+  store: WaitlistStore;
+  now: () => number;
+  /** Tells the owner about a new sign-up. */
+  notify?: (entry: WaitlistEntry, info: { total: number; at: number }) => Promise<unknown>;
+}
+
+/** The owner's email about a new sign-up: who, how to reach them (a WhatsApp link for a number), and how many are on the list. */
+export function waitlistEmail(entry: WaitlistEntry, info: { total: number; at: number }): { subject: string; text: string } {
+  const about = [entry.business, entry.city].filter(Boolean).join(', ');
+  const when = new Date(info.at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+  const reach = entry.contactType === 'whatsapp'
+    ? `WhatsApp: +91 ${entry.contact.slice(0, 5)} ${entry.contact.slice(5)}\nMessage them: https://wa.me/91${entry.contact}`
+    : `Email: ${entry.contact}`;
+  return {
+    subject: `New waitlist sign-up: ${entry.name}${about ? ` (${about})` : ''}`,
+    text: [
+      `${entry.name} joined the Stockpot waitlist.`,
+      '',
+      reach,
+      `Business: ${entry.business ?? 'not given'}`,
+      `City: ${entry.city ?? 'not given'}`,
+      `Signed up: ${when} IST`,
+      '',
+      `${info.total} ${info.total === 1 ? 'person is' : 'people are'} on the waitlist now. See them all in the Firebase console, Firestore Database, waitlist.`,
+    ].join('\n'),
+  };
+}
 
 /** The same contact always gets the same id. */
 export const waitlistId = (contact: string) => createHash('sha256').update(contact).digest('hex').slice(0, 32);
@@ -51,7 +79,10 @@ export function createWaitlistHandler(deps: WaitlistDeps) {
       const checked = checkWaitlist(body);
       if (checked.ok === false) return res.status(400).json({ error: checked.message, field: checked.field, code: 'bad_request' });
 
-      const { created } = await deps.store.save(waitlistId(checked.entry.contact), checked.entry, now);
+      const { created, total } = await deps.store.save(waitlistId(checked.entry.contact), checked.entry, now);
+      if (created && deps.notify) {
+        deps.notify(checked.entry, { total, at: now }).catch((err: unknown) => console.error('Waitlist email failed:', (err as Error)?.message));
+      }
       return res.json({ ok: true, created });
     } catch (err: unknown) {
       console.error('Waitlist sign-up failed:', (err as Error)?.message);
@@ -66,12 +97,14 @@ export function createAdminWaitlistStore(): WaitlistStore {
     async save(id, entry, at) {
       const db = getFirestore();
       const ref = db.collection('waitlist').doc(id);
-      return db.runTransaction(async tx => {
+      const created = await db.runTransaction(async tx => {
         const existing = await tx.get(ref);
         const when = new Date(at).toISOString();
         tx.set(ref, { ...entry, updatedAt: when, ...(!existing.exists && { createdAt: when }) }, { merge: true });
-        return { created: !existing.exists };
+        return !existing.exists;
       });
+      const total = (await db.collection('waitlist').count().get()).data().count;
+      return { created, total };
     },
   };
 }
