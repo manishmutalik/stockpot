@@ -1,5 +1,13 @@
 # Changelog
 
+## Landing page: Promote
+
+- A fourth feature row, **Turn a photo of your food into a post**: an example post (one of the page's own photos, cropped
+  to 4:5 and labelled "Example post", with a caption, hashtags, "Order on WhatsApp" and the Share and Style with AI
+  buttons) beside what Promote does: take or choose a photo, ready for Instagram, caption and hashtags in English or
+  Hinglish, Style with AI, and share in a tap.
+- The pricing card lists Promote among what the plan includes.
+
 ## Landing page: the demo kitchen only, before launch
 
 - **Sign In / Demo** is now **Try the demo** (and "Demo" on a phone). It, the footer link, the closing button and the

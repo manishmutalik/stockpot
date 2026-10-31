@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowRight, Boxes, ChevronDown, CircleCheck, IndianRupee, Sun } from 'lucide-react';
+import { ArrowRight, Boxes, Camera, ChevronDown, CircleCheck, Crop, IndianRupee, Languages, Share2, Sun, Wand2 } from 'lucide-react';
 import { TRIAL_DAYS } from './utils/trial';
 import { OrderJourneyGraphic, PriceCreepGraphic, WhereMoneyGoesGraphic, WorkflowGraphic } from './components/landing/Infographics';
 
@@ -10,6 +10,8 @@ import { OrderJourneyGraphic, PriceCreepGraphic, WhereMoneyGoesGraphic, Workflow
  * app running on the demo kitchen's data (see public/landing/), so the page
  * never promises a screen the product doesn't have, and nothing on it is an
  * invented statistic or testimonial. It only describes features that are live.
+ * Promote's example post (PromotePreview) is labelled as an example: one of the
+ * page's own photos with a caption of the kind Promote writes.
  *
  * What the page says about billing has to match the server: the free trial
  * length is TRIAL_DAYS (src/utils/trial.ts, shared with the server) and
@@ -111,12 +113,65 @@ const FEATURE_CARDS = [
   { icon: Boxes, title: 'Stock that keeps itself up to date.', body: 'Log a bake and the ingredients come off. Stockpot tells you what to reorder.', chip: 'bg-margin/15 text-[#0E7A57]' },
 ];
 
+/** What Promote does, in order: the list beside the example post. */
+const PROMOTE_STEPS = [
+  { icon: Camera, title: 'Take or choose a photo', body: 'Of anything you make, on your phone or computer.' },
+  { icon: Crop, title: 'Ready for Instagram', body: 'Brighter, truer colours, cropped to a post, a square or a story.' },
+  { icon: Languages, title: 'Caption and hashtags', body: 'Written for that dish, in English or Hinglish, with how to order on WhatsApp.' },
+  { icon: Wand2, title: 'Style with AI', body: 'Put the plate on a rustic table, in a café or a festive setting. The food is touched up, never changed.' },
+  { icon: Share2, title: 'Share in a tap', body: 'Straight to Instagram or WhatsApp, with the caption copied.' },
+];
+
+/** An example of what Promote makes (labelled as one): a post cropped from a landing photo, with its caption and hashtags. */
+const PromotePreview: React.FC = () => (
+  <div className={`${CARD} p-4 sm:p-6 grid sm:grid-cols-2 gap-6 items-start`}>
+    <figure className="landing-lift rounded-2xl overflow-hidden border border-[#D0E4E2] bg-white shadow-lg max-w-sm mx-auto w-full">
+      <div className="relative aspect-[4/5] overflow-hidden">
+        <img
+          src="/landing/pastries.webp"
+          alt="An example post: croissants on a bakery counter, cropped to Instagram's portrait shape"
+          loading="lazy" decoding="async"
+          className="absolute inset-0 w-full h-full object-cover object-[38%_70%]"
+        />
+        <span className={`${MONO} absolute top-3 left-3 px-2 py-1 rounded-md bg-ink/70 text-white text-[10px] font-semibold uppercase tracking-wider`}>Example post · 4:5</span>
+      </div>
+      <figcaption className="p-4 space-y-3 text-sm">
+        <p className="text-ink leading-relaxed">
+          Flaky, buttery and still warm from the oven this morning. 🥐 Our croissants are baked fresh every day: DM us to order yours for the weekend!
+        </p>
+        <p className="text-muted">Order on WhatsApp: <span className="italic">your number</span></p>
+        <div className="flex flex-wrap gap-1.5">
+          {['#croissant', '#freshbakes', '#homebaker', '#bakerylove', '#weekendtreats'].map(t => (
+            <span key={t} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold">{t}</span>
+          ))}
+        </div>
+        <div className="flex gap-2 pt-1" aria-hidden="true">
+          <span className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg bg-primary text-white text-xs font-semibold"><Share2 size={14} /> Share</span>
+          <span className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 rounded-lg bg-[#EAF4F3] text-primary text-xs font-semibold"><Wand2 size={14} /> Style with AI</span>
+        </div>
+      </figcaption>
+    </figure>
+    <ol className="space-y-4">
+      {PROMOTE_STEPS.map(({ icon: Icon, title, body }) => (
+        <li key={title} className="flex items-start gap-3">
+          <span className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0"><Icon size={18} /></span>
+          <span>
+            <span className="block font-bold text-ink">{title}</span>
+            <span className="block text-sm text-muted leading-relaxed">{body}</span>
+          </span>
+        </li>
+      ))}
+    </ol>
+  </div>
+);
+
 const PLAN_FEATURES = [
   'Unlimited recipes, orders, pre-orders and production runs',
   'Bills with UPI QR, statements and menu PDFs over WhatsApp',
   'True profit, margin alerts and price suggestions',
   'Morning briefing and Ask Your Business, with fair daily limits',
   'GST for India, reorder suggestions, wastage and R&D tracking',
+  'Promote: photos made ready for Instagram, with captions and hashtags',
 ];
 
 const Reveal: React.FC<{ children: React.ReactNode; className?: string; delay?: number }> = ({ children, className, delay = 0 }) => (
@@ -427,7 +482,7 @@ const LandingPage: React.FC = () => {
           </div>
         </section>
 
-        {/* 3. Features: three rows, alternating sides, then two cards and a line about India */}
+        {/* 3. Features: four rows, alternating sides, then two cards and a line about India */}
         <section id="features" className={`scroll-mt-20 ${SECTION}`}>
           <div className={`${WRAP} flex flex-col gap-16 sm:gap-20 lg:gap-24`}>
             <Reveal className="max-w-3xl">
@@ -489,6 +544,12 @@ const LandingPage: React.FC = () => {
                   />
                 </div>
               </div>
+            </FeatureRow>
+
+            <FeatureRow title="Turn a photo of your food into a post" flip
+              line="Take a photo of something you made. Promote makes it ready for Instagram and writes the caption and hashtags, so posting takes a minute, not an evening."
+            >
+              <PromotePreview />
             </FeatureRow>
 
             {/* Two short cards, no picture */}

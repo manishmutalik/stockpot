@@ -64,6 +64,21 @@ describe('LandingPage', () => {
     expect(text).not.toMatch(/\+\s*18%\s*GST|incl(uding|usive of)\s+GST/i);
   });
 
+  it('shows Promote: an example post, labelled as one, and what Promote does', () => {
+    const { container } = renderPage();
+    const features = container.querySelector('#features')!;
+    expect(screen.getByRole('heading', { name: 'Turn a photo of your food into a post' })).toBeTruthy();
+    expect(features.textContent).toContain('Example post');
+    expect(screen.getByAltText(/an example post/i).getAttribute('src')).toBe('/landing/pastries.webp');
+    for (const step of ['Take or choose a photo', 'Ready for Instagram', 'Caption and hashtags', 'Style with AI', 'Share in a tap']) {
+      expect(features.textContent).toContain(step);
+    }
+    // The food is never said to be changed, and no real phone number is shown
+    expect(features.textContent).toMatch(/touched up, never changed/);
+    expect(features.textContent).not.toMatch(/\d{5}\s?\d{5}/);
+    expect(container.querySelector('#pricing')!.textContent).toContain('Promote: photos made ready for Instagram');
+  });
+
   it('makes no invented claims: no testimonials or made-up statistics', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
