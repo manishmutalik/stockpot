@@ -54,6 +54,20 @@ describe('LandingPage', () => {
     expect(screen.getByRole('link', { name: /privacy policy/i }).getAttribute('href')).toBe('/privacy');
   });
 
+  it('offers the waitlist every few sections, so nobody has to scroll back to the top', () => {
+    const { container } = renderPage();
+    const sectionsWithJoin = [...container.querySelectorAll('main > section')]
+      .map(sec => !!sec.querySelector('a[href="#waitlist"]'));
+    // Hero, problem, features, how it works, pricing and the closing section each carry one
+    expect(sectionsWithJoin.filter(Boolean).length).toBeGreaterThanOrEqual(6);
+    // and no two sections in a row go without one, apart from the waitlist itself and the FAQ before the closing
+    const gaps = sectionsWithJoin.join(',').split('true').map(run => run.split('false').length - 1);
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(2);
+    for (const line of ['Sound familiar? Be first to try Stockpot.', 'Seen enough? The first 25 customers get a founding discount.', 'Ready when it opens? Get on the list.']) {
+      expect(container.textContent).toContain(line);
+    }
+  });
+
   it('hides the price before launch, and offers the first 25 customers a founding discount instead', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
