@@ -1,5 +1,12 @@
 # Changelog
 
+## Landing page: Join the waitlist every few sections
+
+- A short line with a **Join the waitlist** button now follows the problem section ("Sound familiar?"), the second
+  feature row ("Seen enough?", with the founding offer) and How it works ("Ready when it opens?"), so a visitor who is
+  convinced part-way down does not have to scroll to the top or bottom. Shown only while `LAUNCHING_SOON` is on.
+- The closing call to action leads with **Join the waitlist**; **Explore the demo kitchen** sits beside it.
+
 ## Waitlist: an email for each new sign-up
 
 - Each new waitlist sign-up is emailed to `stockpot.app@gmail.com` (`WAITLIST_NOTIFY_TO`): the name, a WhatsApp link or

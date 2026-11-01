@@ -267,6 +267,17 @@ const Tilt: React.FC<{ children: React.ReactNode; className?: string; max?: numb
   return <div ref={ref} onMouseMove={move} onMouseLeave={leave} className={`landing-tilt ${className}`}>{children}</div>;
 };
 
+/**
+ * Before launch, a "Join the waitlist" between sections, so a visitor convinced halfway down need not scroll to find the
+ * form. Each has its own line, for what the visitor has just read.
+ */
+const WaitlistNudge: React.FC<{ line: string; className?: string }> = ({ line, className = '' }) => (
+  <Reveal className={`flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-5 text-center sm:text-left ${className}`}>
+    <p className="text-lg font-semibold text-ink">{line}</p>
+    <a href="#waitlist" className={`${BTN_PRIMARY} w-full sm:w-auto`}>Join the waitlist <ArrowRight size={16} /></a>
+  </Reveal>
+);
+
 /** One feature: a title and one line on one side, its picture on the other. The picture drops under the copy on a phone. */
 const FeatureRow: React.FC<{ title: string; line: string; flip?: boolean; children: React.ReactNode }> = ({ title, line, flip = false, children }) => (
   <div className="grid lg:grid-cols-12 gap-8 lg:gap-14 items-center">
@@ -492,6 +503,7 @@ const LandingPage: React.FC = () => {
                 </Reveal>
               ))}
             </div>
+            {LAUNCHING_SOON && <WaitlistNudge className="mt-10 sm:mt-12" line="Sound familiar? Be first to try Stockpot." />}
           </div>
         </section>
 
@@ -515,6 +527,8 @@ const LandingPage: React.FC = () => {
             >
               <WhereMoneyGoesGraphic />
             </FeatureRow>
+
+            {LAUNCHING_SOON && <WaitlistNudge line={`Seen enough? The first ${FOUNDING_CUSTOMERS} customers get a founding discount.`} />}
 
             {/* A food photo between the rows, drifting a little as it crosses the screen */}
             <Reveal className="relative h-60 sm:h-72 lg:h-80 rounded-3xl overflow-hidden border border-[#dfd5c6] shadow-lg">
@@ -596,6 +610,7 @@ const LandingPage: React.FC = () => {
             <Reveal>
               <WorkflowGraphic showHeading={false} />
             </Reveal>
+            {LAUNCHING_SOON && <WaitlistNudge className="mt-10 sm:mt-12" line="Ready when it opens? Get on the list." />}
           </div>
         </section>
 
@@ -727,9 +742,18 @@ const LandingPage: React.FC = () => {
                 ? 'Stockpot is launching soon. Explore the demo kitchen today and see what your true profit could look like.'
                 : `Start your ${TRIAL_DAYS}-day free trial and see your true profit by tomorrow morning.`}
             </p>
-            <Link to={APP_LINK} className="landing-shimmer inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl bg-white text-primary font-bold hover:bg-[#EAF4F3] transition-colors shadow-xl">
-              {LAUNCHING_SOON ? 'Explore the demo kitchen' : 'Start your free trial'} <ArrowRight size={18} />
-            </Link>
+            <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
+              {LAUNCHING_SOON && (
+                <a href="#waitlist" className="landing-shimmer w-full sm:w-auto inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl bg-white text-primary font-bold hover:bg-[#EAF4F3] transition-colors shadow-xl">
+                  Join the waitlist <ArrowRight size={18} />
+                </a>
+              )}
+              <Link to={APP_LINK} className={LAUNCHING_SOON
+                ? 'w-full sm:w-auto inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl border border-white/60 text-white font-bold hover:bg-white/10 transition-colors'
+                : 'landing-shimmer inline-flex items-center justify-center gap-2 h-12 px-8 rounded-xl bg-white text-primary font-bold hover:bg-[#EAF4F3] transition-colors shadow-xl'}>
+                {LAUNCHING_SOON ? 'Explore the demo kitchen' : 'Start your free trial'} {!LAUNCHING_SOON && <ArrowRight size={18} />}
+              </Link>
+            </div>
           </Reveal>
         </section>
       </main>
