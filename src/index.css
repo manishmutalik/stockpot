@@ -100,7 +100,50 @@
   transition: left 0.75s ease;
 }
 .landing-shimmer:hover::after { left: 130%; }
+/* Section backdrops (Backdrop in src/components/landing/motion.tsx): blurred shapes wandering slowly, each on its own path. */
+@keyframes landing-blob-a {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(8%, 10%) scale(1.12); }
+  66% { transform: translate(-6%, 4%) scale(0.94); }
+}
+@keyframes landing-blob-b {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  40% { transform: translate(-10%, -8%) scale(1.08); }
+  75% { transform: translate(5%, 6%) scale(0.92); }
+}
+@keyframes landing-blob-c {
+  0%, 100% { transform: translate(0, 0) scale(1.05); }
+  50% { transform: translate(12%, -10%) scale(0.9); }
+}
+.landing-blob-a { animation: landing-blob-a 22s ease-in-out infinite; }
+.landing-blob-b { animation: landing-blob-b 27s ease-in-out infinite; }
+.landing-blob-c { animation: landing-blob-c 19s ease-in-out infinite; }
+/* Food icons around the hero (FloatingIcon): a slow bob and sway, each at its own pace. */
+@keyframes landing-bob-a {
+  0%, 100% { transform: translateY(0) rotate(-6deg); }
+  50% { transform: translateY(-12px) rotate(4deg); }
+}
+@keyframes landing-bob-b {
+  0%, 100% { transform: translateY(0) rotate(5deg); }
+  50% { transform: translateY(-9px) rotate(-5deg); }
+}
+@keyframes landing-bob-c {
+  0%, 100% { transform: translateY(-4px) rotate(0deg); }
+  50% { transform: translateY(8px) rotate(8deg); }
+}
+.landing-bob-a { animation: landing-bob-a 6.5s ease-in-out infinite; }
+.landing-bob-b { animation: landing-bob-b 8s ease-in-out infinite; }
+.landing-bob-c { animation: landing-bob-c 7.2s ease-in-out infinite; }
+/* A faint dotted grid that fades out toward its edges. */
+.landing-dots {
+  background-image: radial-gradient(rgba(0, 121, 123, 0.16) 1.2px, transparent 1.3px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 30%, transparent 75%);
+}
+.landing-dots-light { background-image: radial-gradient(rgba(255, 255, 255, 0.12) 1.2px, transparent 1.3px); }
 @media (prefers-reduced-motion: reduce) {
+  .landing-blob-a, .landing-blob-b, .landing-blob-c, .landing-bob-a, .landing-bob-b, .landing-bob-c { animation: none; }
   .landing-float, .landing-glow { animation: none; }
   .landing-lift, .landing-tilt { transition: none; }
   .landing-lift:hover { translate: none; }

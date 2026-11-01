@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
-import { ArrowRight, Boxes, Camera, ChevronDown, CircleCheck, Crop, IndianRupee, Languages, Share2, Sun, Wand2 } from 'lucide-react';
+import { ArrowRight, Boxes, CakeSlice, Camera, ChevronDown, CircleCheck, Coffee, Cookie, Croissant, Crop, IndianRupee, Languages, Share2, Sun, Wand2, Wheat } from 'lucide-react';
 import { TRIAL_DAYS } from './utils/trial';
 import { OrderJourneyGraphic, PriceCreepGraphic, WhereMoneyGoesGraphic, WorkflowGraphic } from './components/landing/Infographics';
 import { WaitlistForm } from './components/landing/WaitlistForm';
 import { FOUNDING_CUSTOMERS } from './utils/waitlist';
+import { Backdrop, FloatingIcon, Parallax, Reveal, ScrollProgress, Tilt, onScrollFrames, useDrift, useLayerParallax, type Floater } from './components/landing/motion';
 
 /**
  * The public landing page. Every screenshot below is a real capture of the
@@ -37,9 +38,12 @@ import { FOUNDING_CUSTOMERS } from './utils/waitlist';
  * the screenshots, a two-column FAQ, a full-width dark call to action and a
  * dark footer). Only the layout and look come from the redesign: every word on
  * the page is the page's own, because the redesign's copy made claims the
- * product does not back up (see LandingPage.test.tsx). Its motion (scroll
- * reveal, a little parallax, a tilt on two cards) is switched off for visitors
- * who ask for reduced motion.
+ * product does not back up (see LandingPage.test.tsx). Its motion (things
+ * rising or sliding into view, layers moving at different speeds as the page
+ * scrolls, soft colour shapes drifting behind each section, food icons floating
+ * around the hero, a tilt on two cards, a reading-progress bar under the
+ * header) lives in src/components/landing/motion.tsx and is switched off for
+ * visitors who ask for reduced motion.
  */
 const PRICE = { symbol: '₹', amount: '2,400', period: 'month' };
 
@@ -62,6 +66,19 @@ const FOUNDING_LINE = `The first ${FOUNDING_CUSTOMERS} customers get a special f
  */
 const DEMO_LINK = '/app?demo';
 const APP_LINK = LAUNCHING_SOON ? DEMO_LINK : '/app';
+
+/**
+ * The food icons floating around the hero, beside the headline where there is room for them: none on a phone, two on a
+ * tablet, all six on a wide screen.
+ */
+const HERO_FLOATERS: Floater[] = [
+  { icon: Croissant, place: 'hidden sm:block top-10 left-[6%]', size: 20, strength: -60, bob: 'a', tint: 'text-[#c98a3d]' },
+  { icon: CakeSlice, place: 'hidden sm:block top-16 right-[7%]', size: 20, strength: -90, bob: 'b', tint: 'text-coral' },
+  { icon: Coffee, place: 'hidden lg:block top-[42%] left-[4%]', size: 22, strength: 70, bob: 'c', tint: 'text-[#8a5a3c]' },
+  { icon: Cookie, place: 'hidden lg:block top-[38%] right-[4%]', size: 20, strength: 50, bob: 'a', tint: 'text-[#b07a3a]' },
+  { icon: Wheat, place: 'hidden lg:block top-[24%] left-[12%]', size: 16, strength: -130, bob: 'b', tint: 'text-[#c9a227]' },
+  { icon: IndianRupee, place: 'hidden lg:block top-[28%] right-[13%]', size: 16, strength: -150, bob: 'c', tint: 'text-margin' },
+];
 
 /** The strip of four facts under the hero photo. Each one is a feature that is live. */
 const HERO_FACTS = [
@@ -184,89 +201,6 @@ const PLAN_FEATURES = [
   'Promote: photos made ready for Instagram, with captions and hashtags',
 ];
 
-const Reveal: React.FC<{ children: React.ReactNode; className?: string; delay?: number }> = ({ children, className, delay = 0 }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 16 }}
-    whileInView={{ opacity: 1, y: 0 }}
-    viewport={{ once: true, margin: '-40px' }}
-    transition={{ duration: 0.45, delay }}
-    className={className}
-  >
-    {children}
-  </motion.div>
-);
-
-/** True when the visitor asked for less motion. A browser that cannot say gets the motion. */
-const wantsLessMotion = (): boolean =>
-  typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-/** Runs `update` on the next frame after each scroll, once now, and cleans up after itself. */
-function onScrollFrames(update: () => void): () => void {
-  let frame = 0;
-  const tick = () => { frame = 0; update(); };
-  const onScroll = () => { if (!frame) frame = requestAnimationFrame(tick); };
-  update();
-  window.addEventListener('scroll', onScroll, { passive: true });
-  return () => { window.removeEventListener('scroll', onScroll); if (frame) cancelAnimationFrame(frame); };
-}
-
-/** Drifts an element a fraction of the way the page has scrolled (a soft parallax). */
-function useDrift<T extends HTMLElement>(speed: number) {
-  const ref = useRef<T>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || wantsLessMotion()) return;
-    return onScrollFrames(() => { el.style.transform = `translate3d(0, ${(window.scrollY * speed).toFixed(1)}px, 0)`; });
-  }, [speed]);
-  return ref;
-}
-
-/**
- * A photo that slides a little inside its frame as the frame crosses the screen. The photo is drawn taller than the frame
- * (see the classes where it is used) so no edge ever shows.
- */
-function useBandParallax<C extends HTMLElement, I extends HTMLElement>(strength: number) {
-  const frame = useRef<C>(null);
-  const image = useRef<I>(null);
-  useEffect(() => {
-    const box = frame.current;
-    const img = image.current;
-    if (!box || !img || wantsLessMotion()) return;
-    return onScrollFrames(() => {
-      const rect = box.getBoundingClientRect();
-      if (rect.bottom < 0 || rect.top > window.innerHeight) return;
-      const y = ((rect.top + rect.height / 2 - window.innerHeight / 2) / window.innerHeight) * strength;
-      img.style.transform = `translate3d(0, ${y.toFixed(1)}px, 0) scale(1.06)`;
-    });
-  }, [strength]);
-  return [frame, image] as const;
-}
-
-/** Tilts what is inside it a few degrees toward the mouse. Only for a mouse (not touch) and not for reduced motion. */
-const Tilt: React.FC<{ children: React.ReactNode; className?: string; max?: number }> = ({ children, className = '', max = 5 }) => {
-  const ref = useRef<HTMLDivElement>(null);
-  const frame = useRef(0);
-  const live = useRef(false);
-  useEffect(() => {
-    live.current = !wantsLessMotion() && typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover)').matches;
-    return () => cancelAnimationFrame(frame.current);
-  }, []);
-  const move = (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = ref.current;
-    if (!live.current || !el) return;
-    const { clientX, clientY } = e;
-    cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(() => {
-      const r = el.getBoundingClientRect();
-      const rx = (((clientY - r.top - r.height / 2) / (r.height / 2)) * -max).toFixed(2);
-      const ry = (((clientX - r.left - r.width / 2) / (r.width / 2)) * max).toFixed(2);
-      el.style.transform = `perspective(1000px) rotateX(${rx}deg) rotateY(${ry}deg) scale3d(1.015, 1.015, 1.015)`;
-    });
-  };
-  const leave = () => { cancelAnimationFrame(frame.current); if (ref.current) ref.current.style.transform = ''; };
-  return <div ref={ref} onMouseMove={move} onMouseLeave={leave} className={`landing-tilt ${className}`}>{children}</div>;
-};
-
 /**
  * Before launch, a "Join the waitlist" between sections, so a visitor convinced halfway down need not scroll to find the
  * form. Each has its own line, for what the visitor has just read.
@@ -285,7 +219,7 @@ const FeatureRow: React.FC<{ title: string; line: string; flip?: boolean; childr
       <h3 className="text-2xl sm:text-3xl font-bold tracking-tight mb-3">{title}</h3>
       <p className="text-lg text-muted leading-relaxed">{line}</p>
     </Reveal>
-    <Reveal className={`lg:col-span-8 min-w-0 ${flip ? 'lg:order-1' : ''}`}>{children}</Reveal>
+    <Reveal from={flip ? 'left' : 'right'} className={`lg:col-span-8 min-w-0 ${flip ? 'lg:order-1' : ''}`}>{children}</Reveal>
   </div>
 );
 
@@ -294,8 +228,8 @@ const LandingPage: React.FC = () => {
   const [scrolled, setScrolled] = useState(false);
   const glowA = useDrift<HTMLDivElement>(0.18);
   const glowB = useDrift<HTMLDivElement>(-0.12);
-  const [panoramaFrame, panoramaImage] = useBandParallax<HTMLDivElement, HTMLImageElement>(36);
-  const [closingFrame, closingImage] = useBandParallax<HTMLElement, HTMLImageElement>(48);
+  const [panoramaFrame, panoramaImage] = useLayerParallax<HTMLDivElement, HTMLImageElement>(36, 'scale(1.06)');
+  const [closingFrame, closingImage] = useLayerParallax<HTMLElement, HTMLImageElement>(48, 'scale(1.06)');
 
   // Smooth-scroll the in-page anchors while the page is open.
   useEffect(() => {
@@ -308,7 +242,7 @@ const LandingPage: React.FC = () => {
   useEffect(() => onScrollFrames(() => setScrolled(window.scrollY > 30)), []);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFB] text-ink font-sans antialiased selection:bg-primary-light/40 overflow-x-hidden">
+    <div className="min-h-screen bg-[#F8FAFB] text-ink font-sans antialiased selection:bg-primary-light/40 overflow-x-clip">
       {/* Header */}
       <header className={`sticky top-0 z-50 backdrop-blur-md border-b border-[#D0E4E2]/50 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFB]/95 shadow-md' : 'bg-[#F8FAFB]/90 shadow-[0_1px_12px_rgba(22,28,39,0.03)]'}`}>
         <div className={`${WRAP} h-16 sm:h-20 flex items-center justify-between gap-4`}>
@@ -351,16 +285,19 @@ const LandingPage: React.FC = () => {
             )}
           </div>
         </div>
+        <ScrollProgress />
       </header>
 
       <main id="top">
         {/* 1. Hero: the promise, then a bakery counter with the tablet that runs it */}
-        <section className="relative overflow-hidden bg-gradient-to-b from-[#faf6f0] via-[#f7f2ea]/60 to-[#F8FAFB] pt-12 pb-20 lg:pt-16 lg:pb-28">
+        <section className="relative isolate overflow-hidden bg-gradient-to-b from-[#faf6f0] via-[#f7f2ea]/60 to-[#F8FAFB] pt-12 pb-20 lg:pt-16 lg:pb-28">
           {/* Soft ambient glows behind the headline */}
           <div ref={glowA} className="absolute top-0 left-1/2 -translate-x-1/2 w-[720px] max-w-full h-[340px] pointer-events-none -z-10" aria-hidden="true">
             <div className="landing-glow w-full h-full bg-gradient-to-b from-[#f2dfcb]/50 to-transparent blur-3xl" />
           </div>
           <div ref={glowB} className="absolute top-40 right-10 w-96 h-96 rounded-full bg-margin/10 blur-3xl pointer-events-none -z-10 hidden md:block" aria-hidden="true" />
+          {/* Food icons floating around the headline, each moving at its own speed as the page scrolls */}
+          {HERO_FLOATERS.map(f => <FloatingIcon key={f.place} {...f} />)}
 
           <div className={`${WRAP} flex flex-col items-center text-center`}>
             <motion.div
@@ -438,6 +375,7 @@ const LandingPage: React.FC = () => {
               transition={{ duration: 0.7, delay: 0.25 }}
               className="w-full max-w-5xl"
             >
+              <Parallax strength={40}>
               <Tilt max={5}>
                 <div className="relative rounded-3xl overflow-hidden border border-[#e5dac9] shadow-2xl bg-[#E9DFD0]">
                   <img
@@ -467,6 +405,7 @@ const LandingPage: React.FC = () => {
                   </div>
                 </div>
               </Tilt>
+              </Parallax>
             </motion.div>
 
             {/* Four quick facts */}
@@ -485,7 +424,8 @@ const LandingPage: React.FC = () => {
         </section>
 
         {/* 2. Problem: the price creep, then two leaks in a line each */}
-        <section className={`${BAND_WARM} ${SECTION}`}>
+        <section className={`relative isolate overflow-hidden ${BAND_WARM} ${SECTION}`}>
+          <Backdrop tone="warm" />
           <div className={WRAP}>
             <Reveal className="max-w-2xl mx-auto text-center mb-10 sm:mb-12">
               <span className={`${EYEBROW} block mb-2`}>The profit leak audit</span>
@@ -498,7 +438,7 @@ const LandingPage: React.FC = () => {
             </Reveal>
             <div className="grid md:grid-cols-2 gap-5 lg:gap-6 mt-6 lg:mt-8 max-w-[1080px] mx-auto">
               {PROBLEM_LINES.map(({ lead, rest, accent }, i) => (
-                <Reveal key={lead} delay={i * 0.08} className={`landing-lift bg-white rounded-2xl shadow-[0_2px_6px_rgba(43,49,61,0.05)] border-t-4 ${accent} p-6 lg:p-7`}>
+                <Reveal key={lead} delay={i * 0.08} from={i % 2 ? 'right' : 'left'} className={`landing-lift bg-white rounded-2xl shadow-[0_2px_6px_rgba(43,49,61,0.05)] border-t-4 ${accent} p-6 lg:p-7`}>
                   <p className="text-lg leading-snug"><strong className="font-bold">{lead}</strong> <span className="text-muted">{rest}</span></p>
                 </Reveal>
               ))}
@@ -508,7 +448,8 @@ const LandingPage: React.FC = () => {
         </section>
 
         {/* 3. Features: four rows, alternating sides, then two cards and a line about India */}
-        <section id="features" className={`scroll-mt-20 ${SECTION}`}>
+        <section id="features" className={`relative isolate overflow-hidden scroll-mt-20 ${SECTION}`}>
+          <Backdrop tone="white" dots />
           <div className={`${WRAP} flex flex-col gap-16 sm:gap-20 lg:gap-24`}>
             <Reveal className="max-w-3xl">
               <span className={`${EYEBROW} block mb-2`}>What&apos;s inside</span>
@@ -601,7 +542,8 @@ const LandingPage: React.FC = () => {
         </section>
 
         {/* 4. How it works: the four steps as a flow */}
-        <section id="how" className={`scroll-mt-20 ${BAND_COOL} ${SECTION}`}>
+        <section id="how" className={`relative isolate overflow-hidden scroll-mt-20 ${BAND_COOL} ${SECTION}`}>
+          <Backdrop tone="cool" dots />
           <div className={WRAP}>
             <Reveal className="text-center max-w-2xl mx-auto mb-10 sm:mb-12">
               <span className={`${EYEBROW} block mb-2`}>Simple workflow</span>
@@ -615,7 +557,8 @@ const LandingPage: React.FC = () => {
         </section>
 
         {/* 5. Pricing */}
-        <section id="pricing" className={`scroll-mt-20 ${SECTION}`}>
+        <section id="pricing" className={`relative isolate overflow-hidden scroll-mt-20 ${SECTION}`}>
+          <Backdrop tone="white" />
           <div className={WRAP}>
             <Reveal className="text-center max-w-xl mx-auto mb-12 sm:mb-14">
               <span className={`${EYEBROW} block mb-2`}>Honest and simple</span>
@@ -673,7 +616,8 @@ const LandingPage: React.FC = () => {
 
         {/* 5b. Before launch: the waitlist */}
         {LAUNCHING_SOON && (
-          <section id="waitlist" className={`scroll-mt-20 ${BAND_COOL} ${SECTION}`}>
+          <section id="waitlist" className={`relative isolate overflow-hidden scroll-mt-20 ${BAND_COOL} ${SECTION}`}>
+            <Backdrop tone="cool" />
             <div className="w-full max-w-2xl mx-auto px-4 sm:px-6">
               <Reveal className="text-center mb-8">
                 <span className={`${EYEBROW} block mb-2`}>Be first in line</span>
@@ -688,7 +632,8 @@ const LandingPage: React.FC = () => {
         )}
 
         {/* 6. FAQ, in two columns */}
-        <section id="faq" className={`scroll-mt-20 ${BAND_WARM} ${SECTION}`}>
+        <section id="faq" className={`relative isolate overflow-hidden scroll-mt-20 ${BAND_WARM} ${SECTION}`}>
+          <Backdrop tone="warm" />
           <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             <Reveal className="text-center max-w-xl mx-auto mb-12 sm:mb-16">
               <span className={`${EYEBROW} block mb-2`}>Transparency first</span>
