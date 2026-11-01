@@ -1,5 +1,16 @@
 # Changelog
 
+## Landing page: more motion and parallax
+
+- Soft, blurred colour shapes drift slowly behind each section and move at their own speeds as the page scrolls, with a
+  faint dotted grid behind Features and How it works (`Backdrop`).
+- Food icons float around the hero headline, each bobbing and moving at its own speed with the scroll (tablets and
+  wider; none on a phone, where they would sit on the text). The hero photo lags a little behind the scroll.
+- Feature pictures and the problem cards slide in from their side; a thin bar under the header fills as you read down.
+- The page's motion now lives in `src/components/landing/motion.tsx`. Scrolling is watched once for the whole page, and
+  everything measures before anything moves, so the extra layers stay smooth. All of it is off for visitors who ask for
+  reduced motion.
+
 ## Landing page: Join the waitlist every few sections
 
 - A short line with a **Join the waitlist** button now follows the problem section ("Sound familiar?"), the second

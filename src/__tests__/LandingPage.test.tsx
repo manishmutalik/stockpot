@@ -320,4 +320,15 @@ describe('LandingPage motion', () => {
     fireEvent.mouseLeave(tilt);
     expect(tilt.style.transform).toBe('');
   });
+  it('puts a moving backdrop behind each content section, and food icons around the hero, all hidden from screen readers', () => {
+    const { container } = renderPage();
+    for (const id of ['features', 'how', 'pricing', 'waitlist', 'faq']) {
+      const backdrop = container.querySelector(`section#${id} > [data-backdrop]`);
+      expect(backdrop, id).not.toBeNull();
+      expect(backdrop!.getAttribute('aria-hidden')).toBe('true');
+    }
+    const icons = container.querySelectorAll('main > section:first-child [class*="landing-bob-"]');
+    expect(icons.length).toBeGreaterThanOrEqual(4);
+    icons.forEach(icon => expect(icon.closest('[aria-hidden="true"]')).not.toBeNull());
+  });
 });
