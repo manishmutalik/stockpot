@@ -242,7 +242,7 @@ const LandingPage: React.FC = () => {
   useEffect(() => onScrollFrames(() => setScrolled(window.scrollY > 30)), []);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFB] text-ink font-sans antialiased selection:bg-primary-light/40 overflow-x-hidden">
+    <div className="min-h-screen bg-[#F8FAFB] text-ink font-sans antialiased selection:bg-primary-light/40 overflow-x-clip">
       {/* Header */}
       <header className={`sticky top-0 z-50 backdrop-blur-md border-b border-[#D0E4E2]/50 transition-all duration-300 ${scrolled ? 'bg-[#F8FAFB]/95 shadow-md' : 'bg-[#F8FAFB]/90 shadow-[0_1px_12px_rgba(22,28,39,0.03)]'}`}>
         <div className={`${WRAP} h-16 sm:h-20 flex items-center justify-between gap-4`}>
