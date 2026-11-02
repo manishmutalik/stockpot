@@ -12,15 +12,16 @@ describe('MadeBadge', () => {
   it('says what was made and toggles the breakdown', () => {
     const onToggle = vi.fn();
     render(<MadeBadge contribution={base} money={money} open={false} onToggle={onToggle} />);
-    const badge = screen.getByRole('button', { name: 'Made ₹210.00. Show breakdown' });
+    const badge = screen.getByRole('button', { name: 'How much money you made on this order: ₹210.00. Show breakdown' });
     expect(badge.textContent).toContain('Made ₹210.00');
+    expect(badge.title).toBe('How much money you made on this order. Click for the breakdown');
     fireEvent.click(badge);
     expect(onToggle).toHaveBeenCalled();
   });
 
   it('says Lost, with the amount as a positive number, when the order lost money', () => {
     render(<MadeBadge contribution={{ ...base, contribution: -25 }} money={money} open={false} onToggle={() => {}} />);
-    expect(screen.getByRole('button', { name: 'Lost ₹25.00. Show breakdown' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'How much money you lost on this order: ₹25.00. Show breakdown' })).toBeTruthy();
   });
 
   it('flags an estimate', () => {
@@ -38,7 +39,7 @@ describe('ContributionBreakdown', () => {
     const g = within(group());
     expect(g.getByText('Items')).toBeTruthy();
     expect(g.getByText('Ingredients')).toBeTruthy();
-    expect(g.getByText('Made on this order')).toBeTruthy();
+    expect(g.getByText('Money made on this order')).toBeTruthy();
     for (const hidden of ['Delivery charged', 'Discount', 'Packaging', 'Courier fee', 'Payment fee']) expect(g.queryByText(hidden)).toBeNull();
   });
 
@@ -49,9 +50,9 @@ describe('ContributionBreakdown', () => {
     expect(g.getByText('-₹20.00')).toBeTruthy();
   });
 
-  it('says Lost on this order for a loss', () => {
+  it('says Money lost on this order for a loss', () => {
     render(<ContributionBreakdown contribution={{ ...base, contribution: -5 }} money={money} gstOn={false} />);
-    expect(within(group()).getByText('Lost on this order')).toBeTruthy();
+    expect(within(group()).getByText('Money lost on this order')).toBeTruthy();
   });
 
   it('explains GST only when GST is on and there is some', () => {

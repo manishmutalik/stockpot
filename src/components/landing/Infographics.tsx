@@ -121,7 +121,7 @@ export const OrderJourneyGraphic: React.FC<{ as?: HeadingTag }> = ({ as }) => (
 export const WhereMoneyGoesGraphic: React.FC<{ as?: HeadingTag }> = ({ as }) => (
   <Card
     eyebrow="Worked example · one order" title={`${rupees(ORDER.quantity * ORDER.unitPrice)} in sales. ${rupees(Math.round(ORDER_MADE))} made.`} as={as} labelledBy="ig-order-title"
-    lede={`Eight Butter Croissants, sent by courier with ${rupees(ORDER.discount)} off. Stockpot takes every cost off the order, so you see what you actually made.`}
+    lede={`Eight Butter Croissants, sent by courier with ${rupees(ORDER.discount)} off. Stockpot takes every cost off the order, so you see how much money you actually made.`}
   >
     <div className="ig-wf" role="img" aria-label={orderAriaLabel()}>
       {waterfall().map(row => (

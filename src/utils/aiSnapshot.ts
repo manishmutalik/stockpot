@@ -224,7 +224,7 @@ export function buildBusinessSnapshot(input: {
         units: count(`p_${key}_units`, `Units of ${item.name} sold`, p.unitsSold),
         revenue: money(`p_${key}_revenue`, `Revenue from ${item.name}`, p.revenue),
         contribution: money(`p_${key}_made`, `What ${item.name} made`, p.contribution),
-        perUnit: money(`p_${key}_per_unit`, `What ${item.name} made per unit`, p.avgContributionPerUnit),
+        perUnit: money(`p_${key}_per_unit`, `How much money ${item.name} made per unit`, p.avgContributionPerUnit),
       };
     });
 
@@ -275,7 +275,7 @@ export function buildBusinessSnapshot(input: {
       label: c.label,
       daysSinceLastOrder: days(`c_${c.label}_days`, `Days since ${c.label} last ordered`, c.daysSinceLastOrder),
       ...(c.favouriteItems[0] && { favourite: nameId('fav', c.label, c.favouriteItems[0]) }),
-      contribution: money(`c_${c.label}_made`, `What the business made on ${c.label}`, c.totalContribution),
+      contribution: money(`c_${c.label}_made`, `How much money the business made on ${c.label}`, c.totalContribution),
     };
   };
   const mentionedRow = (c: CustomerProfile) => {
@@ -286,7 +286,7 @@ export function buildBusinessSnapshot(input: {
       daysSinceLastOrder: days(`c_${c.label}_days`, `Days since ${c.label} last ordered`, c.daysSinceLastOrder),
       orders: count(`c_${c.label}_orders`, `Orders placed by ${c.label}`, c.orderCount),
       spent: money(`c_${c.label}_spent`, `What ${c.label} has spent in all`, c.totalSpent),
-      contribution: money(`c_${c.label}_made`, `What the business made on ${c.label}`, c.totalContribution),
+      contribution: money(`c_${c.label}_made`, `How much money the business made on ${c.label}`, c.totalContribution),
       ...(c.favouriteItems[0] && { favourite: nameId('fav', c.label, c.favouriteItems[0]) }),
     };
   };

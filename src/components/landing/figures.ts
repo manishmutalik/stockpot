@@ -116,7 +116,7 @@ export function waterfall(): WaterfallRow[] {
     cost('courier', 'Courier', 'paid to the delivery app', ORDER.courier),
     cost('discount', 'Discount', `${rupees(ORDER.discount)} off the order`, ORDER.discount),
   ];
-  rows.push({ id: 'made', name: 'Made on this order', amount: ORDER_MADE, kind: 'made', leftPct: 0, widthPct: pct(ORDER_MADE, ORDER_SALES) });
+  rows.push({ id: 'made', name: 'Money made on this order', amount: ORDER_MADE, kind: 'made', leftPct: 0, widthPct: pct(ORDER_MADE, ORDER_SALES) });
   return rows;
 }
 
