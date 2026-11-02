@@ -29,6 +29,12 @@ describe('help topics', () => {
   });
 });
 
+describe('wording about baking', () => {
+  it('keeps "what you made" for what was baked, not for money', () => {
+    expect(HELP_TOPICS.some(t => t.title === 'Logging what you made')).toBe(true);
+  });
+});
+
 describe('searchHelp', () => {
   it('finds topics by title first, then by their words and keywords', () => {
     expect(searchHelp('gst', 'web')[0].id).toBe('gst');

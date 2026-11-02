@@ -26,8 +26,8 @@ export const MadeBadge: React.FC<{
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      aria-label={`${contribution.contribution < 0 ? 'Lost' : 'Made'} ${money(Math.abs(contribution.contribution))}${contribution.estimated ? ' (estimated)' : ''}. Show breakdown`}
-      title="What you made on this order. Click for the breakdown"
+      aria-label={`How much money you ${contribution.contribution < 0 ? 'lost' : 'made'} on this order: ${money(Math.abs(contribution.contribution))}${contribution.estimated ? ' (estimated)' : ''}. Show breakdown`}
+      title={`How much money you ${contribution.contribution < 0 ? 'lost' : 'made'} on this order. Click for the breakdown`}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono text-[10px] font-semibold whitespace-nowrap transition-colors hover:opacity-80 ${TIER_CLASS[tier]}`}
     >
       {contribution.contribution < 0 ? 'Lost' : 'Made'} {money(Math.abs(contribution.contribution))}
@@ -61,7 +61,7 @@ export const ContributionBreakdown: React.FC<{
           </div>
         ))}
         <div className="flex justify-between gap-3 pt-1.5 mt-1.5 border-t border-stone-200 font-semibold">
-          <span>{c.contribution < 0 ? 'Lost on this order' : 'Made on this order'}</span>
+          <span>{c.contribution < 0 ? 'Money lost on this order' : 'Money made on this order'}</span>
           <span className={`font-mono ${c.contribution < 0 ? 'text-coral' : 'text-ink'}`}>{money(c.contribution)}</span>
         </div>
       </div>

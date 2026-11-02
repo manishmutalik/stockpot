@@ -54,7 +54,7 @@ describe('CustomersPanel', () => {
     const row = within(screen.getByRole('listitem'));
     expect(row.getByText(/Not enough orders yet/)).toBeTruthy();
     expect(row.getByText(/today/)).toBeTruthy();
-    expect(row.getByText(/made on them \(est\.\)/)).toBeTruthy();
+    expect(row.getByText(/money made on them \(est\.\)/)).toBeTruthy();
   });
 
   it('links each customer to a WhatsApp message with their favourite item, naming the business', () => {

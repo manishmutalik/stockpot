@@ -430,7 +430,7 @@ const LandingPage: React.FC = () => {
             <Reveal className="max-w-2xl mx-auto text-center mb-10 sm:mb-12">
               <span className={`${EYEBROW} block mb-2`}>The profit leak audit</span>
               <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em]">
-                Busy every day. Still not sure what you made?
+                Busy every day. Still not sure how much money you made?
               </h2>
             </Reveal>
             <Reveal>
@@ -463,7 +463,7 @@ const LandingPage: React.FC = () => {
               <OrderJourneyGraphic />
             </FeatureRow>
 
-            <FeatureRow title="Know what every order made" flip
+            <FeatureRow title="Know how much money every order made" flip
               line="Ingredients, packaging, delivery, discounts and fees come off every order, so the profit you see is the profit you keep."
             >
               <WhereMoneyGoesGraphic />

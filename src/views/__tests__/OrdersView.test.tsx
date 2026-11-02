@@ -284,32 +284,32 @@ describe('OrdersView', () => {
 
     it('shows Made on a single order, and opens the breakdown on a click', () => {
       render1([made('m1')]);
-      const badge = screen.getByRole('button', { name: 'Made $70.00. Show breakdown' });
+      const badge = screen.getByRole('button', { name: 'How much money you made on this order: $70.00. Show breakdown' });
       expect(screen.queryByRole('group', { name: 'How this was worked out' })).toBeNull();
       fireEvent.click(badge);
       const g = within(screen.getByRole('group', { name: 'How this was worked out' }));
       expect(g.getByText('Items')).toBeTruthy();
       expect(g.getByText('Ingredients')).toBeTruthy();
       expect(g.getByText('Packaging')).toBeTruthy();
-      expect(g.getByText('Made on this order')).toBeTruthy();
+      expect(g.getByText('Money made on this order')).toBeTruthy();
       fireEvent.click(badge);
       expect(screen.queryByRole('group', { name: 'How this was worked out' })).toBeNull();
     });
 
     it('shows Lost when the order cost more than it brought in', () => {
       render1([made('m1', { unitPriceAtSale: 10 })]);
-      expect(screen.getByRole('button', { name: 'Lost $20.00. Show breakdown' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'How much money you lost on this order: $20.00. Show breakdown' })).toBeTruthy();
     });
 
     it('takes a discount off what was made, and the breakdown shows it', () => {
       render1([made('m1', { discount: 15 })]);
-      fireEvent.click(screen.getByRole('button', { name: 'Made $55.00. Show breakdown' }));
+      fireEvent.click(screen.getByRole('button', { name: 'How much money you made on this order: $55.00. Show breakdown' }));
       expect(within(screen.getByRole('group', { name: 'How this was worked out' })).getByText('Discount')).toBeTruthy();
     });
 
     it('takes the payment fee off, using the rate the order was stamped with', () => {
       render1([made('m1', { paymentMethod: 'card', paymentFeeRate: 3 })]);
-      expect(screen.getByRole('button', { name: 'Made $67.00. Show breakdown' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'How much money you made on this order: $67.00. Show breakdown' })).toBeTruthy();
     });
 
     it('shows one Made figure for a multi-item order, with the shared discount counted once', () => {
@@ -318,8 +318,8 @@ describe('OrdersView', () => {
         made('g2', { orderGroupId: 'g', menuItemId: 'cookie', unitPriceAtSale: 10, unitIngredientCostAtSale: 2, unitPackagingCostAtSale: 0 }),
       ]);
       // 100 + 10 - 20 discount - 30 - 2 costs
-      expect(screen.getAllByRole('button', { name: /^Made / })).toHaveLength(1);
-      expect(screen.getByRole('button', { name: 'Made $58.00. Show breakdown' })).toBeTruthy();
+      expect(screen.getAllByRole('button', { name: /^How much money you made on this order: / })).toHaveLength(1);
+      expect(screen.getByRole('button', { name: 'How much money you made on this order: $58.00. Show breakdown' })).toBeTruthy();
     });
 
     it('marks an order from before prices were recorded as estimated', () => {

@@ -110,7 +110,7 @@ export const CustomersPanel: React.FC<{
                     <div className="flex items-center gap-3 ml-auto">
                       <div className="text-right">
                         <div className="font-mono text-sm font-semibold text-ink whitespace-nowrap">{money(c.totalContribution)}</div>
-                        <div className="font-mono text-[10px] uppercase tracking-wider text-muted">made on them{c.estimated ? ' (est.)' : ''}</div>
+                        <div className="font-mono text-[10px] uppercase tracking-wider text-muted">money made on them{c.estimated ? ' (est.)' : ''}</div>
                       </div>
                       {nudge ? (
                         <a

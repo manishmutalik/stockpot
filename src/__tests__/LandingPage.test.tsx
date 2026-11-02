@@ -139,7 +139,7 @@ describe('LandingPage', () => {
     for (const phrase of [
       'Take orders the way customers send them',
       "Paste a WhatsApp message and Stockpot fills in the order, advance and all. The bill's UPI QR asks only for what's still due.",
-      'Know what every order made',
+      'Know how much money every order made',
       'Ingredients, packaging, delivery, discounts and fees come off every order, so the profit you see is the profit you keep.',
       'Know when a price needs to go up',
       'When an ingredient gets dearer, Stockpot tells you which items slipped and suggests a price that wins the margin back.',
@@ -186,7 +186,7 @@ describe('LandingPage', () => {
     expect(text).not.toContain('Know exactly what your food business makes');
     expect(text).toContain('For home bakers, home chefs, tiffin services and small cloud kitchens');
     expect(text).toContain('Stockpot tracks your ingredients, orders and costs, and shows what every order actually earns you');
-    expect(text).toContain('Busy every day. Still not sure what you made?');
+    expect(text).toContain('Busy every day. Still not sure how much money you made?');
     expect(text).toContain('The first 25 customers get a special founding discount.');
     for (const fact of ['Per-dish', 'UPI + QR', 'Auto-fill', 'Live Alerts']) expect(text).toContain(fact);
     expect(text).toContain('₹743.04');

@@ -265,7 +265,7 @@ export const SettingsView: React.FC<AppViewProps> = (props) => {
                 subtitle="What you pay when a customer pays this way"
               >
                 <p className="text-sm text-muted -mt-2">
-                  A percentage of the amount collected, taken off what an order made once it is marked paid. Leave a method blank for no fee. The rate is saved with each order when you record how it was paid, so changing it here only affects orders from now on.
+                  A percentage of the amount collected, taken off how much money an order made once it is marked paid. Leave a method blank for no fee. The rate is saved with each order when you record how it was paid, so changing it here only affects orders from now on.
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {PAYMENT_METHODS.map(m => (
