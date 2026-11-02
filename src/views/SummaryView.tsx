@@ -26,7 +26,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     materials, menu, orders, productionRuns, wastageLogs,
     summaryRange, summaryDateStart, summaryDateEnd, setSummaryDateStart, setSummaryDateEnd, summaryRefDate,
     handleRangeChange, financials, chartData, currency, settings, lowStockItems, lastSynced,
-    setActiveTab, setActiveSettingsTab, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders, openRepricing, priceLog,
+    setActiveTab, setActiveSettingsTab, openPriceReview, completePriceReview, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders, openRepricing, priceLog,
   } = props;
 
   const fmt = (n: number) =>
@@ -220,7 +220,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
       <DueTomorrowCard orders={orders ?? []} menu={menu} today={todayInZone(settings.timezone)} onOpen={() => openUpcomingOrders?.()} />
 
       {/* Menu items whose margin has slipped since they were priced (no AI) */}
-      <RepricingCard menu={menu} materials={materials} settings={settings} onOpen={() => openRepricing?.()} />
+      <RepricingCard menu={menu} materials={materials} settings={settings} onOpen={() => openRepricing?.()} onStartReview={() => openPriceReview?.()} onCompleteReview={() => void completePriceReview?.()} />
 
       {/* Yesterday in a few lines: figures from the app, an explanation from AI where it is offered */}
       <DailyBriefing

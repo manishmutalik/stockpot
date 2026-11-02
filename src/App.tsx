@@ -101,6 +101,8 @@ import { newPriceLogEntry } from './utils/priceLog';
 import { AddMaterialModal } from './components/AddMaterialModal';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { DiscardModal } from './components/DiscardModal';
+import { PriceReviewModal } from './components/PriceReviewModal';
+import { nextQuarterStart } from './utils/pricing';
 import { NutritionModal } from './components/NutritionModal';
 import { RestockModal } from './components/RestockModal';
 import { AddOrderModal } from './components/AddOrderModal';
@@ -793,7 +795,7 @@ function BakeryApp() {
   // ── Menu / Recipe Actions ────────────────────────────────────────────────────
   // Extracted to src/hooks/useMenuActions.ts as part of the Phase 4 breakup.
   const {
-    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder, setCountedIn,
+    addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, applyPriceReview, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder, setCountedIn,
     copyMenuItem, addIngredientToRecipe, addQuickIngredientsToRecipe,
     updateRecipeIngredient, removeIngredientFromRecipe,
   } = useMenuActions(menu, materials, orders, showAlert, { today: () => todayInZone(settings.timezone) });
@@ -807,6 +809,26 @@ function BakeryApp() {
     baselinesStamped.current = true;
     void stampPricingBaselines();
   }, [dataReady, user]);
+
+  // An account that has never done a price review gets its first date stored once, so that date can actually arrive.
+  useEffect(() => {
+    if (!user || !settingsLoaded || settings.lastPriceReviewOn || settings.firstPriceReviewOn) return;
+    updateSettingsField('firstPriceReviewOn', nextQuarterStart(todayInZone(settings.timezone)));
+  }, [user, settingsLoaded, settings.lastPriceReviewOn, settings.firstPriceReviewOn]);
+
+  const [priceReviewOpen, setPriceReviewOpen] = useState(false);
+  const openPriceReview = () => setPriceReviewOpen(true);
+  const completePriceReview = () => applyPriceReview([]);
+  // A link from the phone's notification: /app?open=price-review.
+  useEffect(() => {
+    if (!dataReady) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('open') !== 'price-review') return;
+    setPriceReviewOpen(true);
+    params.delete('open');
+    const rest = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
+  }, [dataReady]);
 
   // ── Order Actions ────────────────────────────────────────────────────────────
   // Extracted to src/hooks/useOrderActions.ts as part of the Phase 4 breakup.
@@ -1346,7 +1368,7 @@ function BakeryApp() {
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
     sendVerificationEmail, checkEmailVerified,
-    openAddOrderModalFor, openUpcomingOrders, ordersFilterOnOpen, openRepricing, menuFilterOnOpen, openRecipeReader,
+    openAddOrderModalFor, openUpcomingOrders, ordersFilterOnOpen, openRepricing, openPriceReview, completePriceReview, menuFilterOnOpen, openRecipeReader,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
@@ -1745,6 +1767,18 @@ function BakeryApp() {
         />
 
         {/* Discard Modal */}
+        {priceReviewOpen && (
+          <PriceReviewModal
+            menu={menu}
+            materials={materials}
+            orders={orders}
+            settings={settings}
+            currency={currency}
+            today={todayInZone(settings.timezone)}
+            onApply={applyPriceReview}
+            onClose={() => setPriceReviewOpen(false)}
+          />
+        )}
         {discardTarget && (
           <DiscardModal
             target={discardTarget}

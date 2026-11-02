@@ -13,10 +13,10 @@ const base: any = { id: 'cake', name: 'Cake', sellingPrice: 400, recipe };
 const priced = (over: Record<string, any> = {}): any => ({ ...base, ...pricingStamp(base, mats(500), '2026-06-01'), ...over });
 
 function show(item: any, butter: number, settings: any = SETTINGS) {
-  const onUsePrice = vi.fn();
+  const onStartReview = vi.fn();
   const m = mats(butter);
-  render(<MarginDriftPanel item={item} drift={marginDrift(item, m, settings)} materials={m} settings={settings} currencySymbol="₹" onUsePrice={onUsePrice} />);
-  return { onUsePrice };
+  render(<MarginDriftPanel item={item} drift={marginDrift(item, m, settings)} materials={m} settings={settings} currencySymbol="₹" onStartReview={onStartReview} />);
+  return { onStartReview };
 }
 
 describe('MarginDriftPanel', () => {
@@ -32,9 +32,9 @@ describe('MarginDriftPanel', () => {
   });
 
   it('shows nothing for an unpriced or unstamped item', () => {
-    const { container } = render(<MarginDriftPanel item={{ ...base, sellingPrice: 0 }} drift={null} materials={mats(500)} settings={SETTINGS} currencySymbol="₹" onUsePrice={vi.fn()} />);
+    const { container } = render(<MarginDriftPanel item={{ ...base, sellingPrice: 0 }} drift={null} materials={mats(500)} settings={SETTINGS} currencySymbol="₹" />);
     expect(container.textContent).toBe('');
-    const second = render(<MarginDriftPanel item={base} drift={null} materials={mats(500)} settings={SETTINGS} currencySymbol="₹" onUsePrice={vi.fn()} />);
+    const second = render(<MarginDriftPanel item={base} drift={null} materials={mats(500)} settings={SETTINGS} currencySymbol="₹" />);
     expect(second.container.textContent).toBe('');
   });
 
@@ -45,14 +45,22 @@ describe('MarginDriftPanel', () => {
     expect(badge.textContent).toMatch(/Butter \+28%/);
   });
 
-  it('expands to the drivers, and applies a restoring price in one tap', () => {
-    const { onUsePrice } = show(priced(), 640);
+  it('expands to the drivers and the next review date, with no price to use', () => {
+    show(priced(), 640);
     fireEvent.click(screen.getByRole('button', { expanded: false }));
     expect(screen.getByLabelText('What changed').textContent).toMatch(/Butter \+28%/);
     expect(screen.getByLabelText('What changed').textContent).toMatch(/\+₹28\.00 a unit/);
-    fireEvent.click(screen.getByLabelText(/to restore your margin/));
-    // cost 148 at a 70% margin = 493.33, rounded up to 495
-    expect(onUsePrice).toHaveBeenCalledWith(495);
+    expect(screen.getByText(/You'll get a suggested price at your price review on \d+ [A-Z][a-z]{2}\./)).toBeTruthy();
+    expect(screen.queryByText(/Use ₹/)).toBeNull();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  it('points to the review when one is due, still with no price', () => {
+    const { onStartReview } = show(priced(), 640, { ...SETTINGS, lastPriceReviewOn: '2020-01-01' });
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.queryByText(/₹495/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Your price review is due' }));
+    expect(onStartReview).toHaveBeenCalled();
   });
 
   it('does not blame an ingredient for a recipe edit', () => {
@@ -65,20 +73,12 @@ describe('MarginDriftPanel', () => {
     expect(screen.getByRole('button', { expanded: true }).textContent).not.toMatch(/Butter/);
   });
 
-  it('flags below target, and offers the target price as well', () => {
-    const { onUsePrice } = show(priced({ targetMargin: 75 }), 500);
+  it('flags below target, with no price', () => {
+    show(priced({ targetMargin: 75 }), 500);
     const badge = screen.getByRole('button', { expanded: false });
     expect(badge.textContent).toMatch(/Margin 70%, under your 75% target/);
     fireEvent.click(badge);
-    fireEvent.click(screen.getByLabelText(/to reach your target/));
-    expect(onUsePrice).toHaveBeenCalledWith(480); // 120 / 0.25
+    expect(screen.queryByText(/Use ₹/)).toBeNull();
   });
 
-  it('offers the same price once when restoring the margin and reaching the target come to the same price', () => {
-    // priced at a 70% margin (cost 120 at 400), butter now dearer; a 70% target gives the same price as restoring 70%
-    const item = priced({ targetMargin: 70 });
-    show(item, 640);
-    fireEvent.click(screen.getByRole('button', { expanded: false }));
-    expect(screen.getAllByRole('button', { name: /^Use / })).toHaveLength(1);
-  });
 });

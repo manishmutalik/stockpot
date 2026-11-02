@@ -315,6 +315,9 @@ explains their results, through the same figure registry as everything else.
   exists to compare with. As of today, whatever period is asked about. Both are built
   by `buildBusinessSnapshot` (it takes the `priceLog`). The old note "price-change
   data is not available yet" is gone.
+- **Price review.** `pricing.review` gives the next review date and whether it is due.
+  `suggestedPrice` is left out between reviews, except in the chat, so the briefing cannot
+  suggest a price the app does not.
 - **Briefing.** Two new attention kinds, `reprice` and `price_move`. The code-built
   version (`buildDeterministicBriefing`) now raises the worst repricing item ("Butter
   Cake margin is down from 83% to 70%, with Butter up +67%. A price of ₹450 would

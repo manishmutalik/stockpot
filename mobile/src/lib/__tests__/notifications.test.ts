@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EVENING_TIMES, MORNING_TIMES, routeForNotification, timeLabel, withSwitch, withTime } from '../notifications';
+import { EVENING_TIMES, MORNING_TIMES, routeForNotification, timeLabel, webPathForNotification, withSwitch, withTime } from '../notifications';
 import type { NotificationSettings } from '../../../../src/utils/quickApiTypes';
 
 const base: NotificationSettings = { morningSummary: { enabled: true, time: '08:00' }, lowStock: true, useBy: true, dueTomorrow: { enabled: false, time: '19:00' }, unpaidBills: true };
@@ -50,5 +50,13 @@ describe('routeForNotification', () => {
   });
   it('does nothing for a screen this version does not have, or no data', () => {
     for (const d of [{ screen: 'printer' }, {}, null, undefined, 'today', 5, { screen: 7 }]) expect(routeForNotification(d), String(d)).toBeNull();
+  });
+});
+
+describe('webPathForNotification', () => {
+  it('opens the price review on the website, and nothing else', () => {
+    expect(webPathForNotification({ screen: 'price-review' })).toBe('/app?open=price-review');
+    expect(webPathForNotification({ screen: 'today' })).toBeNull();
+    expect(webPathForNotification(null)).toBeNull();
   });
 });

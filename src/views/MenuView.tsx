@@ -122,7 +122,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
     materials, categories, menu, orders, settings, currency, expandedRecipeId, setExpandedRecipeId,
     setIsIngredientSelectorOpen, setActiveRecipeItemId, addMenuItem, updateMenuItem, updateMenuItemField,
     deleteMenuItem, copyMenuItem, addIngredientToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, menuFilterOnOpen, openRecipeReader,
-    setItemParts, setBatchSize, setMadeToOrder, setCountedIn, productionRuns,
+    setItemParts, setBatchSize, setMadeToOrder, setCountedIn, productionRuns, openPriceReview,
   } = props;
 
   // Purely local, ephemeral UI state for the shareable nutrition card — not
@@ -380,7 +380,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
           <option value="high">60% and up</option>
           <option value="mid">40% – 60%</option>
           <option value="low">Under 40% / unpriced</option>
-          <option value="repricing">Needs repricing ({repricing.length})</option>
+          <option value="repricing">Margin slipped ({repricing.length})</option>
         </select>
         <select aria-label="Sales period" value={salesPeriod} onChange={(e) => setSalesPeriod(e.target.value as SalesPeriod)} className={selectCls}>
           {SALES_PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
@@ -393,6 +393,15 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
           <Calculator size={16} />
           What if…
         </button>
+        {repricing.length > 0 && (
+          <button
+            type="button"
+            onClick={() => openPriceReview?.()}
+            className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-white hover:bg-primary-dark transition-colors"
+          >
+            Review prices now
+          </button>
+        )}
         </>)}
         {otherMatches > 0 && (
           <button type="button" onClick={() => setTab(tab === 'menu' ? 'made' : 'menu')} className="text-sm font-semibold text-primary hover:underline">
@@ -601,7 +610,8 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                       placeholder="-"
                     />
                   </label>
-                  {!made && (
+                  {/* A starting price for an item not yet on sale. Once it has a price, new ones come at the price review. */}
+                  {!made && !(item.sellingPrice > 0) && (
                   <button
                     onClick={() => updateMenuItemField(item.id, 'sellingPrice', suggested)}
                     className="bg-primary/5 hover:bg-primary/10 rounded-xl px-3 py-2 text-left transition-colors"
@@ -637,7 +647,7 @@ export const MenuView: React.FC<AppViewProps> = (props) => {
                         materials={materials}
                         settings={settings}
                         currencySymbol={currency.symbol}
-                        onUsePrice={(price) => updateMenuItemField(item.id, 'sellingPrice', price)}
+                        onStartReview={() => openPriceReview?.()}
                       />
                     </div>
                   </div>

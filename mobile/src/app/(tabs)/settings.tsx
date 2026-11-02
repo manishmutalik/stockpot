@@ -154,7 +154,7 @@ export default function Settings() {
             )}
             {s && (
               <>
-                <Row title="Morning summary" hint="What needs doing today, in one notification" value={s.morningSummary.enabled} onChange={on => prefs.change(withSwitch(s, 'morningSummary', on))}>
+                <Row title="Morning summary" hint="What needs doing today, slipped margins and your price review" value={s.morningSummary.enabled} onChange={on => prefs.change(withSwitch(s, 'morningSummary', on))}>
                   <TimeChips label="SEND AT" times={MORNING_TIMES} current={s.morningSummary.time} onPick={t => prefs.change(withTime(s, 'morningSummary', t))} />
                 </Row>
                 <Row title="Running low" hint="Once, when an ingredient drops below its alert level" value={s.lowStock} onChange={on => prefs.change(withSwitch(s, 'lowStock', on))} />

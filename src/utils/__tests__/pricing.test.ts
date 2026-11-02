@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_TARGET_MARGIN, itemsNeedingRepricing, marginDrift, marginOf, materialPriceStats, needsBaselineStamp,
-  pricesFromPercent, pricingScenario, pricingStamp, recipesAffectedBy, repriceOptions, roundUpTo, suggestedPriceForTarget, targetFor,
-} from '../pricing';
+  pricesFromPercent, pricingScenario, pricingStamp, recipesAffectedBy, repriceOptions, roundUpTo, suggestedPriceForTarget, targetFor, monthlyCostOfSlippedMargins, nextQuarterStart, priceReviewRows, priceReviewStatus, priceReviewSummary, pricingNotice } from '../pricing';
+import { todayInZone } from '../localDate';
 import { summarizeMenu } from '../menuStats';
 import { stampFor } from '../orderPricing';
 
@@ -470,5 +470,89 @@ describe('repriceOptions', () => {
     const cheaper = marginDrift(item, mats(400), SETTINGS)!;
     expect(cheaper.pointsLost).toBeLessThan(0);
     expect(repriceOptions(item, cheaper, SETTINGS).restore).toBeNull();
+  });
+});
+
+describe('the quarterly price review', () => {
+  describe('priceReviewStatus', () => {
+    it('is never due without a stored date, however many quarters pass', () => {
+      for (const today of ['2026-11-02', '2027-01-01', '2027-04-01']) expect(priceReviewStatus({}, today).due).toBe(false);
+      expect(priceReviewStatus({}, '2026-11-02').nextReviewOn).toBe('2027-01-01');
+    });
+
+    it('comes due on the stored first date for an account that has never done one', () => {
+      const s = { firstPriceReviewOn: '2027-01-01' };
+      expect(priceReviewStatus(s, '2026-12-31')).toEqual({ nextReviewOn: '2027-01-01', due: false, daysUntil: 1 });
+      expect(priceReviewStatus(s, '2027-01-01').due).toBe(true);
+      expect(priceReviewStatus(s, '2027-05-01').due).toBe(true);
+    });
+
+    it('runs 3 months from the last completed review', () => {
+      const s = { lastPriceReviewOn: '2026-11-02', firstPriceReviewOn: '2027-01-01' };
+      expect(priceReviewStatus(s, '2027-01-01')).toEqual({ nextReviewOn: '2027-02-02', due: false, daysUntil: 32 });
+      expect(priceReviewStatus(s, '2027-02-01').due).toBe(false);
+      expect(priceReviewStatus(s, '2027-02-02').due).toBe(true);
+    });
+
+    it('stays within the month at a month end, and honours another interval', () => {
+      expect(priceReviewStatus({ lastPriceReviewOn: '2026-11-30' }, '2026-12-01').nextReviewOn).toBe('2027-02-28');
+      expect(priceReviewStatus({ lastPriceReviewOn: '2026-11-02', priceReviewMonths: 6 }, '2026-12-01').nextReviewOn).toBe('2027-05-02');
+    });
+
+    it('goes by the date in the business time zone', () => {
+      const instant = new Date('2026-12-31T19:00:00Z'); // already 1 Jan in India, still 31 Dec in New York
+      const s = { firstPriceReviewOn: '2027-01-01' };
+      expect(priceReviewStatus(s, todayInZone('Asia/Kolkata', instant)).due).toBe(true);
+      expect(priceReviewStatus(s, todayInZone('America/New_York', instant)).due).toBe(false);
+    });
+  });
+
+  it('finds the 1st of the next calendar quarter', () => {
+    expect(nextQuarterStart('2026-01-01')).toBe('2026-04-01');
+    expect(nextQuarterStart('2026-03-31')).toBe('2026-04-01');
+    expect(nextQuarterStart('2026-09-30')).toBe('2026-10-01');
+    expect(nextQuarterStart('2026-10-01')).toBe('2027-01-01');
+    expect(nextQuarterStart('2026-12-31')).toBe('2027-01-01');
+  });
+
+  describe('the review rows', () => {
+    const mats: any[] = [{ id: 'butter', name: 'Butter', unit: 'kg', costPerUnit: 800 }];
+    const line = [{ materialId: 'butter', amount: 100, unit: 'g' }];
+    const priced = (id: string, costThen: number, price = 200, over: Record<string, any> = {}): any => ({ id, name: id, sellingPrice: price, recipe: line, pricedAt: '2026-06-01', costAtPricing: costThen, materialCostsAtPricing: { butter: costThen * 10 }, ...over });
+
+    it('lists slipped items worst first, recommending the price that restores the margin', () => {
+      const rows = priceReviewRows([priced('small', 70), priced('big', 40), priced('fine', 80)], mats, {} as any);
+      expect(rows.map(r => r.item.id)).toEqual(['big', 'small']);
+      expect(rows[0].recommended).toBe('restore');
+      expect(rows[0].mainDriverId).toBe('butter');
+    });
+
+    it('recommends keeping the price when no option would raise it', () => {
+      const rows = priceReviewRows([priced('a', 40, 200, { targetMargin: 99 })], [{ ...mats[0], costPerUnit: 400 }], {} as any);
+      expect(rows[0].recommended).toBe('target');
+      const held = priceReviewRows([priced('b', 40, 200)], mats, { priceRounding: 1000 } as any);
+      expect(held[0].options.restore?.price).toBe(1000);
+    });
+
+    it('summarises what is changing, leaving out prices that do not move', () => {
+      const menu = [{ id: 'a', sellingPrice: 100 }, { id: 'b', sellingPrice: 200 }, { id: 'c', sellingPrice: 300 }];
+      expect(priceReviewSummary(menu, [{ menuItemId: 'a', newPrice: 110 }, { menuItemId: 'b', newPrice: 240 }, { menuItemId: 'c', newPrice: 300 }])).toEqual({ count: 2, averageRisePct: 15 });
+      expect(priceReviewSummary(menu, [])).toEqual({ count: 0, averageRisePct: 0 });
+    });
+
+    it('gives the monthly cost from real sales, and nothing without any', () => {
+      const menu = [priced('big', 40)];
+      const rows = priceReviewRows(menu, mats, {} as any);
+      const input = { menu, materials: mats, settings: {} as any, today: '2026-11-02' };
+      expect(monthlyCostOfSlippedMargins(rows, { ...input, orders: [] })).toBeNull();
+      const sale: any = { id: 'o', date: '2026-10-20', menuItemId: 'big', quantity: 30, unitPriceAtSale: 200, unitIngredientCostAtSale: 80, unitPackagingCostAtSale: 0, status: 'fulfilled', paymentStatus: 'paid' };
+      expect(monthlyCostOfSlippedMargins(rows, { ...input, orders: [sale] })).toBeGreaterThan(0);
+    });
+
+    it('tells the phone the facts without a price', () => {
+      const notice = pricingNotice([priced('big', 40)], mats, { firstPriceReviewOn: '2027-01-01' } as any, '2026-11-02');
+      expect(notice.review.due).toBe(false);
+      expect(notice.slipped).toEqual([{ id: 'big', name: 'big', marginThen: 80, marginNow: 60, driver: { name: 'Butter', pctChange: 100 } }]);
+    });
   });
 });

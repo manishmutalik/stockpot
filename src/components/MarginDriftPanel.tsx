@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { ChevronDown, TrendingDown } from 'lucide-react';
 import type { BakerySettings, MenuItem, RawMaterial } from '../types';
-import { formatShortDate } from '../utils/localDate';
-import { repriceOptions, type MarginDrift } from '../utils/pricing';
+import { formatDayMonth, formatShortDate, todayInZone } from '../utils/localDate';
+import { priceReviewStatus, type MarginDrift } from '../utils/pricing';
 
 const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(Math.abs(n) >= 10 ? 0 : 1)}%`;
 
 /**
  * How an item's margin has moved since it was priced. Always says when the price was set (or "tracking since"
  * for items that predate pricing stamps). When the margin has slipped or is below the owner's target it shows a
- * badge naming the ingredient that moved, and expands to the drivers, the part due to recipe edits (never blamed on
- * an ingredient's price), and prices that would put the margin back, each one tap to apply.
+ * badge naming the ingredient that moved, and expands to the drivers and the part due to recipe edits (never blamed on
+ * an ingredient's price). The facts only: new prices are suggested at the price review, which this points to.
  */
 export const MarginDriftPanel: React.FC<{
   item: MenuItem;
@@ -18,9 +18,8 @@ export const MarginDriftPanel: React.FC<{
   materials: RawMaterial[];
   settings: BakerySettings;
   currencySymbol: string;
-  /** Sets the price, which also stamps a new pricing baseline. */
-  onUsePrice: (price: number) => void;
-}> = ({ item, drift, materials, settings, currencySymbol, onUsePrice }) => {
+  onStartReview?: () => void;
+}> = ({ item, drift, materials, settings, currencySymbol, onStartReview }) => {
   const [open, setOpen] = useState(false);
   if (!(item.sellingPrice > 0) || !item.pricedAt) return null;
   const money = (n: number) => `${currencySymbol}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -32,7 +31,7 @@ export const MarginDriftPanel: React.FC<{
   }
 
   const top = drift.drivers.find(d => d.costImpact > 0);
-  const options = repriceOptions(item, drift, settings);
+  const review = priceReviewStatus(settings, todayInZone(settings.timezone));
   const headline = drift.alert === 'below_target'
     ? `Margin ${drift.marginNow.toFixed(0)}%, under your ${(item.targetMargin ?? settings.defaultTargetMargin ?? 0).toFixed(0)}% target`
     : `Margin ${drift.marginAtPricing.toFixed(0)}% → ${drift.marginNow.toFixed(0)}%`;
@@ -74,30 +73,13 @@ export const MarginDriftPanel: React.FC<{
               <span className="text-muted"> (not ingredient prices)</span>
             </p>
           )}
-          <div className="flex flex-wrap gap-2">
-            {options.restore && (
-              <button
-                type="button"
-                onClick={() => onUsePrice(options.restore!.price)}
-                className="h-9 px-3 rounded-lg bg-primary text-white text-xs font-semibold hover:bg-primary-dark transition-colors"
-                aria-label={`Use ${money(options.restore.price)} to restore your margin`}
-              >
-                Use {money(options.restore.price)} <span className="font-normal opacity-90">· back to {options.restore.margin.toFixed(0)}%</span>
-              </button>
-            )}
-            {/* The same price for both reasons is offered once. */}
-            {options.target && options.target.price !== options.restore?.price && (
-              <button
-                type="button"
-                onClick={() => onUsePrice(options.target!.price)}
-                className="h-9 px-3 rounded-lg bg-stone-100 text-ink text-xs font-semibold hover:bg-stone-200 transition-colors"
-                aria-label={`Use ${money(options.target.price)} to reach your target`}
-              >
-                Use {money(options.target.price)} <span className="font-normal text-muted">· {options.target.margin.toFixed(0)}% target</span>
-              </button>
-            )}
-          </div>
-          <p className="text-xs text-muted">Using a price sets a new baseline, so the margin is measured from today's costs.</p>
+          {review.due ? (
+            <button type="button" onClick={onStartReview} className="text-sm font-semibold text-primary hover:text-primary-dark transition-colors">
+              Your price review is due
+            </button>
+          ) : (
+            <p className="text-xs text-muted">You'll get a suggested price at your price review on {formatDayMonth(review.nextReviewOn)}.</p>
+          )}
         </div>
       )}
     </div>

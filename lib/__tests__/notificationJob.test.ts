@@ -170,7 +170,7 @@ describe('the next day', () => {
 describe('giveBack', () => {
   it('restores only the kinds that failed', () => {
     const previous = { ...emptyNotificationState(), sent: { morning: '2026-10-05' as string }, lowNotified: {} };
-    const current = { sent: { morning: '2026-10-06', lowStock: '2026-10-06' }, lowNotified: { butter: true as const }, useByNotified: {} };
+    const current = { sent: { morning: '2026-10-06', lowStock: '2026-10-06' }, lowNotified: { butter: true as const }, useByNotified: {}, marginNotified: {} };
     const next = giveBack(current, previous, new Set(['lowStock' as const]));
     expect(next.sent).toEqual({ morning: '2026-10-06' });
     expect(next.lowNotified).toEqual({});

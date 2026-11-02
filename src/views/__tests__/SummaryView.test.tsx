@@ -60,17 +60,17 @@ describe('SummaryView repricing card', () => {
   const mats: any[] = [{ id: 'butter', name: 'Butter', unit: 'kg', initialStock: 9, costPerUnit: 900, category: 'Raw Materials', dateAdded: '2026-01-01' }];
   const item = { id: 'cake', name: 'Cake', sellingPrice: 400, recipe: [{ materialId: 'butter', amount: 200, unit: 'g' }], pricedAt: '2026-06-01', costAtPricing: 100, materialCostsAtPricing: { butter: 500 } };
 
-  it('says how many items need repricing, and opens the Menu on them', () => {
+  it('says how many margins have slipped, and opens the Menu on them', () => {
     const openRepricing = vi.fn();
     render(<SummaryView {...makeProps({ materials: mats, menu: [item], openRepricing })} />);
-    expect(screen.getByRole('region', { name: 'Items needing repricing' }).textContent).toContain('1 item needs repricing');
+    expect(screen.getByRole('region', { name: 'Margins and price review' }).textContent).toContain("1 item's margin has slipped");
     fireEvent.click(screen.getByRole('button', { name: 'View in Menu' }));
     expect(openRepricing).toHaveBeenCalled();
   });
 
   it('is absent while margins hold', () => {
     render(<SummaryView {...makeProps({ materials: [{ ...mats[0], costPerUnit: 500 }], menu: [item] })} />);
-    expect(screen.queryByRole('region', { name: 'Items needing repricing' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'Margins and price review' })).toBeNull();
   });
 });
 

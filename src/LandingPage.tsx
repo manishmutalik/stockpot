@@ -195,7 +195,7 @@ const PromotePreview: React.FC = () => (
 const PLAN_FEATURES = [
   'Unlimited recipes, orders, pre-orders and production runs',
   'Bills with UPI QR, statements and menu PDFs over WhatsApp',
-  'True profit, margin alerts and price suggestions',
+  'True profit, margin alerts and a quarterly price review',
   'Morning briefing and Ask Your Business, with fair daily limits',
   'GST for India, reorder suggestions, wastage and R&D tracking',
   'Promote: photos made ready for Instagram, with captions and hashtags',
@@ -491,8 +491,8 @@ const LandingPage: React.FC = () => {
               </div>
             </Reveal>
 
-            <FeatureRow title="Know when a price needs to go up"
-              line="When an ingredient gets dearer, Stockpot tells you which items slipped and suggests a price that wins the margin back."
+            <FeatureRow title="Know when your margins slip"
+              line="When an ingredient gets dearer, Stockpot shows which items slipped and why. Once a quarter, it suggests new prices for all of them together."
             >
               <div className="landing-lift rounded-2xl bg-ink p-2.5 sm:p-4 shadow-2xl border border-ink">
                 <div className="flex items-center gap-2 mb-2 px-2" aria-hidden="true">
@@ -503,7 +503,7 @@ const LandingPage: React.FC = () => {
                 <div className="rounded-xl overflow-hidden border border-white/10">
                   <img
                     src="/landing/laptop-pricing.webp"
-                    alt="Stockpot's Menu on a laptop with Needs repricing on: Butter Croissant's margin has slipped from 62% to 53% because Unsalted Butter is up 30%, with a button to use a price that brings the margin back"
+                    alt="Stockpot's Menu on a laptop with Margin slipped on: Butter Croissant's margin has slipped from 62% to 53% because Unsalted Butter is up 30%, with the date of the next price review"
                     width={1440}
                     height={900}
                     loading="lazy"

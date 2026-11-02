@@ -14,14 +14,18 @@
  *    announced once, and again only after it has recovered and run low a second time;
  *  - when there is nothing to say, nothing is sent (and the kind is not looked at again that day);
  *  - unpaid bills are looked at once an hour in the daytime too: a bill sent from the phone and still unpaid two days later is
- *    announced once (the orders remember it, `billRemindedAt`), so sending it again starts the two days again.
+ *    announced once (the orders remember it, `billRemindedAt`), so sending it again starts the two days again;
+ *  - margins are looked at once, at the morning summary's time and under its switch: an item that has slipped is announced
+ *    once (facts only, never a price), and again only after it has recovered and slipped a second time. A price review that
+ *    has come due is announced once for that date, in place of the slipped items.
  */
 import type { TodayView } from './quickViews';
 import type { NotificationSettings } from './quickNotifications';
 import { minutesOfDay } from './localDate';
+import type { pricingNotice } from './pricing';
 
-export type NotificationKind = 'morning' | 'lowStock' | 'useBy' | 'dueTomorrow' | 'unpaidBills';
-export const NOTIFICATION_KINDS: NotificationKind[] = ['morning', 'lowStock', 'useBy', 'dueTomorrow', 'unpaidBills'];
+export type NotificationKind = 'morning' | 'lowStock' | 'useBy' | 'dueTomorrow' | 'unpaidBills' | 'marginSlip' | 'priceReview';
+export const NOTIFICATION_KINDS: NotificationKind[] = ['morning', 'lowStock', 'useBy', 'dueTomorrow', 'unpaidBills', 'marginSlip', 'priceReview'];
 
 /** How long after its time a scheduled notification may still be sent. */
 export const SEND_WINDOW_MINUTES = 180;
@@ -39,9 +43,13 @@ export interface NotificationState {
   lowNotified: Record<string, true>;
   /** Use-by items already announced, by kind, id and date. */
   useByNotified: Record<string, true>;
+  /** Menu items already announced as slipped, until they recover. */
+  marginNotified: Record<string, true>;
+  /** The due date of the price review last announced. */
+  priceReviewNotifiedFor?: string;
 }
 
-export const emptyNotificationState = (): NotificationState => ({ sent: {}, lowNotified: {}, useByNotified: {} });
+export const emptyNotificationState = (): NotificationState => ({ sent: {}, lowNotified: {}, useByNotified: {}, marginNotified: {} });
 
 /** Whatever is stored, made into a state (anything missing or malformed is empty). */
 export function readNotificationState(stored: unknown): NotificationState {
@@ -53,10 +61,13 @@ export function readNotificationState(stored: unknown): NotificationState {
   };
   const sent: NotificationState['sent'] = {};
   for (const k of NOTIFICATION_KINDS) if (typeof s.sent?.[k] === 'string') sent[k] = s.sent[k];
-  return { sent, lowNotified: flags(s.lowNotified), useByNotified: flags(s.useByNotified) };
+  return {
+    sent, lowNotified: flags(s.lowNotified), useByNotified: flags(s.useByNotified), marginNotified: flags(s.marginNotified),
+    ...(typeof s.priceReviewNotifiedFor === 'string' && { priceReviewNotifiedFor: s.priceReviewNotifiedFor }),
+  };
 }
 
-export interface DueNow { morning: boolean; dueTomorrow: boolean; stock: boolean; bills: boolean }
+export interface DueNow { morning: boolean; dueTomorrow: boolean; stock: boolean; bills: boolean; margins: boolean }
 
 const inWindow = (time: string, nowTime: string) => {
   const since = minutesOfDay(nowTime) - minutesOfDay(time);
@@ -76,6 +87,7 @@ export function whatIsDue(input: { settings: NotificationSettings; state: Notifi
     dueTomorrow: settings.dueTomorrow.enabled && state.sent.dueTomorrow !== localDate && inWindow(settings.dueTomorrow.time, localTime),
     stock: (wantsStock || keepsLowList) && daytime && minute < 15,
     bills: settings.unpaidBills && daytime && minute < 15,
+    margins: settings.morningSummary.enabled && state.sent.marginSlip !== localDate && inWindow(settings.morningSummary.time, localTime),
   };
 }
 
@@ -84,7 +96,7 @@ export interface PlannedNotification {
   title: string;
   body: string;
   /** Where tapping it goes in the app. */
-  data: { type: NotificationKind; screen: 'today' | 'stock-in' | 'items' | 'upcoming' | 'payments-due' };
+  data: { type: NotificationKind; screen: 'today' | 'stock-in' | 'items' | 'upcoming' | 'payments-due' | 'price-review' };
 }
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -104,10 +116,12 @@ export function planNotifications(input: {
   today: TodayView | null;
   /** Customers whose sent bill is unpaid two days on and not yet reminded about, with what they owe (already formatted). */
   unpaidBills?: { name: string; amount: string }[];
+  /** Slipped margins and the price review, worked out when `margins` is due. */
+  pricing?: ReturnType<typeof pricingNotice>;
 }): { notifications: PlannedNotification[]; state: NotificationState } {
   const { settings, localDate, today } = input;
   const due = whatIsDue(input);
-  const state: NotificationState = { sent: { ...input.state.sent }, lowNotified: { ...input.state.lowNotified }, useByNotified: { ...input.state.useByNotified } };
+  const state: NotificationState = { ...input.state, sent: { ...input.state.sent }, lowNotified: { ...input.state.lowNotified }, useByNotified: { ...input.state.useByNotified }, marginNotified: { ...input.state.marginNotified } };
   const notifications: PlannedNotification[] = [];
   if (!today) return { notifications, state };
 
@@ -164,6 +178,34 @@ export function planNotifications(input: {
       }
     }
   }
+  if (due.margins && input.pricing) {
+    state.sent.marginSlip = localDate;
+    const { slipped, review } = input.pricing;
+    const current = new Set(slipped.map(s => s.id));
+    for (const id of Object.keys(state.marginNotified)) if (!current.has(id)) delete state.marginNotified[id];
+    const fresh = slipped.filter(s => !state.marginNotified[s.id]);
+    for (const s of fresh) state.marginNotified[s.id] = true;
+    if (review.due && slipped.length > 0 && state.priceReviewNotifiedFor !== review.nextReviewOn) {
+      state.sent.priceReview = localDate;
+      state.priceReviewNotifiedFor = review.nextReviewOn;
+      notifications.push({
+        kind: 'priceReview',
+        title: 'Time to raise prices',
+        body: `Your quarterly price review is due: ${plural(slipped.length, 'item')} to look at.`,
+        data: { type: 'priceReview', screen: 'price-review' },
+      });
+    } else if (fresh.length > 0) {
+      const one = fresh[0];
+      const cause = one.driver ? ` ${one.driver.name} is up ${one.driver.pctChange.toFixed(0)}%.` : '';
+      notifications.push({
+        kind: 'marginSlip',
+        title: fresh.length === 1 ? `${one.name}'s margin has dropped` : `${fresh.length} items' margins have dropped`,
+        body: fresh.length === 1 ? `${one.marginThen.toFixed(0)}% → ${one.marginNow.toFixed(0)}%.${cause}` : names(fresh.map(s => `${s.name} ${s.marginThen.toFixed(0)}% → ${s.marginNow.toFixed(0)}%`)),
+        data: { type: 'marginSlip', screen: 'today' },
+      });
+    }
+  }
+
   if (due.bills && settings.unpaidBills && input.unpaidBills && input.unpaidBills.length > 0) {
     const list = input.unpaidBills;
     notifications.push({

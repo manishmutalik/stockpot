@@ -73,6 +73,13 @@ export function addDays(date: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d + days)).toISOString().split('T')[0];
 }
 
+/** A YYYY-MM-DD date moved by whole months. A day the new month does not have becomes its last day (30 Nov + 3 months is 28 Feb). */
+export function addMonths(date: string, months: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(y, m - 1 + months + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m - 1 + months, Math.min(d, lastDay))).toISOString().split('T')[0];
+}
+
 /** Whole days from one YYYY-MM-DD date to a later one (negative if the second is earlier). */
 export function daysBetween(from: string, to: string): number {
   const day = (iso: string) => {
@@ -89,6 +96,11 @@ const SHORT_WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "Tue 6 Oct" from a YYYY-MM-DD date. Built by hand so the text does not depend on the runtime's locale data. */
+export function formatDayMonth(iso: string): string {
+  const [, m, d] = iso.split('-').map(Number);
+  return `${d} ${SHORT_MONTHS[m - 1]}`;
+}
+
 export function formatShortDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   return `${SHORT_WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${SHORT_MONTHS[m - 1]}`;
