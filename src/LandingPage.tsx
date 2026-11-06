@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Box, Camera, Check, MessageCircle, Minus, Plus, Sun, TrendingUp, Wallet } from 'lucide-react';
 import { TRIAL_DAYS } from './utils/trial';
+import { PriceCreepGraphic, WhereMoneyGoesGraphic, WorkflowGraphic } from './components/landing/Infographics';
 import { WaitlistForm } from './components/landing/WaitlistForm';
 import { FOUNDING_CUSTOMERS } from './utils/waitlist';
 import { Reveal, onScrollFrames } from './components/landing/motion';
@@ -18,7 +19,9 @@ import { Reveal, onScrollFrames } from './components/landing/motion';
  * the business is GST-registered (see docs/PROJECT_STATE.md); add that here on that day, not before.
  *
  * The look (Nov 2026) is deliberately quiet: white and pale grey sections, big centred headlines, black buttons, and the
- * app itself on a laptop, a tablet and a phone. Stockpot's teal is kept for the logo and small details. Fonts are the
+ * app itself on a laptop, a tablet and a phone. Stockpot's teal is kept for the logo and small details. Three infographics
+ * (src/components/landing/Infographics.tsx, in greys with a hint of red for costs and teal for what is kept) work an example
+ * under the problem, the three answers and how it works. Fonts are the
  * app's own (src/index.css): Manrope for text and JetBrains Mono for figures. Sections rise into view as they are reached
  * (Reveal, off for visitors who ask for reduced motion).
  */
@@ -244,6 +247,7 @@ const LandingPage: React.FC = () => {
                 <span className="text-ink">Stockpot does the sums, so you know what you actually kept.</span>
               </h2>
             </Reveal>
+            <Reveal className="mt-12 w-full"><PriceCreepGraphic /></Reveal>
           </div>
         </section>
 
@@ -260,7 +264,7 @@ const LandingPage: React.FC = () => {
                       {rows.map(([label, value, tone]) => (
                         <div key={label} className="flex items-center justify-between gap-3 py-2 border-b border-black/5 last:border-0 text-[13px]">
                           <dt className={tone === 'pos' ? 'font-bold' : ''}>{label}</dt>
-                          <dd className={`${MONO} m-0 font-semibold tabular-nums ${tone === 'neg' ? 'text-[#B23A4F]' : tone === 'pos' ? 'text-[#13855F]' : ''}`}>{value}</dd>
+                          <dd className={`${MONO} m-0 font-semibold tabular-nums whitespace-nowrap ${tone === 'neg' ? 'text-[#B23A4F]' : tone === 'pos' ? 'text-[#13855F]' : ''}`}>{value}</dd>
                         </div>
                       ))}
                     </dl>
@@ -269,6 +273,7 @@ const LandingPage: React.FC = () => {
                 </Reveal>
               ))}
             </div>
+            <Reveal className="mt-12 w-full"><WhereMoneyGoesGraphic /></Reveal>
             <Reveal className="mt-12 flex flex-col items-center gap-5">
               <p className="text-base sm:text-lg font-semibold max-w-[40ch] text-balance">You already think about your kitchen this way. Stockpot just keeps the numbers straight.</p>
               {LAUNCHING_SOON && <a href="#waitlist" className={BTN_DARK}>Join the waitlist</a>}
@@ -299,6 +304,7 @@ const LandingPage: React.FC = () => {
                 </li>
               ))}
             </ol>
+            <Reveal className="mt-16 w-full"><WorkflowGraphic /></Reveal>
           </div>
         </section>
 

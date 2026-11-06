@@ -160,6 +160,11 @@ logo and small details.
 
 - Copy is in the file (constants like `ANSWERS`, `STEPS`, `FEATURES`, `FAQS`). `src/__tests__/LandingPage.test.tsx` pins
   important phrases, so a copy change may need a test change.
+- Three infographics are HTML/CSS (not images) in `src/components/landing/Infographics.tsx`: the price creep (under the
+  problem), where an order's money goes (under the three answers) and the four-step workflow (in how it works). Their numbers
+  and bar widths come from `figures.ts`, which is unit tested; each picture with numbers has `role="img"` and an
+  `aria-label` stating them. Styles are the `ig-*` rules in `src/index.css`: greys, with `--ig-coral-*` for costs and
+  `--ig-margin-*` for what is kept.
 - The figures in `ANSWERS` are the demo kitchen's own, the same ones the screenshots show. Recapture the screenshots and
   update them together.
 - Sections rise into view (`Reveal` in `src/components/landing/motion.tsx`), which respects `prefers-reduced-motion` (`wantsLessMotion()`).
