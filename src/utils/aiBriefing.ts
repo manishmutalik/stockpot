@@ -162,16 +162,20 @@ export function buildDeterministicBriefing(snapshot: AiSnapshot): BriefingConten
   const dueTomorrow = preorderLine('tomorrow', snapshot.preorders?.dueTomorrow ?? null);
   if (dueToday) attention.push({ kind: 'preorder', text: dueToday });
   if (dueTomorrow) attention.push({ kind: 'preorder', text: dueTomorrow });
-  // The item whose margin has slipped the most: what it was, what it is, which ingredient moved, and a price that restores it.
+  // The item whose margin has slipped the most: what it was, what it is and which ingredient moved. A price that restores
+  // it only when a price review is due; otherwise the date of the review it will come up in.
   const worst = snapshot.pricing?.repricing?.[0];
   if (worst) {
+    const review = snapshot.pricing?.review;
     const cause = worst.driver ? `, with {{name:${worst.driver.name}}} up {{fig:${worst.driver.change}}}` : '';
-    const fix = worst.suggestedPrice ? ` A price of {{fig:${worst.suggestedPrice}}} would restore it.` : '';
+    const fix = review?.due && worst.suggestedPrice ? ` A price of {{fig:${worst.suggestedPrice}}} would restore it.` : '';
+    const lead = review?.due && review.itemsToReview ? `Time to raise prices: your quarterly price review is due, with {{fig:${review.itemsToReview}}} to look at. ` : '';
+    const next = review && !review.due ? ` It is on your price review list for {{fig:${review.nextReviewOn}}}.` : '';
     attention.push({
       kind: 'reprice',
-      text: worst.reason === 'below_target'
-        ? `{{name:${worst.name}}} earns a margin of {{fig:${worst.marginNow}}}, under your target.${fix}`
-        : `{{name:${worst.name}}} margin is down from {{fig:${worst.marginThen}}} to {{fig:${worst.marginNow}}}${cause}.${fix}`,
+      text: lead + (worst.reason === 'below_target'
+        ? `{{name:${worst.name}}} earns a margin of {{fig:${worst.marginNow}}}, under your target.${fix}${next}`
+        : `{{name:${worst.name}}} margin is down from {{fig:${worst.marginThen}}} to {{fig:${worst.marginNow}}}${cause}.${fix}${next}`),
     });
   }
   const names = (ids: string[]) => ids.slice(0, 3).map(id => `{{name:${id}}}`).join(', ');

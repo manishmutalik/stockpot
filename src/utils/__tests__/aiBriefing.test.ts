@@ -245,13 +245,20 @@ describe('buildDeterministicBriefing: pricing', () => {
     settings: { name: 'Asha Bakes', ...NO_GST, timezone: 'Asia/Kolkata' } as any, currency: { code: 'INR', symbol: '₹' }, customers: [], today: TODAY, ...over,
   });
 
-  it('raises the item whose margin slipped, naming the ingredient that moved and a price that restores it', () => {
+  it('names a slipped item and its ingredient straight away, with the review date and no price', () => {
     const { promptSnapshot, registry } = withPricing();
     const content = buildDeterministicBriefing(promptSnapshot);
     const item = content.attention.find(a => a.kind === 'reprice')!;
     expect(validateBriefingContent(content, promptSnapshot).ok).toBe(true);
     const shown = renderAiText(item.text, registry, ctx);
-    expect(shown).toMatch(/^Butter Cake margin is down from 83% to 70%, with Butter up \+67%\. A price of ₹\d+ would restore it\.$/);
+    expect(shown).toMatch(/^Butter Cake margin is down from 83% to 70%, with Butter up \+67%\. It is on your price review list for .+\.$/);
+    expect(shown).not.toMatch(/₹/);
+  });
+
+  it('says it is time to raise prices, with the worst item and its price, when a review is due', () => {
+    const { promptSnapshot, registry } = withPricing({ settings: { name: 'Asha Bakes', ...NO_GST, timezone: 'Asia/Kolkata', lastPriceReviewOn: '2020-01-01' } });
+    const item = buildDeterministicBriefing(promptSnapshot).attention.find(a => a.kind === 'reprice')!;
+    expect(renderAiText(item.text, registry, ctx)).toMatch(/^Time to raise prices: your quarterly price review is due, with 1 to look at\. Butter Cake margin is down from 83% to 70%, with Butter up \+67%\. A price of ₹\d+ would restore it\.$/);
   });
 
   it('says "under your target" when the margin is below a target the owner set', () => {

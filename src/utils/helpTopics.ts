@@ -252,7 +252,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       ),
       points(
         'If there are not enough bases, Stockpot warns you but lets you go ahead. Log the bases you made, and the count comes right.',
-        'When cake gel gets dearer, every cream cake shows it, named as cake gel, in **Items needing repricing**.',
+        'When cake gel gets dearer, every cream cake shows it, named as cake gel, under **Margin slipped**.',
         'Production spend counts each ingredient once: the cream cake run does not count the base again.',
         'A base that is used in other items cannot be deleted until you take it out of them.',
         'On the phone, say "Made 9 vanilla bases" or "Made 3 pineapple cakes" as for anything else.',
@@ -325,12 +325,16 @@ export const HELP_TOPICS: HelpTopic[] = [
   {
     id: 'repricing', section: 'recipes', apps: ['web'],
     title: 'When ingredient prices go up',
-    summary: 'Items needing repricing, and trying a new price before you change it.',
-    keywords: ['reprice', 'margin', 'drift', 'what if', 'price rise', 'mehenga', 'inflation'],
+    summary: 'Margin alerts, the quarterly price review, and trying a new price before you change it.',
+    keywords: ['reprice', 'margin', 'drift', 'what if', 'price rise', 'price review', 'quarterly', 'mehenga', 'inflation'],
     body: [
-      text('When what you pay for materials goes up, your margins shrink without you noticing. Stockpot watches for it:'),
+      text('When what you pay for materials goes up, your margins shrink without you noticing. Stockpot tells you as soon as it happens, and once a quarter tells you it is time to raise prices. Changing prices together, not every time an ingredient moves, keeps your menu steady for customers.'),
       points(
-        'An item whose margin has slipped below your target shows in **Items needing repricing** on the Dashboard, and under **Under 40% / unpriced** in Recipes & Menus.',
+        '**Margin alerts.** An item whose margin has slipped shows on the Dashboard, in your morning briefing and on your phone, with the ingredient behind it. Choose **Margin slipped** in Recipes & Menus to see them all.',
+        '**The quarterly price review.** Every 3 months the Dashboard says it is time to raise prices. **Start review** lists every slipped item with a suggested price, already ticked. Change any you like, then **Apply** sets them all together.',
+        '**Starting early.** After a big supplier price rise, click **Review prices now** in Recipes & Menus. It counts as that quarter\'s review.',
+        '**Skipping.** **Keep all prices for now** finishes the review with nothing changed. The items stay flagged, and the next review is in 3 months.',
+        'You can still change a price by hand at any time.',
         'Click **What if…** to try a new price, or a change in an ingredient\'s price, and see the effect on margin and profit before changing anything.',
         'Your target margin and how big a slip to warn about are in **Settings › Business Profile › Pricing**.',
       ),

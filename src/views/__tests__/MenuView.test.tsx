@@ -60,7 +60,7 @@ describe('MenuView', () => {
     expect(screen.queryByDisplayValue('Cake')).toBeNull();
   });
 
-  it('keeps price, shelf life, servings and suggestion wired up', () => {
+  it('keeps price, shelf life and servings wired up', () => {
     const props = makeProps();
     render(<MenuView {...props} />);
     const c = card('Cake');
@@ -72,8 +72,6 @@ describe('MenuView', () => {
     expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'shelfLifeDays', 3);
     fireEvent.change(within(c).getByLabelText('Servings'), { target: { value: '6' } });
     expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'servings', 6);
-    fireEvent.click(within(c).getByTitle(/Apply the price that earns a 71\.4% margin/));
-    expect(props.updateMenuItemField).toHaveBeenCalledWith('cake', 'sellingPrice', 20); // 4.5 x 3.5 = 15.75, rounded up to the next 5
     fireEvent.change(within(c).getByLabelText('Item name'), { target: { value: 'Big Cake' } });
     expect(props.updateMenuItem).toHaveBeenCalledWith('cake', 'Big Cake');
   });
@@ -248,7 +246,7 @@ describe('MenuView pricing', () => {
     expect(badge.textContent).toMatch(/Butter \+28%/);
     expect(within(card('Plain Bread')).queryByText(/Margin \d+% →/)).toBeNull();
 
-    expect((screen.getByLabelText('Filter by margin') as HTMLSelectElement).textContent).toContain('Needs repricing (1)');
+    expect((screen.getByLabelText('Filter by margin') as HTMLSelectElement).textContent).toContain('Margin slipped (1)');
     fireEvent.change(screen.getByLabelText('Filter by margin'), { target: { value: 'repricing' } });
     expect(screen.getByDisplayValue('Truffle Cake')).toBeTruthy();
     expect(screen.queryByDisplayValue('Plain Bread')).toBeNull();
@@ -261,13 +259,6 @@ describe('MenuView pricing', () => {
     expect(screen.queryByDisplayValue('Fine Cake')).toBeNull();
   });
 
-  it('applies a restoring price from the badge, through the same price update that stamps a new baseline', () => {
-    const props = makeProps({ menu: [stamped('a', 'Truffle Cake')], materials: butter(640), settings: { name: 'T', timezone: 'UTC' } });
-    render(<MenuView {...props} />);
-    fireEvent.click(within(card('Truffle Cake')).getByRole('button', { expanded: false }));
-    fireEvent.click(within(card('Truffle Cake')).getByLabelText(/to restore your margin/));
-    expect(props.updateMenuItemField).toHaveBeenCalledWith('a', 'sellingPrice', 495);
-  });
 
   it('sets a target margin per item (saved when done typing), with the default as the placeholder', () => {
     const props = makeProps({ settings: { name: 'T', defaultTargetMargin: 65 } });
@@ -283,9 +274,21 @@ describe('MenuView pricing', () => {
     expect(props.updateMenuItemField).not.toHaveBeenCalledWith('cake', 'targetMargin', 0);
   });
 
-  it('suggests the price for the item\'s own target, GST-aware', () => {
+  it('offers no suggested price on an item that already has one', () => {
+    render(<MenuView {...makeProps({ menu: [stamped('a', 'Cake')], materials: butter(640), settings: { name: 'T' } })} />);
+    expect(within(card('Cake')).queryByText('Suggest')).toBeNull();
+  });
+
+  it('opens the price review early from the Menu', () => {
+    const openPriceReview = vi.fn();
+    render(<MenuView {...makeProps({ menu: [stamped('a', 'Cake')], materials: butter(640), settings: { name: 'T' }, openPriceReview })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Review prices now' }));
+    expect(openPriceReview).toHaveBeenCalled();
+  });
+
+  it('suggests a starting price for the item\'s own target, GST-aware', () => {
     const items = [{ id: 'c', name: 'Cake', sellingPrice: 100, targetMargin: 60, recipe: [{ materialId: 'flour', amount: 250, unit: 'g' }, { materialId: 'box', amount: 1, unit: 'pcs' }] }]; // cost 4.50
-    const props = makeProps({ menu: items, settings: { name: 'T', gstApplicable: true, gstRate: 18, gstPricingMode: 'inclusive' } });
+    const props = makeProps({ menu: items.map((i: any) => ({ ...i, sellingPrice: 0 })), settings: { name: 'T', gstApplicable: true, gstRate: 18, gstPricingMode: 'inclusive' } });
     render(<MenuView {...props} />);
     // 4.5 / 0.4 = 11.25, plus 18% GST = 13.275, rounded up to 15
     fireEvent.click(within(card('Cake')).getByTitle(/earns a 60% margin/));

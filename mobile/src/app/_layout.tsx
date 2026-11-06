@@ -1,13 +1,14 @@
 import React, { useEffect, useRef } from 'react';
+import { Linking } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Manrope_500Medium, Manrope_600SemiBold, Manrope_700Bold, useFonts as useManrope } from '@expo-google-fonts/manrope';
 import { JetBrainsMono_600SemiBold, useFonts as useMono } from '@expo-google-fonts/jetbrains-mono';
-import { AuthProvider, useAuth } from '../auth/AuthContext';
+import { API_URL, AuthProvider, useAuth } from '../auth/AuthContext';
 import { configureNotifications, registerForPush, useTappedNotification } from '../lib/push';
-import { routeForNotification } from '../lib/notifications';
+import { routeForNotification, webPathForNotification } from '../lib/notifications';
 import { colors } from '../theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -29,6 +30,8 @@ function useNotifications(ready: boolean) {
     const id = `${last.notification.request.identifier}:${last.actionIdentifier}`;
     if (handled.current === id) return;
     handled.current = id;
+    const webPath = webPathForNotification(last.notification.request.content.data);
+    if (webPath && API_URL) { Linking.openURL(`${API_URL.replace(/\/$/, '')}${webPath}`).catch(() => {}); return; }
     const route = routeForNotification(last.notification.request.content.data);
     if (route) router.push(route.params ? { pathname: route.pathname, params: route.params } : route.pathname);
   }, [ready, user, last, router]);

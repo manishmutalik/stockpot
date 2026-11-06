@@ -487,6 +487,12 @@ export interface BakerySettings {
   marginAlertPoints?: number | null;
   /** Round suggested prices up to the nearest multiple of this (default 5, so ₹183.42 becomes ₹185). */
   priceRounding?: number | null;
+  /** When the owner last completed a quarterly price review (YYYY-MM-DD, business time zone). Absent: never. */
+  lastPriceReviewOn?: string | null;
+  /** When an account that has never done a review is first due (the 1st of a calendar quarter). Written once, the first time the business's data loads. */
+  firstPriceReviewOn?: string | null;
+  /** Months between price reviews. Absent: 3. Not shown in Settings yet. */
+  priceReviewMonths?: number | null;
 }
 
 /**
@@ -650,6 +656,10 @@ export interface AppViewProps {
   /** Sets the Menu tab's margin filter when it opens from the Dashboard's "needs repricing" card. */
   menuFilterOnOpen?: 'repricing';
   openRepricing: () => void;
+  /** Opens the quarterly price review, from wherever the owner is. */
+  openPriceReview?: () => void;
+  /** Records a price review as done without changing any price. */
+  completePriceReview?: () => Promise<boolean>;
   /** Opens the recipe reader (a menu item's id fills that item); absent where AI is not available. */
   openRecipeReader?: (menuItemId?: string) => void;
   /** Hands an order over. A pre-order claims its stock now (all items, or none); resolves to whether it was handed over. */

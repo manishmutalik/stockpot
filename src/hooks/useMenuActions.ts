@@ -10,7 +10,7 @@
  * shared Firestore listener in App.tsx and passed in as read-only parameters
  * (same pattern as useSettings/useInventoryActions).
  */
-import { auth, db, doc, setDoc, deleteDoc, deleteField } from '../firebase';
+import { auth, db, doc, setDoc, deleteDoc, deleteField, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { MenuItem, RawMaterial, Order, IngredientRequirement, ItemPart, ItemUnitByMeasure, QuickIngredient, getDefaultRecipeUnit } from '../types';
 import { needsBaselineStamp, pricingStamp } from '../utils/pricing';
@@ -129,6 +129,31 @@ export function useMenuActions(
       }
     }
     return done;
+  };
+
+  /**
+   * Completes a price review: every chosen price, each with its new pricing stamp, and the review date, in one batch,
+   * so it all happens or none of it does. Only those fields are written. An empty list records a review that changed
+   * nothing. Resolves to whether it was saved.
+   */
+  const applyPriceReview = async (changes: { menuItemId: string; newPrice: number }[]): Promise<boolean> => {
+    if (!auth.currentUser) return false;
+    const userId = auth.currentUser.uid;
+    try {
+      const batch = writeBatch(db);
+      for (const { menuItemId, newPrice } of changes) {
+        const item = menu.find(m => m.id === menuItemId);
+        if (!item) continue;
+        batch.set(doc(db, 'users', userId, 'menu', menuItemId), { sellingPrice: newPrice, ...pricingStamp(costView(item, menu), materials, today()), pricingIsBaseline: false }, { merge: true });
+      }
+      batch.set(doc(db, 'users', userId, 'settings', 'bakery'), { lastPriceReviewOn: today() }, { merge: true });
+      await batch.commit();
+      return true;
+    } catch (err) {
+      // Not handleFirestoreError, which throws: the review screen says it was not saved and stays open.
+      console.error('Price review could not be saved:', err);
+      return false;
+    }
   };
 
   /**
@@ -409,6 +434,7 @@ export function useMenuActions(
     updateMenuItem,
     updateMenuItemField,
     stampPricingBaselines,
+    applyPriceReview,
     deleteMenuItem,
     clearFinishedGoodsStock,
     copyMenuItem,

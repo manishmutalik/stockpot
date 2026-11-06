@@ -14,13 +14,15 @@
  *    about price moves. A recipe edit shows up as `recipeChangeImpact`.
  *  - No surprise changes: with no target set, the suggested price is the old 3.5x
  *    markup and nothing is flagged as below target.
+ *  - A slipped margin is flagged as soon as it happens, but a new price for an item
+ *    already on sale is suggested only at the quarterly price review.
  *
  * Pure: no React, Firebase or DOM.
  */
 import type { BakerySettings, MenuItem, Order, PriceLogEntry, RawMaterial } from '../types';
 import { convertAmount } from './conversions';
 import { basePriceOf } from './gstCalculations';
-import { addDays, daysBetween } from './localDate';
+import { addDays, addMonths, daysBetween } from './localDate';
 import { costMenu } from './itemParts';
 import { recipeCost } from './menuStats';
 import { priceHistory } from './priceLog';
@@ -31,6 +33,7 @@ import { actualOrders } from './preorders';
 export const DEFAULT_TARGET_MARGIN = 100 * (1 - 1 / 3.5);
 export const DEFAULT_ALERT_POINTS = 5;
 export const DEFAULT_PRICE_ROUNDING = 5;
+export const DEFAULT_PRICE_REVIEW_MONTHS = 3;
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const pct = (now: number, before: number) => ((now - before) / before) * 100;
@@ -409,4 +412,100 @@ export function itemsNeedingRepricing(menu: MenuItem[], materials: RawMaterial[]
     if (drift?.alert) out.push({ item, drift });
   }
   return out.sort((a, b) => b.drift.pointsLost - a.drift.pointsLost);
+}
+
+/* ------------------------------------------------------------------------------------------------
+ * The quarterly price review
+ * ---------------------------------------------------------------------------------------------- */
+
+type ReviewSettings = Pick<BakerySettings, 'lastPriceReviewOn' | 'firstPriceReviewOn' | 'priceReviewMonths'>;
+
+/** The 1st of the calendar quarter after a date: 1 Jan, 1 Apr, 1 Jul or 1 Oct. */
+export function nextQuarterStart(date: string): string {
+  const [y, m] = date.split('-').map(Number);
+  const nextMonth = (Math.floor((m - 1) / 3) + 1) * 3; // 0-based, 12 is January of the next year
+  return nextMonth === 12 ? `${y + 1}-01-01` : `${y}-${String(nextMonth + 1).padStart(2, '0')}-01`;
+}
+
+/**
+ * When the next price review is due, and whether it is due now. It runs from the last completed review, or for an
+ * account that has never done one from `firstPriceReviewOn`. Without either it is never due: "the next quarter" worked
+ * out from today would move on every quarter, so that date has to be stored once before it can arrive.
+ */
+export function priceReviewStatus(settings: ReviewSettings, today: string): { nextReviewOn: string; due: boolean; daysUntil: number } {
+  const months = settings.priceReviewMonths;
+  const every = typeof months === 'number' && months > 0 ? months : DEFAULT_PRICE_REVIEW_MONTHS;
+  const nextReviewOn = settings.lastPriceReviewOn ? addMonths(settings.lastPriceReviewOn, every) : settings.firstPriceReviewOn || nextQuarterStart(today);
+  const anchored = !!(settings.lastPriceReviewOn || settings.firstPriceReviewOn);
+  return { nextReviewOn, due: anchored && today >= nextReviewOn, daysUntil: daysBetween(today, nextReviewOn) };
+}
+
+export type PriceReviewChoice = 'keep' | 'restore' | 'target' | 'custom';
+
+export interface PriceReviewRow {
+  item: MenuItem;
+  drift: MarginDrift;
+  options: ReturnType<typeof repriceOptions>;
+  /** The ingredient that added most to the cost. Absent when no ingredient's price rose (a recipe edit, say). */
+  mainDriverId?: string;
+  /** What the row starts on: the margin it had, else its target, else no change. */
+  recommended: Exclude<PriceReviewChoice, 'custom'>;
+}
+
+/** One row per item that has slipped or is under target, worst first, with the prices to choose from. */
+export function priceReviewRows(menu: MenuItem[], materials: RawMaterial[], settings: PricingSettings): PriceReviewRow[] {
+  return itemsNeedingRepricing(menu, materials, settings).map(({ item, drift }) => {
+    const options = repriceOptions(item, drift, settings);
+    return {
+      item, drift, options,
+      mainDriverId: drift.drivers.find(d => d.costImpact > 0)?.materialId,
+      recommended: options.restore ? 'restore' : options.target ? 'target' : 'keep',
+    };
+  });
+}
+
+/** How many prices are changing and the average rise, for the line above the Apply button. Prices that do not move are left out. */
+export function priceReviewSummary(menu: Pick<MenuItem, 'id' | 'sellingPrice'>[], changes: { menuItemId: string; newPrice: number }[]): { count: number; averageRisePct: number } {
+  const moves = changes.flatMap(c => {
+    const now = menu.find(m => m.id === c.menuItemId)?.sellingPrice ?? 0;
+    return now > 0 && c.newPrice !== now ? [((c.newPrice - now) / now) * 100] : [];
+  });
+  return { count: moves.length, averageRisePct: moves.length ? moves.reduce((s, m) => s + m, 0) / moves.length : 0 };
+}
+
+/**
+ * What the slipped margins cost in a month: the profit the recommended prices would bring back, going by the last 30
+ * days' real sales (`pricingScenario`). Null when none of these items sold, as there is nothing honest to say.
+ */
+export function monthlyCostOfSlippedMargins(rows: PriceReviewRow[], input: { orders: Order[]; menu: MenuItem[]; materials: RawMaterial[]; settings: PricingSettings; today: string }): number | null {
+  const changes = rows.flatMap(r => {
+    const newPrice = r.recommended === 'keep' ? null : r.options[r.recommended]?.price ?? null;
+    return newPrice === null ? [] : [{ menuItemId: r.item.id, newPrice }];
+  });
+  if (changes.length === 0) return null;
+  const scenario = pricingScenario({ ...input, changes, lookbackDays: 30 });
+  const gain = scenario.perItem.reduce((s, i) => s + (i.noRecentSales ? 0 : i.contributionAfter - i.contributionNow), 0);
+  return gain > 0 ? gain : null;
+}
+
+export interface MarginSlipNotice {
+  id: string;
+  name: string;
+  marginThen: number;
+  marginNow: number;
+  /** The ingredient that rose most, and by how much. */
+  driver?: { name: string; pctChange: number };
+}
+
+/** What the phone is told about margins: the facts of each slipped item, and whether a review is due. No prices. */
+export function pricingNotice(menu: MenuItem[], materials: RawMaterial[], settings: PricingSettings & ReviewSettings, today: string): { slipped: MarginSlipNotice[]; review: ReturnType<typeof priceReviewStatus> } {
+  const slipped = itemsNeedingRepricing(menu, materials, settings).map(({ item, drift }) => {
+    const top = drift.drivers.find(d => d.costImpact > 0 && d.pctChange !== null);
+    const material = top && materials.find(m => m.id === top.materialId);
+    return {
+      id: item.id, name: item.name || 'Untitled', marginThen: drift.marginAtPricing, marginNow: drift.marginNow,
+      ...(top && material && { driver: { name: material.name, pctChange: top.pctChange! } }),
+    };
+  });
+  return { slipped, review: priceReviewStatus(settings, today) };
 }

@@ -258,7 +258,7 @@ describe('the snapshot as a whole', () => {
   it('no longer claims pricing data is missing', () => {
     const { promptSnapshot } = build([order(1)]);
     expect(promptSnapshot.notes.join(' ')).not.toMatch(/repricing data/);
-    expect(promptSnapshot.pricing).toEqual({ repricing: [], materialMoves: [] });
+    expect(promptSnapshot.pricing).toMatchObject({ repricing: [], materialMoves: [] });
   });
 
   it('flags orders valued at today\'s prices', () => {
@@ -285,7 +285,7 @@ describe('the pricing section', () => {
     settings, currency: { code: 'INR', symbol: '₹' }, customers: [], today: TODAY, ...over,
   });
 
-  it('lists an item whose margin slipped, with the ingredient that moved and a price that restores the margin', () => {
+  it('lists an item whose margin slipped, with the ingredient that moved, leaving out the price between reviews', () => {
     const { promptSnapshot, registry } = buildPricing();
     const r = promptSnapshot.pricing!.repricing;
     expect(r).toHaveLength(1);
@@ -296,7 +296,25 @@ describe('the pricing section', () => {
     expect(registry.figures[r[0].marginNow].value).toBe(70);
     expect(promptSnapshot.names[r[0].driver!.name]).toBe('Butter');
     expect(registry.figures[r[0].driver!.change].value).toBe(66.7); // 300 -> 500
-    expect(Number(registry.figures[r[0].suggestedPrice!].value)).toBeGreaterThan(400);
+    expect(r[0].suggestedPrice).toBeUndefined();
+    const review = promptSnapshot.pricing!.review!;
+    expect(review.due).toBe(false);
+    expect(review.itemsToReview).toBeUndefined();
+    expect(registry.figures[review.nextReviewOn].kind).toBe('date');
+  });
+
+  it('includes the suggested price and the count when a review is due', () => {
+    const { promptSnapshot, registry } = buildPricing({ settings: { ...settings, lastPriceReviewOn: '2020-01-01' } });
+    const { repricing, review } = promptSnapshot.pricing!;
+    expect(review!.due).toBe(true);
+    expect(registry.figures[review!.itemsToReview!].value).toBe(1);
+    expect(Number(registry.figures[repricing[0].suggestedPrice!].value)).toBeGreaterThan(400);
+  });
+
+  it('includes the suggested price between reviews when the owner is asking', () => {
+    const { promptSnapshot } = buildPricing({ includeSuggestedPrices: true });
+    expect(promptSnapshot.pricing!.review!.due).toBe(false);
+    expect(promptSnapshot.pricing!.repricing[0].suggestedPrice).toBeTruthy();
   });
 
   it('only ever refers to numbers through figures, with text for the prompt', () => {

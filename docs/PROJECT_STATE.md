@@ -252,11 +252,15 @@ now also returning `grossRevenue`, `paymentFees` and `costOfGoods`) and `priceLo
 - **Price stats** (`materialPriceStats`, `recipesAffectedBy`): purchases only (`restock`,
   `goods_receipt`); a change is `null` ("not enough history yet"), never 0, without an
   entry old enough to compare with; entries in a unit that does not convert are skipped.
-- **UI.** Menu: drift badge and panel (`MarginDriftPanel`), target field, "Needs
-  repricing" filter, "What if…" (`PricingScenarioModal`). Inventory: stats and "Used in"
+- **UI.** Menu: drift badge and panel (`MarginDriftPanel`, facts only), target field, "Margin
+  slipped" filter, "What if…" (`PricingScenarioModal`), "Review prices now" (`PriceReviewModal`). Inventory: stats and "Used in"
   in `PriceHistoryModal`. Settings: a Pricing section (target, alert points, rounding;
   cleared values are saved as `null` because Firestore rejects `undefined`). Dashboard:
   `RepricingCard`.
+- **Quarterly price review.** A slipped margin is flagged at once, with no price; new prices for
+  items on sale are suggested only on the review screen, in the briefing while a review is due,
+  and when the owner asks the chat. `priceReviewStatus` runs 3 months from `lastPriceReviewOn`, or
+  from `firstPriceReviewOn`, which is stored once (never recomputed, or it would never arrive).
 - **Menu margins are now on the pre-GST price** (`basePriceOf` in `gstCalculations.ts`),
   as the handoff requires; `summarizeMenu` takes the settings for this.
 - **AI side (built).** Repricing alerts and ingredient price moves are in the AI

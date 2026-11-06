@@ -29,6 +29,12 @@ export function withTime(s: NotificationSettings, which: 'morningSummary' | 'due
   return { ...s, [which]: { ...s[which], time } };
 }
 
+/** The path on the website a notification opens, for what is only on the website. Nothing for the rest. */
+export function webPathForNotification(data: unknown): string | null {
+  const screen = data && typeof data === 'object' ? (data as Record<string, unknown>).screen : undefined;
+  return screen === 'price-review' ? '/app?open=price-review' : null;
+}
+
 export interface AppRoute { pathname: '/' | '/upcoming' | '/capture'; params?: Record<string, string> }
 
 /**

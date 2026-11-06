@@ -162,6 +162,64 @@ describe('readNotificationState', () => {
   it('fills in an empty state for anything missing or malformed', () => {
     expect(readNotificationState(null)).toEqual(emptyNotificationState());
     expect(readNotificationState({ sent: { morning: 5, lowStock: '2026-10-06' }, lowNotified: { a: true, b: 'yes' }, useByNotified: 'x' }))
-      .toEqual({ sent: { lowStock: '2026-10-06' }, lowNotified: { a: true }, useByNotified: {} });
+      .toEqual({ sent: { lowStock: '2026-10-06' }, lowNotified: { a: true }, useByNotified: {}, marginNotified: {} });
+  });
+
+  it('keeps the slipped items and the review already announced', () => {
+    expect(readNotificationState({ marginNotified: { cake: true }, priceReviewNotifiedFor: '2027-01-01' }))
+      .toMatchObject({ marginNotified: { cake: true }, priceReviewNotifiedFor: '2027-01-01' });
+  });
+});
+
+describe('margins and the price review', () => {
+  const cake = { id: 'cake', name: 'Cake', marginThen: 62, marginNow: 53, driver: { name: 'Butter', pctChange: 30 } };
+  const brownie = { id: 'brownie', name: 'Brownie', marginThen: 70, marginNow: 60 };
+  const notDue = { nextReviewOn: '2027-01-01', due: false, daysUntil: 30 };
+  const due = { nextReviewOn: '2027-01-01', due: true, daysUntil: 0 };
+  const plan = (state: NotificationState, slipped: any[], review: any, time = '08:00', localDate = '2026-10-06', s = settings()) =>
+    planNotifications({ settings: s, state, localDate, localTime: time, today: today(), pricing: { slipped, review } });
+  const about = (r: ReturnType<typeof plan>, kind: string) => r.notifications.filter(n => n.kind === kind);
+
+  it('announces a slipped item with the facts and no price, at the morning summary time', () => {
+    const [n] = about(plan(emptyNotificationState(), [cake], notDue), 'marginSlip');
+    expect(n.title).toBe("Cake's margin has dropped");
+    expect(n.body).toBe('62% → 53%. Butter is up 30%.');
+    expect(n.body).not.toMatch(/₹/);
+  });
+
+  it('counts several slipped items in one notification', () => {
+    const list = about(plan(emptyNotificationState(), [cake, brownie], notDue), 'marginSlip');
+    expect(list).toHaveLength(1);
+    expect(list[0].title).toBe("2 items' margins have dropped");
+  });
+
+  it('announces an item once, and again only after it has recovered', () => {
+    const first = plan(emptyNotificationState(), [cake], notDue);
+    const again = plan({ ...first.state, sent: {} }, [cake], notDue, '08:00', '2026-10-07');
+    expect(about(again, 'marginSlip')).toHaveLength(0);
+    const recovered = plan({ ...again.state, sent: {} }, [], notDue, '08:00', '2026-10-08');
+    expect(recovered.state.marginNotified).toEqual({});
+    expect(about(plan({ ...recovered.state, sent: {} }, [cake], notDue, '08:00', '2026-10-09'), 'marginSlip')).toHaveLength(1);
+  });
+
+  it('says it is time to raise prices once for each review date, in place of the slipped items', () => {
+    const first = plan(emptyNotificationState(), [cake, brownie], due);
+    const [n] = about(first, 'priceReview');
+    expect(n.title).toBe('Time to raise prices');
+    expect(n.body).toBe('Your quarterly price review is due: 2 items to look at.');
+    expect(n.data.screen).toBe('price-review');
+    expect(about(first, 'marginSlip')).toHaveLength(0);
+    expect(about(plan({ ...first.state, sent: {} }, [cake, brownie], due, '08:00', '2026-10-07'), 'priceReview')).toHaveLength(0);
+    expect(about(plan({ ...first.state, sent: {} }, [cake], { ...due, nextReviewOn: '2027-04-01' }, '08:00', '2027-04-01'), 'priceReview')).toHaveLength(1);
+  });
+
+  it('sends nothing about a due review with no items to look at', () => {
+    expect(plan(emptyNotificationState(), [], due).notifications.filter(n => n.kind === 'priceReview')).toHaveLength(0);
+  });
+
+  it('respects the morning summary switch and time', () => {
+    expect(about(plan(emptyNotificationState(), [cake], notDue, '12:00'), 'marginSlip')).toHaveLength(0);
+    const off = settings({ morningSummary: { enabled: false, time: '08:00' } });
+    expect(about(plan(emptyNotificationState(), [cake], notDue, '08:00', '2026-10-06', off), 'marginSlip')).toHaveLength(0);
   });
 });

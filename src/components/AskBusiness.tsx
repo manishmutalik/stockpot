@@ -132,7 +132,7 @@ export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolea
 
     const built = buildBusinessSnapshot({
       period: choice.period, comparison: choice.comparison, orders, menu, materials, experiments, wastageLogs, productionRuns, priceLog,
-      settings, currency, customers, today, mentionedCustomers: mentioned,
+      settings, currency, customers, today, mentionedCustomers: mentioned, includeSuggestedPrices: true,
     });
     const finish = (patch: Partial<Message>) => {
       if (alive.current) setMessages(prev => prev.map(m => (m.id === id ? { ...m, ...patch } : m)));

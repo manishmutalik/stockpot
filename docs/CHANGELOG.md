@@ -1,5 +1,26 @@
 # Changelog
 
+## Quarterly price review
+
+A food business cannot change its menu every time an ingredient price moves, so Stockpot now tells the owner about a slipped
+margin at once, and suggests new prices together, every 3 months.
+
+- **Margin drops are flagged straight away**, facts only: the Menu panel and the **Margin slipped** filter (was "Needs
+  repricing"), the Dashboard card with the next review date, the morning briefing, and a phone notification, once per item
+  until it recovers. The "Use ₹X" buttons are gone, and the Menu's Suggest tile now shows only on an item with no price yet.
+- **Every 3 months, a strong prompt to raise prices.** The Dashboard says "Time to raise prices" until the review is done, with
+  a matching briefing line and phone notification. The review screen (`PriceReviewModal`) lists every slipped item with a price
+  already ticked, says what the margins cost a month going by real sales, and **Apply** saves it all in one batch. Afterwards it
+  offers the updated menu to share.
+- **Start early or skip.** **Review prices now** on the Menu counts as that quarter's review. **Keep all prices for now** records
+  the review with nothing changed; the items stay flagged.
+- **Dates.** Three months from the last review. An account that has never done one stores `firstPriceReviewOn`, the 1st of the
+  next calendar quarter, once; worked out fresh each day it would move on every quarter and never arrive.
+- **The AI.** `pricing.review` is in the snapshot. `suggestedPrice` is there only when a review is due, or in the chat, where the
+  owner may ask what to charge. A cached briefing about a due review stops resolving once it is done, so the code-built one replaces it.
+- **The phone.** Two new notification kinds, under the morning summary's switch and time. The review notification opens
+  `/app?open=price-review` on the website.
+
 ## Landing page: more motion and parallax
 
 - Soft, blurred colour shapes drift slowly behind each section and move at their own speeds as the page scrolls, with a

@@ -291,6 +291,7 @@ describe('validateSnapshotShape', () => {
     });
     const cases: [string, (p: any) => void][] = [
       ['not an object', p => { p.self = 1; }],
+      ['a price review that is not a shape we know', p => { p.review = { nextReviewOn: 5, due: 'yes' }; }],
       ['too many repricing items', p => { p.repricing = Array.from({ length: 6 }, () => p.repricing[0]); }],
       ['a bad reason', p => { p.repricing[0].reason = 'because'; }],
       ['a repricing name that is not text', p => { p.repricing[0].name = 5; }],

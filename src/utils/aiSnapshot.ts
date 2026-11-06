@@ -26,7 +26,7 @@ import { addDays, daysBetween } from './localDate';
 import { bookedAhead, financialsForRange, productProfits, type Financials } from './profit';
 import { actualOrders, summarizeDue } from './preorders';
 import { reorderSuggestions, type ReorderConfidence, type ReorderFlag } from './reorder';
-import { itemsNeedingRepricing, materialPriceStats, repriceOptions, type BreakEven, type PricingScenario } from './pricing';
+import { itemsNeedingRepricing, materialPriceStats, priceReviewStatus, repriceOptions, type BreakEven, type PricingScenario } from './pricing';
 
 export const SNAPSHOT_LIMITS = { products: 30, customersPerList: 10, stockItems: 10, trendDays: 7, unsoldItems: 15, mentionedCustomers: 5, reorderSoon: 5, preorderItems: 5, repricing: 5, materialMoves: 6, scenarioItems: 8 } as const;
 
@@ -76,8 +76,15 @@ export interface SnapshotRepricing {
   marginNow: string;
   /** The ingredient whose price rose the most since the item was priced, and by how much. Absent if no price rose. */
   driver?: { name: string; change: string };
-  /** A price that would put the margin back to what it was (only when higher than today's). */
+  /** A price that would put the margin back to what it was (only when higher than today's). Left out between price reviews, unless the owner is asking. */
   suggestedPrice?: string;
+}
+
+/** The quarterly price review. `itemsToReview` is there only when one is due, so a briefing about a due review stops resolving once it is done. */
+export interface SnapshotPriceReview {
+  nextReviewOn: string;
+  due: boolean;
+  itemsToReview?: string;
 }
 
 /** An ingredient whose purchase price has moved, from the price log (only where there is a purchase old enough to compare with). */
@@ -129,7 +136,7 @@ export interface AiSnapshot {
     mentioned: { label: string; status: string; daysSinceLastOrder: string; orders: string; spent: string; contribution: string; favourite?: string }[];
   };
   /** Pricing: items whose margin has slipped, and ingredients whose price has moved. Optional: older snapshots lack it. */
-  pricing?: { repricing: SnapshotRepricing[]; materialMoves: SnapshotMaterialMove[]; scenario?: SnapshotScenario };
+  pricing?: { repricing: SnapshotRepricing[]; materialMoves: SnapshotMaterialMove[]; review?: SnapshotPriceReview; scenario?: SnapshotScenario };
   /** Pre-orders to prepare (open: not handed over or cancelled) and the customers' money held against them. */
   preorders: { dueToday: SnapshotPreorderDay | null; dueTomorrow: SnapshotPreorderDay | null; advancesHeld?: string };
   notes: string[];
@@ -154,7 +161,7 @@ export function buildBusinessSnapshot(input: {
   materials: (RawMaterial & { remaining: number })[];
   experiments: RecipeExperiment[];
   wastageLogs: WastageLog[];
-  settings: Pick<BakerySettings, 'name' | 'gstApplicable' | 'gstRate' | 'gstPricingMode' | 'fixedCosts' | 'timezone' | 'defaultTargetMargin' | 'marginAlertPoints' | 'priceRounding'>;
+  settings: Pick<BakerySettings, 'lastPriceReviewOn' | 'firstPriceReviewOn' | 'priceReviewMonths' | 'name' | 'gstApplicable' | 'gstRate' | 'gstPricingMode' | 'fixedCosts' | 'timezone' | 'defaultTargetMargin' | 'marginAlertPoints' | 'priceRounding'>;
   currency: { code: string; symbol: string };
   customers: CustomerProfile[];
   /** Today in the business's time zone, for the expiry check. */
@@ -165,6 +172,8 @@ export function buildBusinessSnapshot(input: {
   productionRuns?: (Pick<ProductionRun, 'recipeId' | 'quantityProduced' | 'date'> & Partial<Pick<ProductionRun, 'quantityYield' | 'costTotal'>>)[];
   /** Every ingredient purchase price recorded, for the price moves. Without it none are listed. */
   priceLog?: PriceLogEntry[];
+  /** Include suggested prices between reviews, for when the owner asks what to charge (the chat). */
+  includeSuggestedPrices?: boolean;
 }): BuiltSnapshot {
   const { period, orders, menu, materials, settings, currency } = input;
   const comparison = input.comparison ?? comparisonPeriod(period);
@@ -324,7 +333,9 @@ export function buildBusinessSnapshot(input: {
   };
 
   // Pricing: where the margin has slipped, and which ingredients got dearer. As of today, whatever period is asked about.
-  const repricing: SnapshotRepricing[] = itemsNeedingRepricing(menu, materials, settings).slice(0, SNAPSHOT_LIMITS.repricing).map(({ item, drift }) => {
+  const review = priceReviewStatus(settings, input.today);
+  const slipped = itemsNeedingRepricing(menu, materials, settings);
+  const repricing: SnapshotRepricing[] = slipped.slice(0, SNAPSHOT_LIMITS.repricing).map(({ item, drift }) => {
     const top = drift.drivers.find(d => d.costImpact > 0 && d.pctChange !== null);
     const restore = repriceOptions(item, drift, settings).restore;
     const key = item.id;
@@ -334,9 +345,14 @@ export function buildBusinessSnapshot(input: {
       marginThen: percent(`rp_${key}_then`, `Margin on ${item.name} when its price was set`, drift.marginAtPricing, false),
       marginNow: percent(`rp_${key}_now`, `Margin on ${item.name} now`, drift.marginNow, false),
       ...(top && { driver: { name: nameId('mat', top.materialId, materials.find(m => m.id === top.materialId)?.name ?? 'An ingredient'), change: percent(`rp_${key}_driver`, `How much the price of ${materials.find(m => m.id === top.materialId)?.name ?? 'the ingredient'} has risen since ${item.name} was priced`, top.pctChange!) } }),
-      ...(restore && { suggestedPrice: money(`rp_${key}_price`, `A price for ${item.name} that would restore its margin`, restore.price) }),
+      ...(restore && (review.due || input.includeSuggestedPrices) && { suggestedPrice: money(`rp_${key}_price`, `A price for ${item.name} that would restore its margin`, restore.price) }),
     };
   });
+  const priceReview: SnapshotPriceReview = {
+    nextReviewOn: add('price_review_next', { kind: 'date', value: review.nextReviewOn, label: 'When the next quarterly price review is due' }),
+    due: review.due,
+    ...(review.due && slipped.length > 0 && { itemsToReview: count('price_review_items', 'Menu items to look at in the price review that is due', slipped.length) }),
+  };
   const materialMoves: SnapshotMaterialMove[] = materials
     .flatMap(m => {
       const stats = materialPriceStats(m, input.priceLog ?? [], input.today);
@@ -364,7 +380,7 @@ export function buildBusinessSnapshot(input: {
       period, comparison,
       figures: promptFigures, names, drivers, products, unsoldItems, trend,
       inventory: { cashTiedUp, lowStock, expiringSoon, reorderSoon },
-      pricing: { repricing, materialMoves },
+      pricing: { repricing, materialMoves, review: priceReview },
       customers, preorders, notes,
     },
     registry: { figures, names },

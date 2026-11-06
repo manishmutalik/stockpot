@@ -18,10 +18,11 @@ import type { QuickDb, QuickWrite } from './quickDb';
 import type { PushSender, PushMessage } from './expoPush';
 import { asMenu, currencyOf, loadSettings, loadTodayView } from './quickRoutes';
 import { customerDues } from '../src/utils/quickPayments';
+import { pricingNotice } from '../src/utils/pricing';
 import { ordersToRemind } from '../src/utils/billReminders';
 import { planBillReminded } from '../src/utils/plans';
 import { formatAmount } from '../src/utils/money';
-import type { Order } from '../src/types';
+import type { MenuItem, Order, RawMaterial } from '../src/types';
 import { withNotificationDefaults } from '../src/utils/quickNotifications';
 import {
   NOTIFICATION_KINDS, planNotifications, readNotificationState, whatIsDue,
@@ -62,7 +63,7 @@ async function visit(deps: NotificationJobDeps, uid: string, summary: JobSummary
   const zone = (look.business as Partial<BakerySettings>).timezone;
   const when = { localDate: todayInZone(zone, nowDate), localTime: timeInZone(zone, nowDate) };
   const dueNow = whatIsDue({ settings: look.settings, state: look.state, ...when });
-  if (!dueNow.morning && !dueNow.dueTomorrow && !dueNow.stock && !dueNow.bills) return;
+  if (!dueNow.morning && !dueNow.dueTomorrow && !dueNow.stock && !dueNow.bills && !dueNow.margins) return;
   if (deps.isEntitled && !(await deps.isEntitled(uid))) return;
 
   // 2. Decide and claim, in one transaction.
@@ -73,7 +74,7 @@ async function visit(deps: NotificationJobDeps, uid: string, summary: JobSummary
     const now = whenFor(business, nowDate);
     // Looked at again with the state as it is now: a run that overlapped this one may have claimed it already.
     const due = whatIsDue({ settings, state, ...now });
-    if (!due.morning && !due.dueTomorrow && !due.stock && !due.bills) return null;
+    if (!due.morning && !due.dueTomorrow && !due.stock && !due.bills && !due.margins) return null;
     const today = await loadTodayView(tx, { today: now.localDate, settings: business as any });
     // Bills sent two days ago and still unpaid, by customer; their orders are marked as reminded in this same transaction.
     const reminded: { id: string; previous: number | null }[] = [];
@@ -92,7 +93,10 @@ async function visit(deps: NotificationJobDeps, uid: string, summary: JobSummary
         unpaidBills = customers.map(e => ({ name: e.customer.name, amount: formatAmount(e.customer.dueTotal, currency) }));
       }
     }
-    const plan = planNotifications({ settings, state, ...now, today, unpaidBills });
+    const pricing = due.margins
+      ? pricingNotice((await tx.all('menu')) as MenuItem[], (await tx.all('materials')) as RawMaterial[], business, now.localDate)
+      : undefined;
+    const plan = planNotifications({ settings, state, ...now, today, unpaidBills, pricing });
     const sendsBills = plan.notifications.some(n => n.kind === 'unpaidBills');
     tx.apply([
       { collection: 'mobileSettings', id: STATE_DOC, merge: false, data: { ...plan.state, updatedAt: deps.now() } },
@@ -146,12 +150,17 @@ const whenFor = (business: unknown, nowDate: Date) => {
 
 /** The state with the given kinds put back as they were before this run claimed them. */
 export function giveBack(current: NotificationState, previous: NotificationState, kinds: Set<NotificationKind>): NotificationState {
-  const next: NotificationState = { sent: { ...current.sent }, lowNotified: { ...current.lowNotified }, useByNotified: { ...current.useByNotified } };
+  const next: NotificationState = { ...current, sent: { ...current.sent }, lowNotified: { ...current.lowNotified }, useByNotified: { ...current.useByNotified }, marginNotified: { ...current.marginNotified } };
   for (const kind of NOTIFICATION_KINDS) {
     if (!kinds.has(kind)) continue;
     if (previous.sent[kind] === undefined) delete next.sent[kind]; else next.sent[kind] = previous.sent[kind];
     if (kind === 'lowStock') next.lowNotified = { ...previous.lowNotified };
     if (kind === 'useBy') next.useByNotified = { ...previous.useByNotified };
+    if (kind === 'marginSlip') next.marginNotified = { ...previous.marginNotified };
+    if (kind === 'priceReview') {
+      next.marginNotified = { ...previous.marginNotified };
+      if (previous.priceReviewNotifiedFor === undefined) delete next.priceReviewNotifiedFor; else next.priceReviewNotifiedFor = previous.priceReviewNotifiedFor;
+    }
   }
   return next;
 }

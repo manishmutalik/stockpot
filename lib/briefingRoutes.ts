@@ -53,6 +53,8 @@ function validPricing(p: unknown): boolean {
     && (r.driver === undefined || (isObject(r.driver) && short(r.driver.name) && short(r.driver.change))));
   const movesOk = p.materialMoves.every((m: any) => isObject(m) && short(m.name) && short(m.change) && (m.window === '30 days' || m.window === '90 days'));
   if (!repricingOk || !movesOk) return false;
+  const rv = p.review;
+  if (rv !== undefined && !(isObject(rv) && short(rv.nextReviewOn) && typeof rv.due === 'boolean' && optionalShort(rv.itemsToReview))) return false;
   const sc = p.scenario;
   if (sc === undefined) return true;
   if (!isObject(sc) || !isObject(sc.assumed) || !isObject(sc.breakEven)) return false;

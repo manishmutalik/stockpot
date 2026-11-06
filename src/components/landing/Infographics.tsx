@@ -39,13 +39,13 @@ const Foot: React.FC<{ lead: string; children: React.ReactNode }> = ({ lead, chi
 export const PriceCreepGraphic: React.FC<{ as?: HeadingTag }> = ({ as }) => (
   <Card
     eyebrow="Example · Butter Croissant" title="Same price. Smaller margin." as={as} labelledBy="ig-creep-title"
-    lede={`Butter went up ${CREEP.butterRisePct}%. The croissant still sells for ${rupees(CREEP.price)}, so the extra cost comes straight out of the margin. Stockpot spots it and suggests the price that wins it back.`}
+    lede={`Butter went up ${CREEP.butterRisePct}%. The croissant still sells for ${rupees(CREEP.price)}, so the extra cost comes straight out of the margin. Stockpot spots it, and at your quarterly price review suggests the price that wins it back.`}
   >
     <div className="ig-creep" role="img" aria-label={creepAriaLabel()}>
       {CREEP_ROWS.map((row, i) => (
         <React.Fragment key={row.id}>
           {i === 1 && <div className="ig-cnote"><span className="pill">Butter +{CREEP.butterRisePct}% · cost +{rupees(CREEP_COST_RISE, 2)} a croissant</span></div>}
-          {i === 2 && <div className="ig-cnote good"><span className="pill">Stockpot suggests {rupees(CREEP.suggestedPrice)}</span></div>}
+          {i === 2 && <div className="ig-cnote good"><span className="pill">Price review suggests {rupees(CREEP.suggestedPrice)}</span></div>}
           <div className="ig-crow" aria-hidden="true">
             <div>
               <div className="ig-clabel-t">{row.label}</div>
@@ -147,7 +147,7 @@ const STEP_NODES = [
   { n: '01', icon: ICONS.ingredients, title: 'Add your ingredients', body: 'What you have and what you paid, in grams, kilos or pieces.', example: ['Unsalted butter', '₹570 / kg'], then: 'cost per gram' },
   { n: '02', icon: ICONS.recipes, title: 'Build your recipes', body: 'Each one is costed for you, with a suggested price.', example: ['Butter Croissant', `${rupees(CREEP.costNow, 2)} · ${CREEP_ROWS[1].marginPct}%`], then: 'cost and price' },
   { n: '03', icon: ICONS.orders, title: 'Take orders and log bakes', body: 'Paste orders from WhatsApp, book ahead, bill with a UPI QR.', example: [`Anita · ${JOURNEY.lines[0].quantity} croissants`, `Balance ${rupees(JOURNEY_BALANCE)}`], then: 'sales, stock, payments' },
-  { n: '04', icon: ICONS.briefing, title: 'Read your morning briefing', body: 'True profit, and what to fix today.', example: ['Raise Butter Croissant', `to ${rupees(CREEP.suggestedPrice)}`], then: '' },
+  { n: '04', icon: ICONS.briefing, title: 'Read your morning briefing', body: 'True profit, and what to fix today.', example: ['Butter Croissant', `margin ${CREEP_ROWS[0].marginPct}% → ${CREEP_ROWS[1].marginPct}%`], then: '' },
 ] as const;
 
 const Arrow: React.FC = () => (
