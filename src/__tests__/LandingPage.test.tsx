@@ -172,6 +172,25 @@ describe('LandingPage', () => {
     if ((TRIAL_DAYS as number) !== 14) expect(text).not.toMatch(/\b14-day|\b14 days/);
   });
 
+  it('shows three infographics where they explain the section around them, each stating its figures in words', () => {
+    const { container } = renderPage();
+    const pictures = [...container.querySelectorAll('[role="img"][aria-label]')].map(el => el.getAttribute('aria-label')!);
+    const byStart = (start: string) => pictures.find(l => l.startsWith(start))!;
+    expect(byStart('Butter Croissant: when priced')).toContain('62% margin');
+    expect(byStart('Butter Croissant: when priced')).toContain('53% margin');
+    expect(byStart('Order of 8 Butter Croissants')).toContain('₹603.04 made');
+    expect(container.querySelectorAll('.ig')).toHaveLength(3);
+    // The price creep under the problem, where the money goes under the three answers, the workflow in how it works
+    const sections = [...container.querySelectorAll('main > section')];
+    expect(sections[0].querySelector('.ig-title')!.textContent).toBe('Same price. Smaller margin.');
+    expect(sections[1].querySelector('.ig-title')!.textContent).toBe('₹1,200 in sales. ₹603 made.');
+    const steps = [...container.querySelectorAll('section#how .ig-node h5')].map(h => h.textContent);
+    expect(steps).toEqual(['Add your ingredients', 'Build your recipes', 'Take orders and log bakes', 'Read your morning briefing']);
+    // The price is suggested at the quarterly review, never as a one-tap change
+    expect(sections[0].textContent).toContain('Price review suggests ₹185');
+    expect(container.textContent).not.toContain('From a WhatsApp message to paid in full');
+  });
+
   it('does not repeat design claims the app does not back up', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
