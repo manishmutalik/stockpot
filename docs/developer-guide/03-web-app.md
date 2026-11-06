@@ -153,16 +153,19 @@ Pure functions, one concern per file, each with a header comment. Grouped by pur
 
 ## Landing page
 
-`src/LandingPage.tsx` is a long marketing page: hero, problem, features, how it works, pricing, FAQ, footer.
+`src/LandingPage.tsx` is the marketing page: hero (the app on a laptop, tablet and phone), the problem in a sentence, three
+answers, how it works (WhatsApp message to bill, on three phones), features, pricing, waitlist, FAQ, a closing call to
+action and the footer. The look is quiet: white and pale grey sections, centred headlines, black buttons, teal only for the
+logo and small details.
 
-- Copy is in the file (constants like `PROBLEM_LINES`, `FEATURE_CARDS`, `FAQS`). `src/__tests__/LandingPage.test.tsx` pins
+- Copy is in the file (constants like `ANSWERS`, `STEPS`, `FEATURES`, `FAQS`). `src/__tests__/LandingPage.test.tsx` pins
   important phrases, so a copy change may need a test change.
-- The four infographics are HTML/CSS (not images) in `src/components/landing/Infographics.tsx`. Their numbers and bar
-  widths come from `figures.ts`, which is unit tested; each has a text alternative (`role="img"` with an `aria-label`
-  stating the figures). They size themselves with CSS container queries (styles in `src/index.css`, classes `ig-*`).
-- Motion (reveal on scroll, parallax, tilt) respects `prefers-reduced-motion` (`wantsLessMotion()`).
+- The figures in `ANSWERS` are the demo kitchen's own, the same ones the screenshots show. Recapture the screenshots and
+  update them together.
+- Sections rise into view (`Reveal` in `src/components/landing/motion.tsx`), which respects `prefers-reduced-motion` (`wantsLessMotion()`).
 - The free-trial length shown on the page is `TRIAL_DAYS` from `src/utils/trial.ts`. Never hard-code "14 days" or "45 days".
-- Images are in `public/landing/` (`hero-kitchen`, `laptop-pricing`, `pastries`, `sourdough`).
+- Images are in `public/landing/`: `app-*.webp` are captures of the app on the demo kitchen (dashboard, orders, a pre-order
+  filled from a WhatsApp message, its details, and the bill), and `logo-tagline.webp` is the full logo for the footer.
 
 ## Adding a feature (the checklist)
 

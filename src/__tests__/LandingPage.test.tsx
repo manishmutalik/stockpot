@@ -42,7 +42,7 @@ describe('LandingPage', () => {
 
   it('links the nav and footer to the sections of the page', () => {
     const { container } = renderPage();
-    for (const id of ['features', 'how', 'pricing', 'faq']) {
+    for (const id of ['how', 'features', 'pricing', 'faq']) {
       expect(container.querySelector(`section#${id}`)).not.toBeNull();
       expect(container.querySelector(`a[href="#${id}"]`)).not.toBeNull();
     }
@@ -58,14 +58,11 @@ describe('LandingPage', () => {
     const { container } = renderPage();
     const sectionsWithJoin = [...container.querySelectorAll('main > section')]
       .map(sec => !!sec.querySelector('a[href="#waitlist"]'));
-    // Hero, problem, features, how it works, pricing and the closing section each carry one
-    expect(sectionsWithJoin.filter(Boolean).length).toBeGreaterThanOrEqual(6);
-    // and no two sections in a row go without one, apart from the waitlist itself and the FAQ before the closing
+    // Hero, three answers, features, pricing and the closing section each carry one
+    expect(sectionsWithJoin.filter(Boolean).length).toBeGreaterThanOrEqual(5);
+    // and no two sections in a row go without one
     const gaps = sectionsWithJoin.join(',').split('true').map(run => run.split('false').length - 1);
     expect(Math.max(...gaps)).toBeLessThanOrEqual(2);
-    for (const line of ['Sound familiar? Be first to try Stockpot.', 'Seen enough? The first 25 customers get a founding discount.', 'Ready when it opens? Get on the list.']) {
-      expect(container.textContent).toContain(line);
-    }
   });
 
   it('hides the price before launch, and offers the first 25 customers a founding discount instead', () => {
@@ -76,25 +73,11 @@ describe('LandingPage', () => {
     const pricing = container.querySelector('#pricing')!.textContent ?? '';
     expect(pricing).toContain('Pricing at launch');
     expect(pricing).toContain('Founding offer: the first 25 customers get a special discount.');
+    expect(pricing).toContain('Promote: photos made ready for Instagram');
     expect(text).toContain('Is there a launch offer?');
     expect(text).not.toMatch(/\$\d/);
     expect(text).not.toMatch(/₹499/);
     expect(text).not.toMatch(/\+\s*18%\s*GST|incl(uding|usive of)\s+GST/i);
-  });
-
-  it('shows Promote: an example post, labelled as one, and what Promote does', () => {
-    const { container } = renderPage();
-    const features = container.querySelector('#features')!;
-    expect(screen.getByRole('heading', { name: 'Turn a photo of your food into a post' })).toBeTruthy();
-    expect(features.textContent).toContain('Example post');
-    expect(screen.getByAltText(/an example post/i).getAttribute('src')).toBe('/landing/pastries.webp');
-    for (const step of ['Take or choose a photo', 'Ready for Instagram', 'Caption and hashtags', 'Style with AI', 'Share in a tap']) {
-      expect(features.textContent).toContain(step);
-    }
-    // The food is never said to be changed, and no real phone number is shown
-    expect(features.textContent).toMatch(/touched up, never changed/);
-    expect(features.textContent).not.toMatch(/\d{5}\s?\d{5}/);
-    expect(container.querySelector('#pricing')!.textContent).toContain('Promote: photos made ready for Instagram');
   });
 
   it('makes no invented claims: no testimonials or made-up statistics', () => {
@@ -109,97 +92,83 @@ describe('LandingPage', () => {
     expect(container.textContent ?? '').not.toMatch(/no credit card/i);
   });
 
-  it('only shows screenshots and photos that ship with the app, each described', () => {
+  it('shows the real app, captured on the demo kitchen, every screenshot described', () => {
     const { container } = renderPage();
     const shots = [...container.querySelectorAll('img')].filter(img => img.getAttribute('src')?.startsWith('/landing/'));
     const srcs = shots.map(img => img.getAttribute('src'));
-    for (const name of ['hero-kitchen', 'laptop-pricing', 'pastries', 'sourdough']) {
+    for (const name of ['app-dashboard', 'app-orders', 'app-preorder-message', 'app-preorder-details', 'app-bill', 'logo-tagline']) {
       expect(srcs).toContain(`/landing/${name}.webp`);
     }
     shots.forEach(img => {
       expect(img.getAttribute('src')).toMatch(/^\/landing\/[a-z-]+\.webp$/);
-      // product screenshots carry real alt text; purely decorative photos are hidden from readers
-      const decorative = img.getAttribute('aria-hidden') === 'true';
-      expect(decorative ? img.getAttribute('alt') === '' : !!img.getAttribute('alt')).toBe(true);
+      expect(img.getAttribute('alt')).toBeTruthy();
     });
-    expect(screen.getByAltText(/dashboard open on a tablet/i)).toBeTruthy();
-    expect(screen.getByAltText(/menu on a laptop/i)).toBeTruthy();
+    expect(screen.getByAltText(/dashboard on a laptop/i)).toBeTruthy();
+    expect(screen.getByAltText(/orders on a tablet/i)).toBeTruthy();
+    expect(screen.getByAltText(/anita's bill/i)).toBeTruthy();
   });
 
-  it('does not reference the old screenshots that were removed', () => {
+  it('does not reference screenshots and photos that were removed', () => {
     const { container } = renderPage();
-    for (const old of ['dashboard', 'dashboard-capture', 'device-laptop', 'device-phone', 'add-item', 'add-order', 'gst', 'inventory', 'orders', 'production', 'recipes', 'rnd', 'wastage', 'banner-wide', 'banner-tablet', 'phone-order', 'phone-bill']) {
+    for (const old of ['hero-kitchen', 'laptop-pricing', 'pastries', 'sourdough', 'dashboard', 'orders', 'phone-bill']) {
       expect(container.querySelector(`img[src="/landing/${old}.webp"]`)).toBeNull();
     }
   });
 
-  it('covers the features in words, one line each, with no bullet lists', () => {
+  it('covers the features in words, one line each', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
     for (const phrase of [
-      'Take orders the way customers send them',
-      "Paste a WhatsApp message and Stockpot fills in the order, advance and all. The bill's UPI QR asks only for what's still due.",
-      'Know how much money every order made',
-      'Ingredients, packaging, delivery, discounts and fees come off every order, so the profit you see is the profit you keep.',
-      'Know when your margins slip',
-      'When an ingredient gets dearer, Stockpot shows which items slipped and why. Once a quarter, it suggests new prices for all of them together.',
-      'A briefing every morning.',
-      'Stock that keeps itself up to date.',
+      'Take orders the way customers send them.',
+      'Paste a WhatsApp message and Stockpot fills in the order, advance and all.',
+      'Money made on every order',
+      'Margin alerts, quarterly prices',
+      'Know the day butter eats your margin. Every quarter, set new prices for all of it at once.',
+      'A briefing every morning',
+      'Stock that keeps up',
+      'Photos into posts',
       'Built for India: rupees, GST, UPI, WhatsApp, and grams to litres.',
     ]) {
       expect(text).toContain(phrase);
     }
-    expect(container.querySelectorAll('section#features ul')).toHaveLength(0);
-    for (const gone of ['Get paid without chasing', 'Customers worth a message', 'Shopify and Odoo orders imported too']) expect(text).not.toContain(gone);
+    expect(container.querySelectorAll('section#features h3')).toHaveLength(6);
+    // No price is suggested for an item outside the quarterly review, so the page never says it is
+    expect(text).not.toMatch(/suggests a price that wins|Use ₹/);
   });
 
-  it('shows the four infographics, each with a text alternative that states its figures', () => {
+  it('walks through an order from a WhatsApp message to a bill, in three steps', () => {
     const { container } = renderPage();
-    const pictures = [...container.querySelectorAll('[role="img"][aria-label]')].map(el => el.getAttribute('aria-label')!);
-    const byStart = (start: string) => pictures.find(l => l.startsWith(start))!;
-    expect(byStart('Butter Croissant: when priced')).toContain('62% margin');
-    expect(byStart('Butter Croissant: when priced')).toContain('53% margin');
-    expect(byStart('Butter Croissant: when priced')).toContain('suggested ₹185');
-    expect(byStart('Order total ₹2,520')).toContain('₹2,020 balance');
-    expect(byStart('Order of 8 Butter Croissants')).toContain('₹603.04 made');
-    // the fourth is real text: the steps, in order, with what passes between them and the re-costing loop
-    const steps = [...container.querySelectorAll('section#how .ig-node h5')].map(h => h.textContent);
-    expect(steps).toEqual(['Add your ingredients', 'Build your recipes', 'Take orders and log bakes', 'Read your morning briefing']);
-    expect(container.querySelector('section#how')!.textContent).toContain('every recipe that uses it is re-costed');
-    expect(container.querySelectorAll('.ig')).toHaveLength(4);
+    const steps = [...container.querySelectorAll('section#how ol > li h3')].map(h => h.textContent);
+    expect(steps).toEqual(['Paste the message', 'Check and book', 'Send the bill']);
   });
 
-  it('puts each infographic where the content plan says: the price creep under the problem headline, two in features, the flow in how it works', () => {
+  it("answers the three morning questions with the demo kitchen's own figures, which add up", () => {
     const { container } = renderPage();
-    expect(container.querySelectorAll('section#features .ig')).toHaveLength(2);
-    expect(container.querySelectorAll('section#how .ig')).toHaveLength(1);
-    const problem = container.querySelector('section.border-y .ig')!;
-    expect(problem.querySelector('.ig-title')!.textContent).toBe('Same price. Smaller margin.');
-    expect(container.querySelector('section#features .ig-title')!.textContent).toBe('From a WhatsApp message to paid in full');
-  });
-
-  it('shows the hero promise, the price and four quick facts', () => {
-    const { container } = renderPage();
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('The CFO of your food business');
     const text = container.textContent ?? '';
-    expect(text).toContain('Know exactly how much money your food business makes.');
-    expect(text).not.toContain('Know exactly what your food business makes');
+    for (const title of ['How much money you made', 'What needs restocking', 'Whose order is due']) expect(text).toContain(title);
+    // ₹3,600 of sales, less ₹1,428 and ₹1,070, is the ₹1,102 the dashboard screenshot shows
+    for (const figure of ['₹3,600', '−₹1,428', '−₹1,070', '₹1,102']) expect(text).toContain(figure);
+    expect(3600 - 1428 - 1070).toBe(1102);
+  });
+
+  it('shows the hero promise and the founding offer', () => {
+    const { container } = renderPage();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Stop guessing how much money you made.');
+    const text = container.textContent ?? '';
     expect(text).toContain('For home bakers, home chefs, tiffin services and small cloud kitchens');
     expect(text).toContain('Stockpot tracks your ingredients, orders and costs, and shows what every order actually earns you');
-    expect(text).toContain('Busy every day. Still not sure how much money you made?');
+    expect(text).toContain('Busy every day, still not sure how much money you made?');
     expect(text).toContain('The first 25 customers get a special founding discount.');
-    for (const fact of ['Per-dish', 'UPI + QR', 'Auto-fill', 'Live Alerts']) expect(text).toContain(fact);
-    expect(text).toContain('₹743.04');
-    expect(screen.getByRole('link', { name: /see how it works/i }).getAttribute('href')).toBe('#how');
   });
 
-  it('closes on the same promise, pointing to the demo while sign-ups are not open', () => {
+  it('closes on the promise and signs off as the CFO of your food business, pointing to the demo while sign-ups are not open', () => {
     const { container } = renderPage();
     const text = container.textContent ?? '';
-    expect(container.querySelector('section.bg-ink h2')!.textContent).toBe('Know exactly how much money your food business makes.');
+    expect(screen.getByRole('heading', { name: 'Stop guessing. Start knowing.' })).toBeTruthy();
+    expect(container.querySelector('footer')!.textContent).toContain('The CFO of your food business.');
+    expect(screen.getByAltText('Stockpot: inventory and margin tracking')).toBeTruthy();
     expect(text).toContain('Stockpot is launching soon. Explore the demo kitchen today');
     expect(text).toContain('Can I try it before I pay?Stockpot is launching soon.');
-    // the content plan was written for a 14-day trial; the server's is TRIAL_DAYS, and the page must match checkout
     if ((TRIAL_DAYS as number) !== 14) expect(text).not.toMatch(/\b14-day|\b14 days/);
   });
 
@@ -235,18 +204,12 @@ describe('LandingPage', () => {
     expect(document.documentElement.style.scrollBehavior).toBe(before);
   });
 
-  it('lays the FAQ out in two columns, in order, with every question present', () => {
+  it('lists every question in one column, in order', () => {
     const { container } = renderPage();
     const buttons = [...container.querySelectorAll('section#faq button[aria-expanded]')].map(b => b.textContent);
     expect(buttons).toHaveLength(11);
-    const columns = [...container.querySelectorAll('section#faq .md\\:grid-cols-2 > div')];
-    expect(columns).toHaveLength(2);
-    const names = columns.map(col => [...col.querySelectorAll('button[aria-expanded]')].map(b => b.textContent));
-    expect(names[0]).toHaveLength(6);
-    expect(names[1]).toHaveLength(5);
-    expect(names[0][0]).toBe('Do I need a GST number?');
-    expect(names[1][4]).toBe('Can I try it before I pay?');
-    expect([...names[0], ...names[1]]).toEqual(buttons);
+    expect(buttons[0]).toBe('Do I need a GST number?');
+    expect(buttons[10]).toBe('Can I try it before I pay?');
   });
 
   it('puts every footer link in the footer nav, and keeps the copyright', () => {
@@ -257,78 +220,21 @@ describe('LandingPage', () => {
   });
 });
 
-describe('LandingPage motion', () => {
-  const realMatchMedia = window.matchMedia;
-  afterEach(() => {
-    window.matchMedia = realMatchMedia;
-    Object.defineProperty(window, 'scrollY', { value: 0, configurable: true });
-  });
+describe('LandingPage header', () => {
+  afterEach(() => { Object.defineProperty(window, 'scrollY', { value: 0, configurable: true }); });
   const scrollTo = (y: number) => act(async () => {
     Object.defineProperty(window, 'scrollY', { value: y, configurable: true });
     window.dispatchEvent(new Event('scroll'));
     await new Promise(r => requestAnimationFrame(() => r(null)));
   });
-  const mockMotion = (reduced: boolean) => {
-    window.matchMedia = ((query: string) => ({
-      matches: query.includes('prefers-reduced-motion') ? reduced : true,
-      media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false,
-    })) as unknown as typeof window.matchMedia;
-  };
 
-  it('puts a shadow on the header once the page has scrolled, and takes it off at the top', async () => {
+  it('draws a line under the header once the page has scrolled, and takes it off at the top', async () => {
     const { container } = renderPage();
     const header = container.querySelector('header')!;
-    expect(header.className).not.toContain('shadow-md');
+    expect(header.className).not.toContain('shadow-');
     await scrollTo(200);
-    expect(header.className).toContain('shadow-md');
+    expect(header.className).toContain('shadow-');
     await scrollTo(0);
-    expect(header.className).not.toContain('shadow-md');
-  });
-
-  it('drifts the hero glow with the scroll', async () => {
-    mockMotion(false);
-    const { container } = renderPage();
-    const glow = container.querySelector('section div[aria-hidden="true"]') as HTMLElement;
-    await scrollTo(500);
-    expect(glow.style.transform).toBe('translate3d(0, 90.0px, 0)');
-  });
-
-  it('keeps everything still for a visitor who asked for reduced motion', async () => {
-    mockMotion(true);
-    const { container } = renderPage();
-    const glow = container.querySelector('section div[aria-hidden="true"]') as HTMLElement;
-    await scrollTo(500);
-    expect(glow.style.transform).toBe('');
-    for (const img of container.querySelectorAll('img[src="/landing/pastries.webp"], img[src="/landing/sourdough.webp"]')) {
-      expect((img as HTMLElement).style.transform).toBe('');
-    }
-    // the tilt does nothing either
-    const tilt = container.querySelector('.landing-tilt') as HTMLElement;
-    fireEvent.mouseMove(tilt, { clientX: 10, clientY: 10 });
-    await act(async () => { await new Promise(r => requestAnimationFrame(() => r(null))); });
-    expect(tilt.style.transform).toBe('');
-  });
-
-  it('tilts toward the mouse and settles back when it leaves', async () => {
-    mockMotion(false);
-    const { container } = renderPage();
-    const tilt = container.querySelector('.landing-tilt') as HTMLElement;
-    tilt.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 100, right: 200, bottom: 100, x: 0, y: 0, toJSON() {} }) as DOMRect;
-    fireEvent.mouseMove(tilt, { clientX: 200, clientY: 0 });
-    await act(async () => { await new Promise(r => requestAnimationFrame(() => r(null))); });
-    expect(tilt.style.transform).toContain('rotateX(5.00deg) rotateY(5.00deg)');
-    fireEvent.mouseLeave(tilt);
-    expect(tilt.style.transform).toBe('');
-  });
-  it('puts a moving backdrop behind each content section, and food icons around the hero, all hidden from screen readers', () => {
-    const { container } = renderPage();
-    for (const id of ['features', 'how', 'pricing', 'waitlist', 'faq']) {
-      const backdrop = container.querySelector(`section#${id} > [data-backdrop]`);
-      expect(backdrop, id).not.toBeNull();
-      expect(backdrop!.getAttribute('aria-hidden')).toBe('true');
-    }
-    const icons = container.querySelectorAll('main > section:first-child [class*="landing-bob-"]');
-    expect(icons.length).toBeGreaterThanOrEqual(4);
-    icons.forEach(icon => expect(icon.closest('[aria-hidden="true"]')).not.toBeNull());
+    expect(header.className).not.toContain('shadow-');
   });
 });
