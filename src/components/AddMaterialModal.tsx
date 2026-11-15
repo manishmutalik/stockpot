@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Check, Plus } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Check, Plus, TriangleAlert } from 'lucide-react';
 import { ModalShell, MODAL_LABEL, modalField } from './ModalShell';
 import { isCountedByThePiece } from '../utils/kitchenMeasures';
+import { similarItems } from '../utils/duplicates';
 
 export interface AddMaterialFields {
   name: string;
@@ -19,15 +20,24 @@ interface AddMaterialModalProps {
   onChange: (field: keyof AddMaterialFields, value: string) => void;
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
+  /** The items already in the inventory, to say when the name is one of them. */
+  existing?: { id: string; name: string; category: string }[];
+  /** Restock an item already there instead of adding it again. */
+  onRestockExisting?: (id: string) => void;
 }
 
 /**
  * Form for adding one raw material to the category being browsed. State and the save handler live in App.
  * Until a unit is chosen here, it follows the name: something counted, not weighed (eggs), is in pieces; anything else
  * keeps the unit the form opened with.
+ * As the name is typed it is checked against the inventory (utils/duplicates): an item already there ("Chini" when there
+ * is "Sugar") is named, with a button to restock it instead; one that may be the same is asked about. Adding is never
+ * blocked: "Salted Butter" and "Unsalted Butter" are two things.
  */
-export function AddMaterialModal({ category, currency, fields, onChange, onSubmit, onClose }: AddMaterialModalProps) {
+export function AddMaterialModal({ category, currency, fields, onChange, onSubmit, onClose, existing = [], onRestockExisting }: AddMaterialModalProps) {
   const [unitChosen, setUnitChosen] = useState(false);
+  const { same, maybe } = useMemo(() => similarItems(fields.name, existing), [fields.name, existing]);
+  const twin = same[0] ?? maybe[0];
   const [openedWith] = useState(fields.unit);
   const changeName = (name: string) => {
     onChange('name', name);
@@ -60,7 +70,7 @@ export function AddMaterialModal({ category, currency, fields, onChange, onSubmi
             className="flex-1 h-12 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md shadow-primary/20 flex items-center justify-center gap-2"
           >
             <Check size={18} />
-            Add Item
+            {same.length > 0 ? 'Add anyway' : 'Add Item'}
           </button>
         </div>
       }
@@ -75,8 +85,26 @@ export function AddMaterialModal({ category, currency, fields, onChange, onSubmi
           value={fields.name}
           onChange={(e) => changeName(e.target.value)}
           placeholder="e.g. All-Purpose Flour"
+          aria-describedby={twin ? 'mat-name-twin' : undefined}
           className={`${modalField()} font-semibold`}
         />
+        {twin && (
+          <div id="mat-name-twin" role="status" className={`mt-2 flex items-start gap-2 rounded-lg px-3 py-2 text-sm ${same.length > 0 ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-stone-50 text-muted border border-stone-200'}`}>
+            <TriangleAlert size={16} className="shrink-0 mt-0.5" aria-hidden="true" />
+            <div className="min-w-0">
+              <p>
+                {same.length > 0
+                  ? <>You already have <strong>{twin.name.trim()}</strong>{twin.category ? ` in ${twin.category}` : ''}.</>
+                  : <>Is this the same as <strong>{twin.name.trim()}</strong>{twin.category ? ` in ${twin.category}` : ''}?</>}
+              </p>
+              {onRestockExisting && (
+                <button type="button" onClick={() => onRestockExisting(twin.id)} className="mt-1 font-semibold text-primary hover:underline">
+                  Restock {twin.name.trim()} instead
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>

@@ -77,4 +77,33 @@ describe('AddMaterialModal', () => {
     fireEvent.click(screen.getByRole('button', { name: /Add Item/ }));
     expect(props.onSubmit).toHaveBeenCalledTimes(1);
   });
+
+  describe('an item already in the inventory', () => {
+    const existing = [{ id: 's', name: 'Sugar', category: 'Pantry' }, { id: 'b', name: 'Amul Butter', category: 'Dairy' }];
+    const show = (name: string) => {
+      const onRestockExisting = vi.fn();
+      const props = { category: 'Dairy', currency: { symbol: '$' }, fields: { ...empty, name }, onChange: vi.fn(), onSubmit: vi.fn(), onClose: vi.fn(), existing, onRestockExisting };
+      render(<AddMaterialModal {...props} />);
+      return onRestockExisting;
+    };
+
+    it('says so, offers to restock it instead, and still lets the owner add it', () => {
+      const onRestockExisting = show('Chini');
+      expect(screen.getByRole('status').textContent).toBe('You already have Sugar in Pantry.Restock Sugar instead');
+      expect(screen.getByRole('button', { name: 'Add anyway' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Restock Sugar instead' }));
+      expect(onRestockExisting).toHaveBeenCalledWith('s');
+    });
+
+    it('asks when the name may be the same item', () => {
+      show('Butter');
+      expect(screen.getByRole('status').textContent).toMatch(/^Is this the same as Amul Butter in Dairy\?/);
+      expect(screen.getByRole('button', { name: 'Add Item' })).toBeTruthy();
+    });
+
+    it('says nothing for a new name', () => {
+      show('Saffron');
+      expect(screen.queryByRole('status')).toBeNull();
+    });
+  });
 });

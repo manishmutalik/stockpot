@@ -13,10 +13,12 @@ import { reorderSuggestions } from '../utils/reorder';
 import { materialPriceStats, recipesAffectedBy } from '../utils/pricing';
 import { todayInZone } from '../utils/localDate';
 import { getExpiryInfo, getParDeficitPercent, getStockStatus, StockStatus } from '../utils/inventoryStatus';
+import { duplicatesOf, similarItems } from '../utils/duplicates';
+import { nameList } from '../utils/deleteWarnings';
 
 const PAGE_SIZE = 15;
 
-type StatusFilter = 'all' | 'ok' | 'reorder' | 'low' | 'expiry';
+type StatusFilter = 'all' | 'ok' | 'reorder' | 'low' | 'expiry' | 'duplicates';
 
 const STATUS_PILL: Record<StockStatus, { label: string; cls: string }> = {
   low: { label: 'Low Stock', cls: 'bg-coral/10 text-coral' },
@@ -29,6 +31,19 @@ const TH = 'px-3 py-3 font-mono text-[10px] font-semibold uppercase tracking-wid
 // Numbers read as plain mono text until hovered/focused, then behave as inputs.
 const CELL_INPUT =
   'bg-transparent border border-transparent hover:border-stone-200 focus:border-primary focus:bg-white rounded-md px-2 py-1 font-mono text-sm text-ink text-right outline-none focus:ring-2 focus:ring-primary/20 transition-colors';
+
+/**
+ * Under an item's name: the items it already is under another name (always shown, so duplicates stand out), or, while
+ * the name is being typed, the ones it may be.
+ */
+const NameTwins: React.FC<{ twins?: { name: string }[]; maybe: { name: string }[] }> = ({ twins, maybe }) => {
+  const names = (list: { name: string }[]) => nameList(list.map(t => t.name.trim()));
+  if (twins && twins.length > 0) {
+    return <p className="mt-1 text-xs font-medium text-amber-700">Also in your inventory as {names(twins)}</p>;
+  }
+  if (maybe.length > 0) return <p className="mt-1 text-xs text-muted">Same as {names(maybe)}?</p>;
+  return null;
+};
 
 export const InventoryView: React.FC<AppViewProps> = (props) => {
   const {
@@ -62,10 +77,16 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
     [remainingInventory]
   );
 
+  // Items that are the same thing under two names ("Chini" and "Sugar"): flagged on their rows and given a filter.
+  const duplicates = useMemo(() => duplicatesOf(remainingInventory), [remainingInventory]);
+  // The row whose name is being typed: it also hears about items that may be the same ("Amul Butter" for "Butter").
+  const [namingId, setNamingId] = useState<string | null>(null);
+
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     return sortedRemainingInventory.filter(m => {
       if (q && !m.name.toLowerCase().includes(q)) return false;
+      if (statusFilter === 'duplicates') return duplicates.has(m.id) && (categoryFilter === 'all' || m.category === categoryFilter);
       if (categoryFilter !== 'all' && m.category !== categoryFilter) return false;
       if (unitFilter !== 'all' && (m.unit || 'g') !== unitFilter) return false;
       if (statusFilter === 'expiry') {
@@ -75,7 +96,7 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
       if (statusFilter !== 'all') return getStockStatus(m.remaining, m.threshold) === statusFilter;
       return true;
     });
-  }, [sortedRemainingInventory, search, categoryFilter, unitFilter, statusFilter]);
+  }, [sortedRemainingInventory, search, categoryFilter, unitFilter, statusFilter, duplicates]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const filterKey = [search, categoryFilter, statusFilter, unitFilter].join('\u0000');
@@ -290,6 +311,15 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
 
       {/* Search / filter / actions */}
       <div className="surface-card p-4 flex flex-col gap-3">
+        {duplicates.size > 0 && statusFilter !== 'duplicates' && (
+          <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-900">
+            <TriangleAlert size={16} className="shrink-0" aria-hidden="true" />
+            <span>{duplicates.size} items look like the same thing under two names.</span>
+            <button type="button" onClick={() => { setSearch(''); setUnitFilter('all'); setStatusFilter('duplicates'); }} className="font-semibold text-primary hover:underline">
+              Show them
+            </button>
+          </div>
+        )}
         <div className="flex flex-col xl:flex-row xl:items-center gap-3">
           <div className="relative flex-1 min-w-0 xl:max-w-md">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
@@ -313,6 +343,7 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
               <option value="reorder">Reorder Soon</option>
               <option value="low">Low Stock</option>
               <option value="expiry">Expiring / Expired</option>
+              <option value="duplicates">Possible duplicates{duplicates.size > 0 ? ` (${duplicates.size})` : ''}</option>
             </select>
             <select aria-label="Filter by unit" value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className={selectCls}>
               <option value="all">All Units</option>
@@ -401,9 +432,15 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
                           aria-label={`Name of ${mat.name}`}
                           value={mat.name || ''}
                           onChange={(e) => updateMaterial(mat.id, 'name', e.target.value)}
+                          onFocus={() => setNamingId(mat.id)}
+                          onBlur={() => setNamingId(id => (id === mat.id ? null : id))}
                           className={`w-full bg-transparent border border-transparent hover:border-stone-200 focus:border-primary focus:bg-white rounded-md px-2 py-1 -mx-2 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20 ${isLow ? 'text-coral' : 'text-ink'}`}
                         />
                       </div>
+                      <NameTwins
+                        twins={duplicates.get(mat.id)}
+                        maybe={namingId === mat.id ? similarItems(mat.name, remainingInventory, mat.id).maybe : []}
+                      />
                     </td>
                     <td className="px-3 py-3">
                       <select

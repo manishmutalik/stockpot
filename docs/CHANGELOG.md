@@ -1,5 +1,21 @@
 # Changelog
 
+## Inventory: duplicate warnings; CSV import updates instead of duplicating
+
+- **"You already have this."** Typing a name in **Add Item** checks it against the inventory (`src/utils/duplicates.ts`):
+  the same name however it is written ("Eggs" and "egg", "Butter 500 g" and "butter"), or names the kitchen table says
+  are one thing ("Chini" and "Sugar", "Maida" and "All purpose flour"), says "You already have Sugar", with **Restock
+  Sugar instead**; the button becomes **Add anyway**. A name that may be the same ("Butter" and "Amul Butter") is asked
+  about. Adding is never blocked.
+- **Duplicates already in the inventory are marked**: "Also in your inventory as Chini" under the name, a notice with
+  the count and **Show them**, and a **Possible duplicates** status filter. While a name is being edited, items it may be
+  are asked about too ("Same as Amul Butter?").
+- **CSV import updates items already there** (`src/utils/inventoryImport.ts`), so importing a file twice doubles
+  nothing. A row for an item you have updates its cost and threshold from the cells filled in (a cost per kg for an
+  item kept in grams is converted, and goes into the price history); its stock is left as it is, since Restock adds stock.
+  A row whose unit is of another kind, or that matches two items already, is skipped with the reason; a name twice in the
+  file is one item, from its last row. The summary says what was added, updated, left and skipped.
+
 ## Every delete asks first
 
 Deleting an inventory item, a menu item, an order or a test-bake session used to happen on one tap. Each now asks first, in

@@ -176,6 +176,28 @@ describe('importing materials from CSV — the price log', () => {
   });
 });
 
+describe('importing materials from CSV — items already there', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it('updates an item already in the inventory instead of adding it again, logs its new price, and says so', async () => {
+    const butter = { id: 'butter', name: 'Butter', unit: 'g', initialStock: 500, costPerUnit: 0.5, category: 'Dairy', threshold: 100, dateAdded: '2026-01-01' } as RawMaterial;
+    csvRows = [{ Name: 'butter', Unit: 'kg', 'Initial Stock': '40', Cost: '600', Threshold: '' }, { Name: 'Saffron', Unit: 'g', 'Initial Stock': '5', Cost: '450', Threshold: '1' }];
+    const showAlert = vi.fn();
+    const { result } = renderHook(() => useInventoryActions([butter], ['Raw Materials'], [], showAlert, vi.fn()));
+    const input = { target: { files: [new File([''], 'm.csv')], value: '' } } as unknown as Parameters<ReturnType<typeof useInventoryActions>['handleImportCSV']>[0];
+    await act(async () => { result.current.handleImportCSV(input, 'Raw Materials'); });
+    await vi.waitFor(() => expect(showAlert).toHaveBeenCalled());
+
+    const writes = batchSet.mock.calls as [{ path: string }, Record<string, unknown>, unknown?][];
+    const butterWrite = writes.find(([ref]) => ref.path.endsWith('/materials/butter'));
+    expect(butterWrite?.[1]).toEqual({ costPerUnit: 0.6 }); // per g; the stock is not touched
+    expect(butterWrite?.[2]).toEqual({ merge: true });
+    expect(writes.filter(([ref]) => ref.path.includes('/materials/'))).toHaveLength(2);
+    expect(logWrites().map(c => c[1])).toContainEqual(expect.objectContaining({ materialId: 'butter', unit: 'g', unitCost: 0.6, source: 'manual_edit' }));
+    expect(showAlert).toHaveBeenCalledWith('Import done', expect.stringMatching(/^Added 1 new item\. Updated 1 item you already had \(Butter\).*use Restock/));
+  });
+});
+
 describe('editing a cost by hand — the price log', () => {
   beforeEach(() => { vi.clearAllMocks(); vi.useFakeTimers(); setDocMock.mockResolvedValue(undefined); });
   afterEach(() => { vi.useRealTimers(); });
