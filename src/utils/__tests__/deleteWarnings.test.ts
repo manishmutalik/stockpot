@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { experimentDeleteWarning, materialDeleteWarning, menuItemDeleteWarning, nameList, ordersDeleteWarning } from '../deleteWarnings';
+import { experimentDeleteWarning, materialDeleteWarning, menuItemDeleteWarning, mergeWarning, nameList, ordersDeleteWarning } from '../deleteWarnings';
 import type { MenuItem, Order, RecipeExperiment } from '../../types';
 
 describe('nameList', () => {
@@ -52,5 +52,13 @@ describe('what the popup says before a delete', () => {
     expect(experimentDeleteWarning(exp)).toEqual({ title: 'Delete "Eggless sponge"?', message: 'The session and its notes go. This cannot be undone.', confirmLabel: 'Delete' });
     expect(experimentDeleteWarning({ ...exp, parts: [{ itemId: 'b', quantity: 1 }] }).message).toMatch(/go back to stock/);
     expect(experimentDeleteWarning(undefined).title).toBe('Delete this session?');
+  });
+
+  it('asks before a merge, naming both items, with a Merge button', () => {
+    expect(mergeWarning('Sugar', ' Chini ')).toEqual({
+      title: 'Merge Chini into Sugar?',
+      message: 'Its stock, recipes and history move to Sugar, and Chini is deleted. This cannot be undone.',
+      confirmLabel: 'Merge',
+    });
   });
 });

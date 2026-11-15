@@ -1,6 +1,9 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Combine } from 'lucide-react';
 import { ModalShell, MODAL_LABEL, modalField } from './ModalShell';
+import { ConfirmDialog } from './ConfirmDialog';
+import { mergeWarning } from '../utils/deleteWarnings';
 import type { MenuItem, Order, PriceLogEntry, RawMaterial, RecipeExperiment, WastageLog } from '../types';
 import { canMerge, mergeSummary, planMergeMaterials } from '../utils/mergeMaterials';
 import { maybeSameItemName, sameItemName } from '../utils/duplicates';
@@ -10,8 +13,9 @@ type Item = RawMaterial & { remaining?: number };
 /**
  * Merging two inventory items that are one thing (utils/mergeMaterials). Opened from an item: the owner picks the other
  * item (those that look the same first, and only items counted the same way), picks which name to keep, reads what will
- * happen (stock, cost, what moves across, that the other is deleted and it cannot be undone) and presses Merge. This
- * screen is the confirmation: nothing is written until then.
+ * happen (stock, cost, what moves across, that the other is deleted and it cannot be undone) and presses Merge, which
+ * asks once more in the same popup every delete uses ("Merge Chini into Sugar?"). Nothing is written until that is
+ * answered Merge.
  */
 export function MergeMaterialsModal({ from, otherId, materials, menu, experiments, orders, wastageLogs, priceLog, currencySymbol, onMerge, onClose }: {
   from: Item;
@@ -57,6 +61,7 @@ export function MergeMaterialsModal({ from, otherId, materials, menu, experiment
   }, [keep, remove, menu, experiments, orders, wastageLogs, priceLog, currencySymbol]);
 
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const merge = async () => {
     if (!keep || !remove || busy) return;
     setBusy(true);
@@ -81,7 +86,7 @@ export function MergeMaterialsModal({ from, otherId, materials, menu, experiment
           <button type="button" onClick={onClose} className="flex-1 h-12 rounded-xl bg-stone-100 text-ink text-sm font-semibold hover:bg-stone-200 transition-colors">Cancel</button>
           <button
             type="button"
-            onClick={merge}
+            onClick={() => setConfirming(true)}
             disabled={!keep || !remove || !!preview?.error || busy}
             className="flex-1 h-12 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md shadow-primary/20 flex items-center justify-center gap-2"
           >
@@ -132,6 +137,11 @@ export function MergeMaterialsModal({ from, otherId, materials, menu, experiment
           )}
         </div>
       )}
+
+      {confirming && keep && remove && (() => {
+        const w = mergeWarning(keep.name, remove.name);
+        return createPortal(<ConfirmDialog type="confirm" title={w.title} message={w.message} confirmLabel={w.confirmLabel} onConfirm={merge} onClose={() => setConfirming(false)} />, document.body);
+      })()}
     </ModalShell>
   );
 }

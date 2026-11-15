@@ -1,9 +1,10 @@
 /**
  * deleteWarnings.ts
  *
- * What the "Are you sure?" popup says before something is deleted (or, later, merged): the thing's name and what else
- * goes with it, in plain words, so the owner knows what the one tap will undo. Every delete of an item, recipe, order or
- * test bake asks first (the hooks call showConfirm with these); none of them can be undone.
+ * What the "Are you sure?" popup says before something is deleted or merged: the thing's name and what else goes with
+ * it, in plain words, so the owner knows what the one tap will undo. Every delete of an item, recipe, order or test bake
+ * asks first (the hooks call showConfirm with these), and so does every merge of two inventory items
+ * (MergeMaterialsModal); none of them can be undone.
  */
 import type { MenuItem, Order, RecipeExperiment } from '../types';
 import { formatItemQuantity, itemUnit } from './itemUnits';
@@ -77,5 +78,16 @@ export function experimentDeleteWarning(exp: RecipeExperiment | undefined): Warn
     title: `Delete ${exp?.name?.trim() ? `"${exp.name.trim()}"` : 'this session'}?`,
     message: `The session and its notes go.${usedParts ? ' The bases and fillings it used go back to stock.' : ''} ${UNDO}`,
     confirmLabel: 'Delete',
+  };
+}
+
+/** Merging one inventory item into another: the other is deleted once all it had has moved to the kept one. */
+export function mergeWarning(keepName: string, removeName: string): Warning {
+  const keep = named(keepName, 'the item you keep');
+  const remove = named(removeName, 'the other item');
+  return {
+    title: `Merge ${remove} into ${keep}?`,
+    message: `Its stock, recipes and history move to ${keep}, and ${remove} is deleted. ${UNDO}`,
+    confirmLabel: 'Merge',
   };
 }

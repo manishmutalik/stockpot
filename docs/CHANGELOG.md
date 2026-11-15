@@ -1,5 +1,12 @@
 # Changelog
 
+## Merging asks before it merges
+
+- Pressing **Merge** on the merge screen now asks once more, in the same popup every delete uses: "Merge Chini into
+  Sugar? Its stock, recipes and history move to Sugar, and Chini is deleted. This cannot be undone." with **Cancel** and
+  **Merge** (`mergeWarning` in `src/utils/deleteWarnings.ts`). Cancel goes back to the merge screen; nothing is written
+  until the popup's Merge is pressed.
+
 ## Inventory: merge two items into one
 
 - **Merge** (`MergeMaterialsModal`, `src/utils/mergeMaterials.ts`, `useMergeMaterials`): from a duplicate's "Also in your
