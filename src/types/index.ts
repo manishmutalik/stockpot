@@ -611,6 +611,8 @@ export interface AppViewProps {
   deleteCategory: (c: string) => void;
   updateMaterial: (id: string, f: string, v: any) => void;
   deleteMaterial: (id: string) => void;
+  /** Merges one inventory item into another (utils/mergeMaterials); resolves whether it was done. */
+  mergeMaterials: (keepId: string, removeId: string) => Promise<boolean>;
   /** Adds a blank item: one sold on the menu, or (`notForSale`) a base or filling. Resolves its id. */
   addMenuItem: (options?: { notForSale?: boolean }) => Promise<string | undefined> | void;
   updateMenuItem: (id: string, m: any) => void;

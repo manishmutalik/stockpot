@@ -40,6 +40,9 @@ describe('typical weights and names', () => {
     expect(matchMaterialByName('makhan', materials)?.id).toBe('b');
     expect(matchMaterialByName('powdered sugar', materials)?.id).toBe('i');
     expect(matchMaterialByName('cocoa', materials)).toBeNull();
+    // The same name however it is typed: a plural or a pack size
+    expect(matchMaterialByName('Cashews', [{ id: 'c', name: 'Cashew' }])?.id).toBe('c');
+    expect(matchMaterialByName('cocoa powder', [{ id: 'cp', name: 'Cocoa Powder 250 g' }])?.id).toBe('cp');
     expect(matchMaterialByName('fresh cream', [{ id: 'm', name: 'Full Cream Milk' }])).toBeNull();
     // Two butters: the owner chooses
     expect(matchMaterialByName('butter', [...materials, { id: 'b2', name: 'Salted Butter' }])).toBeNull();

@@ -21,6 +21,7 @@
  */
 import { convertAmount } from './conversions';
 import { squash } from './orderParse';
+import { nameKey } from './nameKey';
 import type { ParsedIngredient, RecipeUnit } from './recipeParse';
 
 export const ML_PER = { tsp: 5, tbsp: 15, cup: 240 } as const;
@@ -190,12 +191,13 @@ export function typicalWeightFor(name: string): TypicalWeight | null {
 
 /**
  * The owner's material an ingredient most likely is, by name, when the model found none: the same table entry
- * ("chini" and "Sugar", "makhan" and "Unsalted Butter"), or the same name. Never a different entry ("chini" is not
+ * ("chini" and "Sugar", "makhan" and "Unsalted Butter"), or the same name, however it is typed ("Cashews" and "Cashew"). Never a different entry ("chini" is not
  * "Icing Sugar"), and never when two materials fit equally (then the owner chooses).
  */
 export function matchMaterialByName<M extends { id: string; name: string }>(nameAsWritten: string, materials: M[]): M | null {
-  const target = squash(nameAsWritten);
-  const exact = materials.filter(m => squash(m.name) === target);
+  // The same name however it is typed: "Cashews" is "Cashew", "Butter 500 g" is "butter" (utils/nameKey).
+  const target = nameKey(nameAsWritten);
+  const exact = target ? materials.filter(m => nameKey(m.name) === target) : [];
   if (exact.length === 1) return exact[0];
   const entry = typicalWeightFor(nameAsWritten);
   if (!entry) return null;

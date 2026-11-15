@@ -23,6 +23,7 @@ import { convertAmount } from './conversions';
 import { matchMaterialByName, parseAmount, perItem, resolveLine, suggestMaterialUnit, type LineAnswers, type LineQuestion, type LineResolution } from './kitchenMeasures';
 import { defaultEntryUnit, ENTRY_UNITS, familyOf, fromEntryUnit, inEntryUnit, itemUnit, type EntryUnit, type ItemUnit } from './itemUnits';
 import { squash } from './orderParse';
+import { nameKey } from './nameKey';
 import type { MaterialMemory, NewMaterialInput, RecipeImportItem, RecipeImportLine } from './plans/planRecipes';
 import type { ParsedIngredient, ParsedRecipes } from './recipeParse';
 
@@ -243,8 +244,9 @@ export function batchWeight(draft: RecipeDraft, recipe: DraftRecipe, materials: 
 export function buildDraft(parsed: ParsedRecipes, input: { materials: DraftMaterial[]; menu: DraftMenuItem[]; fromPhotos: boolean; forMenuItemId?: string }): RecipeDraft {
   const newMaterials: DraftNewMaterial[] = [];
   const newKeyFor = (ingredient: ParsedIngredient): string => {
-    const name = squash(ingredient.nameAsWritten);
-    const found = newMaterials.find(n => squash(n.name) === name);
+    // One new item for one name however each recipe typed it ("Cashews", "cashew").
+    const name = nameKey(ingredient.nameAsWritten);
+    const found = newMaterials.find(n => nameKey(n.name) === name);
     if (found) return found.key;
     const key = `n${newMaterials.length + 1}`;
     newMaterials.push({ key, name: capitalise(ingredient.nameAsWritten), unit: suggestMaterialUnit(ingredient), pricePerBuyUnit: null });
@@ -313,7 +315,7 @@ export function lineMaterial(draft: RecipeDraft, line: DraftLine, materials: Dra
 export function chooseLineMaterial(draft: RecipeDraft, line: DraftLine, choice: LineChoice | { kind: 'new_from_line' }): void {
   line.answers = {};
   if (choice.kind !== 'new_from_line') { line.choice = choice; return; }
-  const own = draft.newMaterials.find(n => squash(n.name) === squash(line.ingredient.nameAsWritten));
+  const own = draft.newMaterials.find(n => nameKey(n.name) === nameKey(line.ingredient.nameAsWritten));
   if (own) { line.choice = { kind: 'new', key: own.key }; return; }
   const key = `n${draft.newMaterials.length + 1}`;
   draft.newMaterials.push({ key, name: capitalise(line.ingredient.nameAsWritten), unit: suggestMaterialUnit(line.ingredient), pricePerBuyUnit: null });

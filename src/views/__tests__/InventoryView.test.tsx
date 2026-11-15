@@ -280,4 +280,17 @@ describe('InventoryView duplicates', () => {
     expect(screen.queryByText(/look like the same thing/)).toBeNull();
     expect(screen.queryByText(/Also in your inventory/)).toBeNull();
   });
+
+  it('opens the merge screen from a duplicate, with the other item chosen, and from any row', () => {
+    const mergeMaterials = vi.fn();
+    render(<InventoryView {...makeProps({ items, mergeMaterials, experiments: [], orders: [], wastageLogs: [], priceLog: [], menu: [] })} />);
+    const hint = screen.getByText('Also in your inventory as Chini');
+    fireEvent.click(within(hint).getByRole('button', { name: 'Merge' }));
+    expect((screen.getByLabelText('Merge Sugar with') as HTMLSelectElement).value).toBe('chini');
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByLabelText('Merge Sugar with')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Merge Butter with another item' }));
+    expect((screen.getByLabelText('Merge Butter with') as HTMLSelectElement).value).toBe('amul');
+    expect(mergeMaterials).not.toHaveBeenCalled();
+  });
 });

@@ -3,11 +3,12 @@ import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import {
   AlertCircle, ChevronLeft, ChevronRight, CircleCheck, Download, Package, PackageMinus, Plus,
-  History, RefreshCw, Salad, Search, ShoppingCart, SlidersHorizontal, Trash2, TriangleAlert, Upload, Wallet
+  Combine, History, RefreshCw, Salad, Search, ShoppingCart, SlidersHorizontal, Trash2, TriangleAlert, Upload, Wallet
 } from 'lucide-react';
 import { AppViewProps } from '../types';
 import { UNIT_CONVERSIONS } from '../utils/conversions';
 import { PriceHistoryModal } from '../components/PriceHistoryModal';
+import { MergeMaterialsModal } from '../components/MergeMaterialsModal';
 import { ReorderSuggestions } from '../components/ReorderSuggestions';
 import { reorderSuggestions } from '../utils/reorder';
 import { materialPriceStats, recipesAffectedBy } from '../utils/pricing';
@@ -36,12 +37,16 @@ const CELL_INPUT =
  * Under an item's name: the items it already is under another name (always shown, so duplicates stand out), or, while
  * the name is being typed, the ones it may be.
  */
-const NameTwins: React.FC<{ twins?: { name: string }[]; maybe: { name: string }[] }> = ({ twins, maybe }) => {
+const NameTwins: React.FC<{ twins?: { id: string; name: string }[]; maybe: { id: string; name: string }[]; onMerge: (otherId: string) => void }> = ({ twins, maybe, onMerge }) => {
   const names = (list: { name: string }[]) => nameList(list.map(t => t.name.trim()));
+  // onMouseDown keeps the name box's blur from hiding the link before it is clicked.
+  const merge = (otherId: string) => (
+    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => onMerge(otherId)} className="ml-1.5 font-semibold text-primary hover:underline">Merge</button>
+  );
   if (twins && twins.length > 0) {
-    return <p className="mt-1 text-xs font-medium text-amber-700">Also in your inventory as {names(twins)}</p>;
+    return <p className="mt-1 text-xs font-medium text-amber-700">Also in your inventory as {names(twins)}{merge(twins[0].id)}</p>;
   }
-  if (maybe.length > 0) return <p className="mt-1 text-xs text-muted">Same as {names(maybe)}?</p>;
+  if (maybe.length > 0) return <p className="mt-1 text-xs text-muted">Same as {names(maybe)}?{merge(maybe[0].id)}</p>;
   return null;
 };
 
@@ -52,7 +57,7 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
     currency, inventorySortBy, setInventorySortBy, inventorySortOrder, setInventorySortOrder,
     sortedRemainingInventory, remainingInventory, lowStockItems, refreshData, updateMaterial,
     deleteMaterial, setRestockMaterial, setDiscardTarget, openNutritionEditor, priceLog,
-    menu, productionRuns, wastageLogs, orders
+    menu, productionRuns, wastageLogs, orders, experiments, mergeMaterials
   } = props;
 
   // The material whose price history is open (kept by id, so it follows the material if it is renamed).
@@ -81,6 +86,8 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
   const duplicates = useMemo(() => duplicatesOf(remainingInventory), [remainingInventory]);
   // The row whose name is being typed: it also hears about items that may be the same ("Amul Butter" for "Butter").
   const [namingId, setNamingId] = useState<string | null>(null);
+  // The merge screen: opened from an item, perhaps with the other item chosen (from a duplicate's "Merge").
+  const [mergeFor, setMergeFor] = useState<{ id: string; otherId?: string } | null>(null);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -309,6 +316,26 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
         onRestock={(id) => { const mat = remainingInventory.find(m => m.id === id); if (mat) openRestock(mat); }}
       />
 
+      {mergeFor && (() => {
+        const from = remainingInventory.find(m => m.id === mergeFor.id);
+        return from ? createPortal(
+          <MergeMaterialsModal
+            from={from}
+            otherId={mergeFor.otherId}
+            materials={remainingInventory}
+            menu={menu ?? []}
+            experiments={experiments ?? []}
+            orders={orders ?? []}
+            wastageLogs={wastageLogs ?? []}
+            priceLog={priceLog ?? []}
+            currencySymbol={currency.symbol}
+            onMerge={mergeMaterials}
+            onClose={() => setMergeFor(null)}
+          />,
+          document.body,
+        ) : null;
+      })()}
+
       {/* Search / filter / actions */}
       <div className="surface-card p-4 flex flex-col gap-3">
         {duplicates.size > 0 && statusFilter !== 'duplicates' && (
@@ -440,6 +467,7 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
                       <NameTwins
                         twins={duplicates.get(mat.id)}
                         maybe={namingId === mat.id ? similarItems(mat.name, remainingInventory, mat.id).maybe : []}
+                        onMerge={(otherId) => setMergeFor({ id: mat.id, otherId })}
                       />
                     </td>
                     <td className="px-3 py-3">
@@ -557,6 +585,14 @@ export const InventoryView: React.FC<AppViewProps> = (props) => {
                         >
                           <ShoppingCart size={14} />
                           {isLow && 'Restock'}
+                        </button>
+                        <button
+                          onClick={() => setMergeFor({ id: mat.id })}
+                          className="p-2 rounded-lg text-muted hover:text-primary hover:bg-primary/10 transition-colors"
+                          title="Merge with another item"
+                          aria-label={`Merge ${mat.name} with another item`}
+                        >
+                          <Combine size={16} />
                         </button>
                         <button
                           onClick={() => setHistoryForId(mat.id)}

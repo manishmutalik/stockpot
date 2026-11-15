@@ -1,5 +1,21 @@
 # Changelog
 
+## Inventory: merge two items into one
+
+- **Merge** (`MergeMaterialsModal`, `src/utils/mergeMaterials.ts`, `useMergeMaterials`): from a duplicate's "Also in your
+  inventory as …" or the merge button on any item. Choose the other item (those that look the same first; only items
+  counted the same way: by weight, by volume or in the same unit) and which to keep (by default the one more recipes use,
+  else the older). The screen says what will happen and nothing is written until **Merge** is pressed.
+- The kept item takes both stocks in its unit (500 g joins 2 kg as 2.5 kg) and both stock batches, a cost averaged by
+  stock, the sooner expiry, and the other's threshold, nutrition, allergens, GST rate and spoon/piece weights where it
+  had none. Recipe and test-bake lines move across (one line where a recipe had both), as do what orders took, wastage
+  records and the price history. The other item is then deleted.
+- Written safely: the moved records first, in batches Firestore accepts, then the kept item and the delete together, so
+  stock is never counted twice or lost; a merge that fails part way can be run again.
+- **Reading a recipe (web and phone)** now finds an item however its name is typed (`src/utils/nameKey.ts`): "Cashews"
+  is your "Cashew", "Cocoa powder" your "Cocoa Powder 250 g", and the same new ingredient typed two ways in two recipes
+  is one new item, so reading recipes adds fewer duplicates.
+
 ## Inventory: duplicate warnings; CSV import updates instead of duplicating
 
 - **"You already have this."** Typing a name in **Add Item** checks it against the inventory (`src/utils/duplicates.ts`):

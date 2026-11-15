@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { RecipeSetupView } from '../../../../src/utils/quickApiTypes';
 import { perItem } from '../../../../src/utils/kitchenMeasures';
 import { squash } from '../../../../src/utils/orderParse';
+import { nameKey } from '../../../../src/utils/nameKey';
 import {
   BUY_UNIT, asksWhatItIs, batchShare, batchWeight, chooseLineMaterial, chooseUse, keptPartsOf, lineCostPerItem, lineMaterial, questionPrompt, recipeUnit, resolveDraftLine,
   makesShown, makesUnitOf, makesUnitsFor, setMakes, setMakesUnit, unitChangeNote, usedNewMaterials,
@@ -246,7 +247,7 @@ function IngredientRow({ draft, recipe, line, setup, cost, share, flagged, updat
   const material = lineMaterial(draft, line, materials);
   const ing = line.ingredient;
   const written = [ing.amountAsWritten, ing.unitAsWritten, ing.nameAsWritten].filter(Boolean).join(' ');
-  const ownNew = draft.newMaterials.find(n => squash(n.name) === squash(ing.nameAsWritten));
+  const ownNew = draft.newMaterials.find(n => nameKey(n.name) === nameKey(ing.nameAsWritten));
   const chosenNew = line.choice.kind === 'new' ? draft.newMaterials.find(n => n.key === (line.choice as { key: string }).key) : undefined;
   const pinned: SheetOption[] = [
     ownNew ? { value: `n:${ownNew.key}`, label: `New: ${ownNew.name}`, hint: 'Added to your stock when you save', icon: 'add-circle-outline' }
