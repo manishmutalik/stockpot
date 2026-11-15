@@ -20,7 +20,7 @@ const menu: any[] = [
   { id: 'cake', name: 'Cake', sellingPrice: 200, recipe: line, pricedAt: '2026-06-01', costAtPricing: 40, materialCostsAtPricing: { butter: 400 }, pricingIsBaseline: true },
   { id: 'brownie', name: 'Brownie', sellingPrice: 200, recipe: line, pricedAt: '2026-06-01', costAtPricing: 40, materialCostsAtPricing: { butter: 400 } },
 ];
-const actions = () => renderHook(() => useMenuActions(menu, materials, [], vi.fn(), { today: () => '2026-11-02' })).result.current;
+const actions = () => renderHook(() => useMenuActions(menu, materials, [], vi.fn(), vi.fn(), { today: () => '2026-11-02' })).result.current;
 
 describe('applyPriceReview', () => {
   beforeEach(() => { batch.set.mockReset(); batch.commit.mockReset().mockResolvedValue(undefined); });
@@ -45,7 +45,7 @@ describe('applyPriceReview', () => {
   it('costs an item through its parts when stamping', async () => {
     const base = { id: 'base', name: 'Base', sellingPrice: 0, notForSale: true, recipe: line };
     const layered = { id: 'layered', name: 'Layered', sellingPrice: 300, recipe: [], parts: [{ itemId: 'base', quantity: 1 }] };
-    const { result } = renderHook(() => useMenuActions([base, layered] as any, materials, [], vi.fn(), { today: () => '2026-11-02' }));
+    const { result } = renderHook(() => useMenuActions([base, layered] as any, materials, [], vi.fn(), vi.fn(), { today: () => '2026-11-02' }));
     await result.current.applyPriceReview([{ menuItemId: 'layered', newPrice: 400 }]);
     expect(batch.set.mock.calls[0][1].costAtPricing).toBeGreaterThan(0);
   });

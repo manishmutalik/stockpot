@@ -3,16 +3,17 @@ import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 /**
  * The small alert / confirm popup behind showAlert() and showConfirm().
- * `confirm` warns (coral) and offers Cancel + Delete; `alert` is a single OK.
+ * `confirm` warns (coral) and offers Cancel and the action (`confirmLabel`, Delete unless given); `alert` is a single OK.
  */
 export function ConfirmDialog({
-  type, title, message, onConfirm, onClose,
+  type, title, message, onConfirm, onClose, confirmLabel = 'Delete',
 }: {
   type: 'alert' | 'confirm';
   title: string;
   message: string;
-  onConfirm?: () => void;
+  onConfirm?: () => void | Promise<void>;
   onClose: () => void;
+  confirmLabel?: string;
 }) {
   const isConfirm = type === 'confirm';
   return (
@@ -38,12 +39,12 @@ export function ConfirmDialog({
             </button>
           )}
           <button
-            onClick={() => { onConfirm?.(); onClose(); }}
+            onClick={() => { void onConfirm?.(); onClose(); }}
             className={`flex-1 h-11 rounded-xl text-white text-sm font-semibold transition-colors shadow-md ${
               isConfirm ? 'bg-coral hover:opacity-90 shadow-coral/20' : 'bg-primary hover:bg-primary-dark shadow-primary/20'
             }`}
           >
-            {isConfirm ? 'Delete' : 'OK'}
+            {isConfirm ? confirmLabel : 'OK'}
           </button>
         </div>
       </div>

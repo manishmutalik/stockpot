@@ -246,6 +246,7 @@ import {
   RecipeExperiment,
   BakerySettings,
   AppUser,
+  type ShowConfirm,
 } from './types';
 export type { InventoryBatch, WastageLog, Order, QuickIngredient };
 export { getDefaultRecipeUnit };
@@ -549,8 +550,9 @@ function BakeryApp() {
     show: boolean;
     title: string;
     message: string;
-    onConfirm?: () => void;
+    onConfirm?: () => void | Promise<void>;
     type: 'alert' | 'confirm';
+    confirmLabel?: string;
   }>({ show: false, title: '', message: '', type: 'alert' });
   const [notifications, setNotifications] = useState<{ id: string, message: string, type: 'low-stock' }[]>([]);
   // Tracks the previous count of low-stock items to detect newly-triggered alerts.
@@ -756,9 +758,10 @@ function BakeryApp() {
    * @param title     - Modal heading.
    * @param message   - Body text to display.
    * @param onConfirm - Callback invoked when the user clicks the confirm button.
+   * @param confirmLabel - The confirm button's word (Delete unless given; Merge for a merge).
    */
-  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
-    setModalConfig({ show: true, title, message, onConfirm, type: 'confirm' });
+  const showConfirm: ShowConfirm = (title, message, onConfirm, confirmLabel) => {
+    setModalConfig({ show: true, title, message, onConfirm, type: 'confirm', confirmLabel });
   };
 
   const [showSaveFeedback, setShowSaveFeedback] = useState(false);
@@ -798,7 +801,7 @@ function BakeryApp() {
     addMenuItem, updateMenuItem, updateMenuItemField, stampPricingBaselines, applyPriceReview, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder, setCountedIn,
     copyMenuItem, addIngredientToRecipe, addQuickIngredientsToRecipe,
     updateRecipeIngredient, removeIngredientFromRecipe,
-  } = useMenuActions(menu, materials, orders, showAlert, { today: () => todayInZone(settings.timezone) });
+  } = useMenuActions(menu, materials, orders, showAlert, showConfirm, { today: () => todayInZone(settings.timezone) });
 
   // Items priced before pricing stamps existed get a baseline stamp once, when the business's data has arrived,
   // so margin drift is tracked from that day on (and labelled "tracking since", not guessed at).
@@ -833,7 +836,7 @@ function BakeryApp() {
   // ── Order Actions ────────────────────────────────────────────────────────────
   // Extracted to src/hooks/useOrderActions.ts as part of the Phase 4 breakup.
   const {
-    addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders,
+    addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, deleteOrders, resetOrders,
   } = useOrderActions(menu, orders, orderDate, showConfirm, showAlert, materials, settings.paymentFeeRates, {
     // Booking, advances and cancellations are dated in the business's own time zone, and an advance is compared with the total including GST.
     today: () => todayInZone(settings.timezone),
@@ -852,7 +855,7 @@ function BakeryApp() {
     addExperiment, updateExperiment, deleteExperiment,
     addMaterialToExperiment, removeMaterialFromExperiment, updateExperimentMaterial,
     addPartToExperiment, updateExperimentPart, restartExperimentPart, removePartFromExperiment,
-  } = useExperimentActions(experiments, materials, menu);
+  } = useExperimentActions(experiments, materials, menu, showConfirm);
 
   // ── Wastage / Discard Actions ────────────────────────────────────────────────
   // Extracted to src/hooks/useWastageActions.ts as part of the Phase 4 breakup.
@@ -1381,7 +1384,7 @@ function BakeryApp() {
     removeMaterialFromExperiment, addPartToExperiment, updateExperimentPart, restartExperimentPart, removePartFromExperiment, copyMenuItem, addIngredientToRecipe,
     addQuickIngredientsToRecipe, updateRecipeIngredient, removeIngredientFromRecipe, logProductionRun,
     deleteProductionRun, deleteProductionRunSession, handleDiscardBatch,
-    addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, resetOrders, saveSettings,
+    addOrderGroup, fulfillOrder, cancelPreorder, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, deleteOrders, resetOrders, saveSettings,
     handleRestock, showSaveFeedback, saveDay,
     updateCurrency, updateSettingsField, handleLogout, convertAmount,
     billing, cancelSubscription, isCancelling, startCheckout, isStartingCheckout,
@@ -1859,6 +1862,7 @@ function BakeryApp() {
             title={modalConfig.title}
             message={modalConfig.message}
             onConfirm={modalConfig.onConfirm}
+            confirmLabel={modalConfig.confirmLabel}
             onClose={() => setModalConfig({ ...modalConfig, show: false })}
           />
         )}

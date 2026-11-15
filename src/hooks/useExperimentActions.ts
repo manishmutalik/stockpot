@@ -12,14 +12,16 @@
  */
 import { auth, db, doc, setDoc, deleteDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { ItemPart, MenuItem, RecipeExperiment, RawMaterial } from '../types';
+import { ItemPart, MenuItem, RecipeExperiment, RawMaterial, type ShowConfirm } from '../types';
+import { experimentDeleteWarning } from '../utils/deleteWarnings';
 
 const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
 export function useExperimentActions(
   experiments: RecipeExperiment[],
   materials: RawMaterial[],
-  menu: MenuItem[] = []
+  menu: MenuItem[],
+  showConfirm: ShowConfirm
 ) {
   /**
    * Saves an experiment's bases and fillings (`parts`) and, in the same write, takes what more it now uses of each from
@@ -128,8 +130,13 @@ export function useExperimentActions(
     }
   };
 
-  /** Removes an experiment document from Firestore, giving the bases and fillings it used back to stock. */
-  const deleteExperiment = async (id: string) => {
+  /** Removes an experiment document from Firestore after asking, giving the bases and fillings it used back to stock. */
+  const deleteExperiment = (id: string) => {
+    const { title, message, confirmLabel } = experimentDeleteWarning(experiments.find(e => e.id === id));
+    showConfirm(title, message, () => removeExperiment(id), confirmLabel);
+  };
+
+  const removeExperiment = async (id: string) => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     const exp = experiments.find(e => e.id === id);

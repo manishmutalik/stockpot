@@ -373,7 +373,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
   const {
     orders, menu, currency, settings, orderFilterStart, setOrderFilterStart, orderFilterEnd, setOrderFilterEnd,
     setIsAddOrderModalOpen, shopifyStatus, importShopifyOrders, isImportingShopify, odooStatus,
-    importOdooOrders, isImportingOdoo, fulfillOrder, cancelPreorder, ordersFilterOnOpen, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, materials
+    importOdooOrders, isImportingOdoo, fulfillOrder, cancelPreorder, ordersFilterOnOpen, markOrdersPaid, dismissPaymentClaim, setOrdersPaymentMethod, updateOrder, deleteOrder, deleteOrders, materials
   } = props;
 
   // Which orders currently have their "Delivery Details" section expanded.
@@ -882,11 +882,7 @@ export const OrdersView: React.FC<AppViewProps> = (props) => {
                             </button>
                           )}
                           <button
-                            onClick={() => {
-                              if (window.confirm(`Delete this whole order? This removes all ${cluster.orders.length} items.`)) {
-                                cluster.orders.forEach(o => deleteOrder(o.id));
-                              }
-                            }}
+                            onClick={() => deleteOrders(cluster.orders.map(o => o.id))}
                             title="Delete every item in this order"
                             className="flex items-center gap-1 px-2 py-1 rounded-lg font-mono text-[10px] font-semibold uppercase tracking-wider text-coral hover:bg-coral/10 transition-colors"
                           >

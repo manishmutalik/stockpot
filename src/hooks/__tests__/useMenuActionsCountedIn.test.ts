@@ -18,7 +18,7 @@ const ganache: MenuItem = { id: 'ganache', name: 'Chocolate ganache', sellingPri
 const cake: MenuItem = { id: 'cake', name: 'Truffle cake', sellingPrice: 900, recipe: [] };
 const setup = (menu: MenuItem[]) => {
   const showAlert = vi.fn();
-  const h = renderHook(() => useMenuActions(menu, [], [], showAlert, { today: () => '2026-10-15' })).result.current;
+  const h = renderHook(() => useMenuActions(menu, [], [], showAlert, vi.fn(), { today: () => '2026-10-15' })).result.current;
   return { h, showAlert };
 };
 

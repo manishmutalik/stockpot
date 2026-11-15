@@ -20,7 +20,8 @@
  */
 import { auth, db, doc, setDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial } from '../types';
+import { BakerySettings, MenuItem, Order, PaymentMethod, RawMaterial, type ShowConfirm } from '../types';
+import { ordersDeleteWarning } from '../utils/deleteWarnings';
 import { formatShortDate } from '../utils/localDate';
 import { hasTakenStock, isOpenPreorder } from '../utils/preorders';
 import { stampFor } from '../utils/orderPricing';
@@ -33,7 +34,7 @@ export function useOrderActions(
   menu: MenuItem[],
   orders: Order[],
   orderDate: string,
-  showConfirm: (title: string, message: string, onConfirm: () => void) => void,
+  showConfirm: ShowConfirm,
   showAlert: (title: string, message: string) => void,
   /** Needed to stamp each new order with what its item costs to make right now. */
   materials: RawMaterial[],
@@ -364,23 +365,30 @@ export function useOrderActions(
   };
 
   /**
-   * Deletes an order document, restoring the stock it had claimed back to
-   * `finishedGoodsStock` in the same atomic batch — a deleted order can't
-   * be left permanently holding stock that's no longer claimed by anything.
+   * Deletes orders after asking (what they were and for whom), restoring the stock they had claimed in the same atomic
+   * batch — a deleted order can't be left permanently holding stock that's no longer claimed by anything.
+   * `deleteOrder` is one order; `deleteOrders` a whole multi-item order, with one question for all of it.
    */
-  const deleteOrder = async (id: string) => {
+  const deleteOrders = (ids: string[]) => {
+    const found = ids.map(id => orders.find(o => o.id === id)).filter((o): o is Order => !!o);
+    if (found.length === 0) return;
+    const { title, message, confirmLabel } = ordersDeleteWarning(found, menu);
+    showConfirm(title, message, () => removeOrders(found), confirmLabel);
+  };
+  const deleteOrder = (id: string) => deleteOrders([id]);
+
+  const removeOrders = async (toDelete: Order[]) => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
-    const order = orders.find(o => o.id === id);
     try {
       const batch = writeBatch(db);
-      batch.delete(doc(db, 'users', userId, 'orders', id));
+      for (const order of toDelete) batch.delete(doc(db, 'users', userId, 'orders', order.id));
       // Only an order that took stock gives any back (shelf units, or a made-to-order item's ingredients and parts):
       // deleting a pre-order that never took it must not add phantom units.
-      if (order) addWritesToBatch(batch, userId, planOrderGiveBack({ orders: [order], menu, materials }));
+      addWritesToBatch(batch, userId, planOrderGiveBack({ orders: toDelete, menu, materials }));
       await batch.commit();
     } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, `users/${userId}/orders/${id}`);
+      handleFirestoreError(err, OperationType.DELETE, `users/${userId}/orders/${toDelete.map(o => o.id).join(',')}`);
     }
   };
 
@@ -424,6 +432,7 @@ export function useOrderActions(
     setOrdersPaymentMethod,
     updateOrder,
     deleteOrder,
+    deleteOrders,
     resetOrders,
   };
 }

@@ -17,6 +17,8 @@ import { useOrderActions } from '../useOrderActions';
 import type { MenuItem, Order, RawMaterial } from '../../types';
 
 const showConfirm = vi.fn();
+/** Presses the button on the last confirm popup. */
+const confirmLast = () => showConfirm.mock.calls[showConfirm.mock.calls.length - 1][2]();
 const materials: RawMaterial[] = [];
 
 describe('addOrderGroup — adding a customer order with one or more items', () => {
@@ -310,11 +312,39 @@ describe('deleteOrder — restoring the stock an order had claimed', () => {
       useOrderActions(menu, [order], '2026-01-01', showConfirm, showAlert, materials)
     );
 
-    await result.current.deleteOrder('o1');
+    result.current.deleteOrder('o1');
+    expect(batchDelete).not.toHaveBeenCalled();
+    expect(showConfirm).toHaveBeenLastCalledWith('Delete this order?', expect.stringMatching(/^3 × Cake\. Any stock it took goes back/), expect.any(Function), 'Delete');
+    await confirmLast();
 
     expect(batchDelete).toHaveBeenCalledTimes(1);
     const menuCall = batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('/menu/'));
     expect(menuCall[1].finishedGoodsStock).toBe(7); // 4 + 3
+    expect(batchCommit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('deleteOrders — a whole multi-item order', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('asks once for all its items, then deletes them and gives their stock back in one batch', async () => {
+    const menu: MenuItem[] = [
+      { id: 'cake', name: 'Cake', sellingPrice: 20, recipe: [], finishedGoodsStock: 4 } as MenuItem,
+      { id: 'cookie', name: 'Cookie', sellingPrice: 5, recipe: [], finishedGoodsStock: 1 } as MenuItem,
+    ];
+    const orders: Order[] = [
+      { id: 'a', menuItemId: 'cake', quantity: 2, date: '2026-01-01', customerName: 'Anita', orderGroupId: 'g' },
+      { id: 'b', menuItemId: 'cookie', quantity: 6, date: '2026-01-01', customerName: 'Anita', orderGroupId: 'g' },
+    ];
+    const { result } = renderHook(() => useOrderActions(menu, orders, '2026-01-01', showConfirm, vi.fn(), materials));
+    result.current.deleteOrders(['a', 'b']);
+    expect(showConfirm).toHaveBeenCalledTimes(1);
+    expect(showConfirm).toHaveBeenCalledWith('Delete this whole order?', expect.stringMatching(/^All 2 items for Anita: 2 × Cake and 6 × Cookie\./), expect.any(Function), 'Delete');
+    expect(batchDelete).not.toHaveBeenCalled();
+    await confirmLast();
+    expect(batchDelete).toHaveBeenCalledTimes(2);
     expect(batchCommit).toHaveBeenCalledTimes(1);
   });
 });
@@ -334,7 +364,8 @@ describe('made-to-order orders — giving back and changing what they took', () 
 
   it('deleting gives back the cream and the bases it took, and no finished cakes', async () => {
     const { result } = renderHook(() => useOrderActions(menu, [order], '2026-01-01', showConfirm, vi.fn(), [cream]));
-    await result.current.deleteOrder('o1');
+    result.current.deleteOrder('o1');
+    await confirmLast();
     expect(written('/materials/cream')).toEqual({ initialStock: 1000 });
     expect(written('/menu/base')).toEqual({ finishedGoodsStock: 3 });
     expect(written('/menu/cake')).toBeUndefined();

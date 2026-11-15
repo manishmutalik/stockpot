@@ -21,6 +21,14 @@ describe('ConfirmDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('confirm: names its button for the action, such as Merge', () => {
+    const onConfirm = vi.fn();
+    render(<ConfirmDialog type="confirm" title="Merge Butter?" message="m" onConfirm={onConfirm} onClose={vi.fn()} confirmLabel="Merge" />);
+    expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
   it('alert: a single OK', () => {
     const onClose = vi.fn();
     render(<ConfirmDialog type="alert" title="Saved" message="All done." onClose={onClose} />);
