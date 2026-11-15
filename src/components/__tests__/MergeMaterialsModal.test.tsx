@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MergeMaterialsModal } from '../MergeMaterialsModal';
 import type { MenuItem, RawMaterial } from '../../types';
 
@@ -10,6 +10,12 @@ const chini = mk('chini', 'Chini', { initialStock: 500, costPerUnit: 0.05 });
 const jaggery = mk('jaggery', 'Jaggery', { unit: 'kg', initialStock: 1, costPerUnit: 80 });
 const eggs = mk('eggs', 'Eggs', { unit: 'pcs', initialStock: 30, costPerUnit: 7 });
 const menu = [{ id: 'cake', name: 'Cake', sellingPrice: 500, recipe: [{ materialId: 'chini', amount: 50, unit: 'g' }] }] as MenuItem[];
+
+/** Presses Merge on the merge screen, then Merge in the "are you sure?" popup. */
+const confirmMerge = () => {
+  fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Merge' }));
+};
 
 const open = (from: RawMaterial, onMerge = vi.fn().mockResolvedValue(true), otherId?: string) => {
   const onClose = vi.fn();
@@ -36,14 +42,29 @@ describe('MergeMaterialsModal', () => {
     expect(status.textContent).toContain('Moves to Sugar: 1 recipe.');
     expect(status.textContent).toContain('Chini is then deleted. This cannot be undone.');
     expect(onMerge).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
+    confirmMerge();
     expect(onMerge).toHaveBeenCalledWith('sugar', 'chini');
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
+  it('asks before merging, and Cancel in that question merges nothing', () => {
+    const { onMerge, onClose } = open(sugar);
+    fireEvent.click(screen.getByRole('radio', { name: /^Sugar/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
+    const ask = screen.getByRole('alertdialog', { name: 'Merge Chini into Sugar?' });
+    expect(ask.textContent).toContain('Its stock, recipes and history move to Sugar, and Chini is deleted. This cannot be undone.');
+    expect(onMerge).not.toHaveBeenCalled();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(onMerge).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    // The merge screen is still open, to choose again or cancel.
+    expect(screen.getByLabelText('Merge Sugar with')).toBeTruthy();
+  });
+
   it('stays open if the merge did not go through', async () => {
     const { onClose } = open(sugar, vi.fn().mockResolvedValue(false));
-    fireEvent.click(screen.getByRole('button', { name: 'Merge' }));
+    confirmMerge();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Merge' })).toBeTruthy());
     expect(onClose).not.toHaveBeenCalled();
   });
