@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+import { deleteDoc } from '../../firebase';
 
 const setDocMock = vi.fn();
 const batchSet = vi.fn();
@@ -17,7 +18,7 @@ vi.mock('../../utils/apiClient', () => ({ apiFetch: vi.fn() }));
 vi.mock('papaparse', () => ({ default: { parse: (_f: any, opts: any) => opts.complete({ data: csvRows }) } }));
 
 import { useInventoryActions, COST_EDIT_LOG_DELAY_MS } from '../useInventoryActions';
-import type { RawMaterial } from '../../types';
+import type { MenuItem, RawMaterial } from '../../types';
 
 const materialWrite = () => batchSet.mock.calls.find(([ref]: any[]) => ref.path.includes('/materials/'))!;
 const logWrites = () => batchSet.mock.calls.filter(([ref]: any[]) => ref.path.includes('/priceLog/'));
@@ -249,5 +250,33 @@ describe('editing a cost by hand — the price log', () => {
     unmount();
     expect(logCalls()).toHaveLength(1);
     expect(logCalls()[0][1].unitCost).toBe(52);
+  });
+});
+
+describe('deleteMaterial', () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  const butter = { id: 'butter', name: 'Unsalted Butter', unit: 'g', initialStock: 500, costPerUnit: 0.6, category: 'Raw Materials', dateAdded: '2026-01-01' } as RawMaterial;
+  const menu = [
+    { id: 'croissant', name: 'Croissant', sellingPrice: 80, recipe: [{ materialId: 'butter', amount: 20, unit: 'g' }, { materialId: 'flour', amount: 50, unit: 'g' }] },
+    { id: 'bread', name: 'Bread', sellingPrice: 60, recipe: [{ materialId: 'flour', amount: 300, unit: 'g' }] },
+  ] as MenuItem[];
+
+  it('asks first, naming the recipes it is in, and deletes nothing until the owner says yes', async () => {
+    const showConfirm = vi.fn();
+    const { result } = renderHook(() => useInventoryActions([butter], ['Raw Materials'], menu, vi.fn(), showConfirm));
+    result.current.deleteMaterial('butter');
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(showConfirm).toHaveBeenCalledWith(
+      'Delete Unsalted Butter?',
+      'It is in 1 recipe: Croissant. It will be taken out of it, so its cost will no longer count it. This cannot be undone.',
+      expect.any(Function),
+      'Delete',
+    );
+    await showConfirm.mock.calls[0][2]();
+    expect(vi.mocked(deleteDoc).mock.calls[0][0]).toMatchObject({ path: expect.stringMatching(/users\/user1\/materials\/butter$/) });
+    const menuWrite = (id: string) => (setDocMock.mock.calls as [{ path: string }, MenuItem][]).find(([ref]) => ref.path.endsWith(`/menu/${id}`));
+    expect(menuWrite('croissant')?.[1].recipe).toEqual([{ materialId: 'flour', amount: 50, unit: 'g' }]);
+    expect(menuWrite('bread')).toBeUndefined();
   });
 });

@@ -21,8 +21,9 @@ const cake: MenuItem = { id: 'cake', name: 'Pineapple Cream Cake', sellingPrice:
 const half: MenuItem = { id: 'half', name: 'Pineapple Cream Cake ½ kg', sellingPrice: 500, recipe: [] };
 const setup = (menu: MenuItem[]) => {
   const showAlert = vi.fn();
-  const h = renderHook(() => useMenuActions(menu, materials, [], showAlert, { today: () => '2026-10-14' })).result.current;
-  return { h, showAlert };
+  const showConfirm = vi.fn();
+  const h = renderHook(() => useMenuActions(menu, materials, [], showAlert, showConfirm, { today: () => '2026-10-14' })).result.current;
+  return { h, showAlert, showConfirm };
 };
 
 describe('parts in the menu actions', () => {
@@ -42,11 +43,15 @@ describe('parts in the menu actions', () => {
   });
 
   it('will not delete a base other items are made from, and says which', async () => {
-    const { h, showAlert } = setup([base, cake, half]);
-    await h.deleteMenuItem('base');
+    const { h, showAlert, showConfirm } = setup([base, cake, half]);
+    h.deleteMenuItem('base');
+    expect(showConfirm).not.toHaveBeenCalled();
     expect(deleteDoc).not.toHaveBeenCalled();
     expect(showAlert).toHaveBeenCalledWith('Still in use', expect.stringMatching(/used in Pineapple Cream Cake/));
-    await h.deleteMenuItem('half');
+    h.deleteMenuItem('half');
+    expect(deleteDoc).not.toHaveBeenCalled();
+    expect(showConfirm).toHaveBeenCalledWith('Delete Pineapple Cream Cake ½ kg?', 'Its recipe goes with it. This cannot be undone.', expect.any(Function), 'Delete');
+    await showConfirm.mock.calls[0][2]();
     expect(deleteDoc).toHaveBeenCalledTimes(1);
   });
 

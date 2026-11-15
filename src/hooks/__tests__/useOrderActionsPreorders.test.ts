@@ -20,6 +20,8 @@ import type { MenuItem, Order, RawMaterial } from '../../types';
 const TODAY = '2026-10-04';
 const DUE = '2026-10-06';
 const showConfirm = vi.fn();
+/** Presses the button on the last confirm popup. */
+const confirmLast = () => showConfirm.mock.calls[showConfirm.mock.calls.length - 1][2]();
 const flour: RawMaterial = { id: 'flour', name: 'Flour', unit: 'kg', initialStock: 50, costPerUnit: 40, category: 'Raw Materials', dateAdded: '2026-01-01' } as RawMaterial;
 
 const menuOf = (stock: { cake?: number; cookie?: number } = {}): MenuItem[] => [
@@ -47,20 +49,24 @@ beforeEach(() => { vi.clearAllMocks(); });
 describe('deleteOrder never adds back stock an order did not take', () => {
   it('a pre-order not yet handed over gives nothing back', async () => {
     const p = preorder({ quantity: 3 });
-    await hook(menuOf({ cake: 5 }), [p]).deleteOrder(p.id);
+    hook(menuOf({ cake: 5 }), [p]).deleteOrder(p.id);
+    expect(batchDelete).not.toHaveBeenCalled();
+    await confirmLast();
     expect(batchDelete).toHaveBeenCalledTimes(1);
     expect(writes('menu')).toHaveLength(0);
   });
 
   it('a pre-order that was handed over gives its stock back', async () => {
     const p = preorder({ quantity: 3, stockClaimed: true, fulfilled: true });
-    await hook(menuOf({ cake: 5 }), [p]).deleteOrder(p.id);
+    hook(menuOf({ cake: 5 }), [p]).deleteOrder(p.id);
+    await confirmLast();
     expect(stockWrite('cake')).toBe(8);
   });
 
   it('an ordinary order, old or new, gives its stock back as it always did', async () => {
     const legacy = order({ quantity: 4 });
-    await hook(menuOf({ cake: 1 }), [legacy]).deleteOrder(legacy.id);
+    hook(menuOf({ cake: 1 }), [legacy]).deleteOrder(legacy.id);
+    await confirmLast();
     expect(stockWrite('cake')).toBe(5);
   });
 
@@ -68,8 +74,11 @@ describe('deleteOrder never adds back stock an order did not take', () => {
     const cancelledStock = order({ quantity: 4, cancelledOn: TODAY });
     const cancelledPre = preorder({ quantity: 2, stockClaimed: true, cancelledOn: TODAY });
     const h = hook(menuOf({ cake: 1 }), [cancelledStock, cancelledPre]);
-    await h.deleteOrder(cancelledStock.id);
-    await h.deleteOrder(cancelledPre.id);
+    h.deleteOrder(cancelledStock.id);
+    await confirmLast();
+    h.deleteOrder(cancelledPre.id);
+    await confirmLast();
+    expect(batchDelete).toHaveBeenCalledTimes(2);
     expect(writes('menu')).toHaveLength(0);
   });
 });

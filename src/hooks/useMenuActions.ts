@@ -12,7 +12,8 @@
  */
 import { auth, db, doc, setDoc, deleteDoc, deleteField, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
-import { MenuItem, RawMaterial, Order, IngredientRequirement, ItemPart, ItemUnitByMeasure, QuickIngredient, getDefaultRecipeUnit } from '../types';
+import { MenuItem, RawMaterial, Order, IngredientRequirement, ItemPart, ItemUnitByMeasure, QuickIngredient, getDefaultRecipeUnit, type ShowConfirm } from '../types';
+import { menuItemDeleteWarning } from '../utils/deleteWarnings';
 import { needsBaselineStamp, pricingStamp } from '../utils/pricing';
 import { DEFAULT_TIME_ZONE, todayInZone } from '../utils/localDate';
 import { costView, itemsUsing, partsOf, wouldLoop } from '../utils/itemParts';
@@ -24,6 +25,7 @@ export function useMenuActions(
   materials: RawMaterial[],
   orders: Order[],
   showAlert: (title: string, message: string) => void,
+  showConfirm: ShowConfirm,
   options: { today?: () => string } = {}
 ) {
   const today = options.today ?? (() => todayInZone(DEFAULT_TIME_ZONE));
@@ -157,12 +159,10 @@ export function useMenuActions(
   };
 
   /**
-   * Deletes a menu item and all associated sales orders from Firestore.
-   * Cascading order deletion prevents orphaned records.
+   * Deletes a menu item and all associated sales orders from Firestore, after asking (saying how many orders go with
+   * it). Cascading order deletion prevents orphaned records.
    */
-  const deleteMenuItem = async (id: string) => {
-    if (!auth.currentUser) return;
-    const userId = auth.currentUser.uid;
+  const deleteMenuItem = (id: string) => {
     // An item other items are made from (a sponge base) cannot go while they use it: their costs would quietly drop.
     const users = itemsUsing(menu, id);
     if (users.length > 0) {
@@ -170,6 +170,13 @@ export function useMenuActions(
       showAlert('Still in use', `${menu.find(m => m.id === id)?.name ?? 'This item'} is used in ${names}. Remove it from ${users.length === 1 ? 'that item' : 'those items'} first.`);
       return;
     }
+    const { title, message, confirmLabel } = menuItemDeleteWarning(menu.find(m => m.id === id)?.name, orders.filter(o => o.menuItemId === id).length);
+    showConfirm(title, message, () => removeMenuItem(id), confirmLabel);
+  };
+
+  const removeMenuItem = async (id: string) => {
+    if (!auth.currentUser) return;
+    const userId = auth.currentUser.uid;
     try {
       await deleteDoc(doc(db, 'users', userId, 'menu', id));
       const ordersToDelete = orders.filter(o => o.menuItemId === id);

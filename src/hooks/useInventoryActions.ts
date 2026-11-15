@@ -16,7 +16,8 @@ import Papa from 'papaparse';
 import { auth, db, doc, setDoc, deleteDoc, writeBatch } from '../firebase';
 import { handleFirestoreError, OperationType } from '../utils/firestoreError';
 import { apiFetch } from '../utils/apiClient';
-import { RawMaterial, MenuItem } from '../types';
+import { RawMaterial, MenuItem, type ShowConfirm } from '../types';
+import { materialDeleteWarning } from '../utils/deleteWarnings';
 import { newPriceLogEntry } from '../utils/priceLog';
 import { planRestock } from '../utils/plans';
 import { addWritesToBatch } from '../utils/plans/clientCommit';
@@ -32,7 +33,7 @@ export function useInventoryActions(
   categories: string[],
   menu: MenuItem[],
   showAlert: (title: string, message: string) => void,
-  showConfirm: (title: string, message: string, onConfirm: () => void) => void
+  showConfirm: ShowConfirm
 ) {
   // ── Restock Modal State ──────────────────────────────────────────────────
   const [restockMaterial, setRestockMaterial] = useState<RawMaterial | null>(null);
@@ -446,10 +447,16 @@ export function useInventoryActions(
   };
 
   /**
-   * Deletes a material document from Firestore, then removes it from any
-   * recipes that reference it.
+   * Deletes a material after asking (naming the recipes it will be taken out of), then removes it from any recipes
+   * that reference it.
    */
-  const deleteMaterial = async (id: string) => {
+  const deleteMaterial = (id: string) => {
+    const usedIn = menu.filter(item => item.recipe.some(r => r.materialId === id)).map(item => item.name);
+    const { title, message, confirmLabel } = materialDeleteWarning(materials.find(m => m.id === id)?.name, usedIn);
+    showConfirm(title, message, () => removeMaterial(id), confirmLabel);
+  };
+
+  const removeMaterial = async (id: string) => {
     if (!auth.currentUser) return;
     const userId = auth.currentUser.uid;
     try {

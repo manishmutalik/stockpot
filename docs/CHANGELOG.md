@@ -1,5 +1,20 @@
 # Changelog
 
+## Every delete asks first
+
+Deleting an inventory item, a menu item, an order or a test-bake session used to happen on one tap. Each now asks first, in
+the app's own popup, and says what goes with it (`src/utils/deleteWarnings.ts`):
+
+- **Inventory item**: names the recipes it will be taken out of, whose costs then stop counting it.
+- **Menu item**: says how many of its orders are deleted with it, and that those sales leave the reports.
+- **Order**: what it was and for whom ("12 × Croissant for Anita"); stock it took goes back. **Delete All** on a multi-item
+  order asks once for all of it (`deleteOrders`) and deletes it in one write, where it used to ask in a browser box and then
+  delete item by item.
+- **Test bake**: its bases and fillings go back to stock.
+
+The question is asked inside the delete actions themselves (the hooks), so any new delete button asks too. The popup's
+button can be named for the action (`confirmLabel`, Delete unless given), ready for merging duplicate items.
+
 ## Quarterly price review
 
 A food business cannot change its menu every time an ingredient price moves, so Stockpot now tells the owner about a slipped

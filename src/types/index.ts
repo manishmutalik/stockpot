@@ -673,6 +673,8 @@ export interface AppViewProps {
   /** Records how already-paid orders were paid. */
   setOrdersPaymentMethod: (ids: string[], method: PaymentMethod) => void;
   deleteOrder: (id: string) => void;
+  /** Deletes several orders (a whole multi-item order) after one confirmation. */
+  deleteOrders: (ids: string[]) => void;
   resetOrders: () => void;
   saveSettings: () => void;
   updateSettingsField: (field: any, value: any) => void;
@@ -736,3 +738,9 @@ export interface AppViewProps {
   setShowAddMaterialModal: (b: boolean) => void;
 
 }
+
+/**
+ * Asks before something that cannot be undone (a delete, a merge): `onConfirm` runs only if the owner presses the
+ * button, whose word is `confirmLabel` (Delete unless given). Shown by App's ConfirmDialog.
+ */
+export type ShowConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>, confirmLabel?: string) => void;

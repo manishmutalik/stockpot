@@ -18,7 +18,7 @@ const materials: any[] = [
 ];
 const recipe = [{ materialId: 'butter', amount: 200, unit: 'g' }, { materialId: 'box', amount: 1, unit: 'pcs' }]; // 110
 const cake = (over: Record<string, any> = {}): any => ({ id: 'cake', name: 'Cake', sellingPrice: 0, recipe, ...over });
-const hook = (menu: any[]) => renderHook(() => useMenuActions(menu, materials, [], vi.fn(), { today: () => '2026-10-05' })).result.current;
+const hook = (menu: any[]) => renderHook(() => useMenuActions(menu, materials, [], vi.fn(), vi.fn(), { today: () => '2026-10-05' })).result.current;
 
 describe('the pricing stamp', () => {
   beforeEach(() => setDoc.mockClear());

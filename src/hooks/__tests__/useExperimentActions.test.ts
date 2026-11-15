@@ -24,13 +24,16 @@ const menu = [
 ] as MenuItem[];
 const exp = (parts?: RecipeExperiment['parts']): RecipeExperiment => ({ id: 'e1', name: 'Trial', date: '2026-10-19', materials: [], ...(parts && { parts }) });
 const stockWrite = (id: string) => batchSet.mock.calls.find(([ref]) => ref.path === `users/user1/menu/${id}`)?.[1];
+/** The confirm popup: records the question; `yes()` presses its button. */
+const ask = vi.fn();
+const yes = () => ask.mock.calls[ask.mock.calls.length - 1][2]();
 const expWrite = () => batchSet.mock.calls.find(([ref]) => ref.path === 'users/user1/experiments/e1')?.[1];
 
 describe('useExperimentActions: bases and fillings', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('adds one with nothing used, and leaves stock alone', async () => {
-    const { result } = renderHook(() => useExperimentActions([exp()], [], menu));
+    const { result } = renderHook(() => useExperimentActions([exp()], [], menu, ask));
     await result.current.addPartToExperiment('e1', 'base');
     expect(expWrite().parts).toEqual([{ itemId: 'base', quantity: 0 }]);
     expect(stockWrite('base')).toBeUndefined();
@@ -38,7 +41,7 @@ describe('useExperimentActions: bases and fillings', () => {
   });
 
   it('takes what more is used from stock, in the same write', async () => {
-    const { result } = renderHook(() => useExperimentActions([exp([{ itemId: 'base', quantity: 1 }, { itemId: 'ganache', quantity: 0.2 }])], [], menu));
+    const { result } = renderHook(() => useExperimentActions([exp([{ itemId: 'base', quantity: 1 }, { itemId: 'ganache', quantity: 0.2 }])], [], menu, ask));
     await result.current.updateExperimentPart('e1', 'base', 3);
     expect(expWrite().parts[0]).toEqual({ itemId: 'base', quantity: 3 });
     expect(stockWrite('base')).toEqual({ finishedGoodsStock: 4 }); // 6 less the 2 more used
@@ -49,26 +52,31 @@ describe('useExperimentActions: bases and fillings', () => {
 
   it('gives it back when the line or the session is removed', async () => {
     const used = [exp([{ itemId: 'base', quantity: 2 }])];
-    const { result } = renderHook(() => useExperimentActions(used, [], menu));
+    const { result } = renderHook(() => useExperimentActions(used, [], menu, ask));
     await result.current.removePartFromExperiment('e1', 'base');
     expect(expWrite().parts).toEqual([]);
     expect(stockWrite('base')).toEqual({ finishedGoodsStock: 8 });
     batchSet.mockClear();
-    await result.current.deleteExperiment('e1');
+    result.current.deleteExperiment('e1');
+    expect(batchDelete).not.toHaveBeenCalled();
+    expect(ask).toHaveBeenLastCalledWith('Delete "Trial"?', expect.stringMatching(/go back to stock/), expect.any(Function), 'Delete');
+    await yes();
     expect(batchDelete).toHaveBeenCalledWith({ path: 'users/user1/experiments/e1' });
     expect(stockWrite('base')).toEqual({ finishedGoodsStock: 8 });
     expect(deleteDoc).not.toHaveBeenCalled();
   });
 
   it('deletes a session with no bases as before', async () => {
-    const { result } = renderHook(() => useExperimentActions([exp()], [], menu));
-    await result.current.deleteExperiment('e1');
+    const { result } = renderHook(() => useExperimentActions([exp()], [], menu, ask));
+    result.current.deleteExperiment('e1');
+    expect(deleteDoc).not.toHaveBeenCalled();
+    await yes();
     expect(deleteDoc).toHaveBeenCalledTimes(1);
     expect(batchCommit).not.toHaveBeenCalled();
   });
 
   it('after a unit change, sets the amount in the new unit and takes it from the cleared stock', async () => {
-    const { result } = renderHook(() => useExperimentActions([exp([{ itemId: 'base', quantity: 300 }])], [], menu));
+    const { result } = renderHook(() => useExperimentActions([exp([{ itemId: 'base', quantity: 300 }])], [], menu, ask));
     await result.current.restartExperimentPart('e1', 'base', 0.3);
     expect(expWrite().parts).toEqual([{ itemId: 'base', quantity: 0.3 }]);
     expect(stockWrite('base')).toEqual({ finishedGoodsStock: -0.3 });
