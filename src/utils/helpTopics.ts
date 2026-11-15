@@ -171,7 +171,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: 'materials', section: 'stock', apps: ['web'],
     title: 'Adding your materials',
     summary: 'Ingredients and packaging, with what you paid, so recipes can be costed.',
-    keywords: ['material', 'ingredient', 'inventory', 'stock', 'add item', 'packaging', 'csv', 'import', 'unit', 'kacha maal'],
+    keywords: ['material', 'ingredient', 'inventory', 'stock', 'add item', 'packaging', 'csv', 'import', 'unit', 'kacha maal', 'duplicate', 'same item'],
     body: [
       steps(
         'Open **Stock / Inventory** and click **Add Item**.',
@@ -180,7 +180,8 @@ export const HELP_TOPICS: HelpTopic[] = [
         'Optional: its category (Raw Materials, Packaging…), the GST you pay on it, and the expiry date of what you have.',
       ),
       points(
-        'Many at once? Click **Template** to download a spreadsheet, fill it in, then **Import CSV**.',
+        'Many at once? Click **Template** to download a spreadsheet, fill it in, then **Import CSV**. An item you already have is updated (its cost and threshold), not added again; its stock stays as it is, so use **Restock** to add to it.',
+        'Typing a name you already have (Chini when you have Sugar) says so, with a button to restock that one instead. Items that look like the same thing under two names are marked in the list; the **Possible duplicates** filter shows them together.',
         'A recipe can use a different unit from the one you buy in (grams of flour you buy by the kg): Stockpot converts.',
         'Packaging (boxes, bags, labels) is a material too, so its cost counts.',
       ),

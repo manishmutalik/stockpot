@@ -1809,6 +1809,14 @@ function BakeryApp() {
           }}
           onSubmit={handleAddMaterialSubmit}
           onClose={() => setShowAddMaterialModal(false)}
+          existing={materials}
+          onRestockExisting={(id) => {
+            const mat = remainingInventory.find(m => m.id === id);
+            if (!mat) return;
+            setShowAddMaterialModal(false);
+            setRestockMaterial(mat);
+            setRestockExpiryDate(mat.expiryDate || '');
+          }}
         />
       )}
 

@@ -19,6 +19,7 @@ import { apiFetch } from '../utils/apiClient';
 import { RawMaterial, MenuItem, type ShowConfirm } from '../types';
 import { materialDeleteWarning } from '../utils/deleteWarnings';
 import { newPriceLogEntry } from '../utils/priceLog';
+import { csvImportSummary, planCsvImport } from '../utils/inventoryImport';
 import { planRestock } from '../utils/plans';
 import { addWritesToBatch } from '../utils/plans/clientCommit';
 // Type-only: erased at build time, so the search functions themselves
@@ -108,48 +109,39 @@ export function useInventoryActions(
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      complete: async (results: any) => {
+      complete: async (results: { data: Record<string, unknown>[] }) => {
         try {
+          // An item already in the inventory is updated, not added again, so importing a file twice doubles nothing.
+          const plan = planCsvImport(results.data, materials, {
+            category: targetCategory,
+            today: new Date().toISOString().split('T')[0],
+            newId: () => Math.random().toString(36).substr(2, 9),
+          });
           const batch = writeBatch(db);
-          let count = 0;
-
-          results.data.forEach((row: any) => {
-            const name = row['Name']?.trim();
-            if (!name) return; // Skip invalid rows
-
-            const id = Math.random().toString(36).substr(2, 9);
-            const newMat: RawMaterial = {
-              id,
-              name,
-              unit: row['Unit']?.trim() || 'g',
-              initialStock: parseFloat(row['Initial Stock']) || 0,
-              costPerUnit: parseFloat(row['Cost']) || 0,
-              category: targetCategory,
-              threshold: parseFloat(row['Threshold']) || 0,
-              dateAdded: new Date().toISOString().split('T')[0]
-            };
-
-            const docRef = doc(db, 'users', userId, 'materials', id);
-            batch.set(docRef, newMat);
+          for (const newMat of plan.create) {
+            batch.set(doc(db, 'users', userId, 'materials', newMat.id), newMat);
             // A material that arrives with a cost starts its price history with it.
             if (newMat.costPerUnit > 0) {
               const entry = newPriceLogEntry({
-                materialId: id, unit: newMat.unit, unitCost: newMat.costPerUnit, macAfter: newMat.costPerUnit, source: 'initial',
+                materialId: newMat.id, unit: newMat.unit, unitCost: newMat.costPerUnit, macAfter: newMat.costPerUnit, source: 'initial',
                 ...(newMat.initialStock > 0 && { quantity: newMat.initialStock }),
               });
               batch.set(doc(db, 'users', userId, 'priceLog', entry.id), entry);
             }
-            count++;
-          });
-
-          if (count > 0) {
-            await batch.commit();
-            showAlert('Success', `Imported ${count} items from CSV.`);
-          } else {
-            showAlert('Warning', 'No valid items found in the CSV. Make sure you have a "Name" column.');
           }
-        } catch (err: any) {
-          showAlert('Error', `Failed to import CSV: ${err.message}`);
+          for (const u of plan.update) {
+            batch.set(doc(db, 'users', userId, 'materials', u.id), u.fields, { merge: true });
+            // A new cost from the file is a price change like one typed in, so it goes in the price history too.
+            if (u.fields.costPerUnit !== undefined) {
+              const entry = newPriceLogEntry({ materialId: u.id, unit: u.unit, unitCost: u.fields.costPerUnit, macAfter: u.fields.costPerUnit, source: 'manual_edit' });
+              batch.set(doc(db, 'users', userId, 'priceLog', entry.id), entry);
+            }
+          }
+          if (plan.create.length + plan.update.length > 0) await batch.commit();
+          const { title, message } = csvImportSummary(plan);
+          showAlert(title, message);
+        } catch (err: unknown) {
+          showAlert('Error', `Failed to import CSV: ${(err as Error)?.message}`);
         }
 
         e.target.value = '';

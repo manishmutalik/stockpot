@@ -249,3 +249,35 @@ describe('InventoryView', () => {
     });
   });
 });
+
+describe('InventoryView duplicates', () => {
+  const items = [mk('sugar', 'Sugar'), mk('chini', 'Chini', { category: 'Pantry' }), mk('butter', 'Butter'), mk('amul', 'Amul Butter'), flour];
+
+  it('flags items that are the same thing under two names, and filters to them', () => {
+    render(<InventoryView {...makeProps({ items })} />);
+    expect(screen.getByText('Also in your inventory as Chini')).toBeTruthy();
+    expect(screen.getByText('Also in your inventory as Sugar')).toBeTruthy();
+    // "Butter" and "Amul Butter" may be two things: not flagged until one is being named.
+    expect(screen.queryByText(/Also in your inventory as (Amul )?Butter/)).toBeNull();
+    const notice = screen.getByRole('status');
+    expect(notice.textContent).toContain('2 items look like the same thing under two names.');
+    fireEvent.click(within(notice).getByRole('button', { name: 'Show them' }));
+    const names = screen.getAllByRole('textbox', { name: /^Name of / }).map(i => (i as HTMLInputElement).value);
+    expect(names.sort()).toEqual(['Chini', 'Sugar']);
+  });
+
+  it('asks about an item that may be the same while its name is being typed', () => {
+    render(<InventoryView {...makeProps({ items })} />);
+    expect(screen.queryByText('Same as Amul Butter?')).toBeNull();
+    fireEvent.focus(screen.getByLabelText('Name of Butter'));
+    expect(screen.getByText('Same as Amul Butter?')).toBeTruthy();
+    fireEvent.blur(screen.getByLabelText('Name of Butter'));
+    expect(screen.queryByText('Same as Amul Butter?')).toBeNull();
+  });
+
+  it('says nothing when there are no duplicates', () => {
+    render(<InventoryView {...makeProps()} />);
+    expect(screen.queryByText(/look like the same thing/)).toBeNull();
+    expect(screen.queryByText(/Also in your inventory/)).toBeNull();
+  });
+});

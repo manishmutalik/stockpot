@@ -74,7 +74,7 @@ parameters, so a hook never keeps a second copy. This is described in `docs/ARCH
 | `useFirestoreCollection` | Generic `onSnapshot` listener for `users/{uid}/<collection>`; returns `[items, setItems, loaded]` |
 | `useSettingsListener` | The single `settings/bakery` document; also fills `categories` and `currency` |
 | `useSettings` | Debounced autosave of settings, the theme-colour CSS variable, explicit save and currency change |
-| `useInventoryActions` | Materials and categories CRUD, CSV import/export, the Restock modal's own state and submit |
+| `useInventoryActions` | Materials and categories CRUD, CSV import (planned by `utils/inventoryImport`: updates items already there) and template, the Restock modal's own state and submit |
 | `useMenuActions` | Menu item CRUD and recipe editing; stamps `pricedAt`/`costAtPricing` when a price changes |
 | `useOrderActions` | Order add/update/delete, hand-over (`fulfillOrder`), cancel pre-order, mark paid, payment method |
 | `useProductionActions` | Logging and deleting production runs, discarding expired batches |
@@ -103,7 +103,7 @@ out money themselves; they call `src/utils/profit.ts` and friends.
 | View | Main content | Key helpers it uses |
 |---|---|---|
 | `SummaryView` | Dashboard: range picker (daily/weekly/monthly/custom), True profit card, sales-to-true-profit breakdown (`ProfitBreakdown`), trend chart, production spend, daily briefing, repricing card, due-tomorrow card | `profit.ts`, `preorders.ts`, `DailyBriefing` |
-| `InventoryView` | Materials table with status pills, restock, price history, reorder suggestions, nutrition, CSV | `inventoryStatus.ts`, `reorder.ts`, `pricing.ts` |
+| `InventoryView` | Materials table with status pills, restock, price history, reorder suggestions, nutrition, CSV, duplicate flags and filter | `inventoryStatus.ts`, `reorder.ts`, `pricing.ts`, `duplicates.ts` |
 | `MenuView` | Menu items, recipe editor with live cost, margin drift, target margin, what-if pricing, nutrition rollup | `pricing.ts`, `menuStats.ts`, `nutritionCalculations.ts` |
 | `OrdersView` | Orders by day, customer panel, pending payments, pre-orders and hand-over, bills, shareable menu PDF | `payments.ts`, `preorders.ts`, `customers.ts`, `billing.ts` |
 | `ProductionView` | Production runs and batches, freshness, discard | `batchStock.ts`, `stockAging.ts`, `productionStats.ts` |
