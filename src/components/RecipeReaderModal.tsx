@@ -5,6 +5,7 @@ import type { MenuItem, RawMaterial } from '../types';
 import type { RecipeReader } from '../hooks/useRecipeReader';
 import { perItem } from '../utils/kitchenMeasures';
 import { squash } from '../utils/orderParse';
+import { nameKey } from '../utils/nameKey';
 import { ENTRY_UNITS, formatItemQuantity, fromEntry, perUnit, toEntry } from '../utils/itemUnits';
 import { RECIPE_MAX_PHOTOS } from '../utils/recipeParse';
 import {
@@ -453,7 +454,7 @@ const IngredientRow: React.FC<{
   const ing = line.ingredient;
   const written = [ing.amountAsWritten, ing.unitAsWritten, ing.nameAsWritten].filter(Boolean).join(' ');
   const value = line.choice.kind === 'existing' ? `e:${line.choice.id}` : line.choice.kind === 'new' ? `n:${line.choice.key}` : 'skip';
-  const ownNew = draft.newMaterials.find(n => squash(n.name) === squash(ing.nameAsWritten));
+  const ownNew = draft.newMaterials.find(n => nameKey(n.name) === nameKey(ing.nameAsWritten));
   const sorted = [...materials].sort((a, b) => a.name.localeCompare(b.name));
 
   const choose = (v: string) => set((l, d) => chooseLineMaterial(d, l,

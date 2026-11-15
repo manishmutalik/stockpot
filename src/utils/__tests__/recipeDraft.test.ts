@@ -23,6 +23,15 @@ const parsed: ParsedRecipes = { recipes: [cupcakes, cream], moreNotRead: false }
 const draftOf = (p: ParsedRecipes = parsed) => buildDraft(p, { materials, menu, fromPhotos: true });
 
 describe('buildDraft', () => {
+  it('makes one new material of a name typed two ways in two recipes, and finds an owned one written in the plural', () => {
+    const a: ParsedRecipe = { ...cupcakes, ingredients: [ing('Cashews', '50', 'g'), ing('Chocolate chip', '30', 'g')] };
+    const b: ParsedRecipe = { ...cream, ingredients: [ing('cashew', '20', 'g')] };
+    const d = draftOf({ recipes: [a, b], moreNotRead: false });
+    expect(d.newMaterials.map(n => n.name)).toEqual(['Cashews']);
+    expect(d.recipes[1].lines[0].choice).toEqual({ kind: 'new', key: 'n1' });
+    expect(d.recipes[0].lines[1].choice).toEqual({ kind: 'existing', id: 'm_chips' });
+  });
+
   it('matches what it can, makes one new material per name across recipes, and leaves a component undecided', () => {
     const d = draftOf();
     const [cup, wc] = d.recipes;

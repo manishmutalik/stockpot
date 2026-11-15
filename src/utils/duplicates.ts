@@ -14,24 +14,10 @@
  *    since "Salted Butter" and "Unsalted Butter" are both butter and still two things.
  * Never the same: two names the table keeps apart ("Sugar" and "Icing Sugar").
  */
-import { squash } from './orderParse';
 import { TYPICAL_WEIGHTS, typicalWeightFor } from './kitchenMeasures';
+import { nameKey } from './nameKey';
 
-/** A pack size or count written into a name: "500 g", "1kg", "2 l", "12 pcs", or a bare number. */
-const PACK_SIZE = /(^|\s)\d+(?:\.\d+)?\s*(?:kg|kgs|g|gm|gms|gram|grams|ml|l|ltr|litre|litres|liter|liters|pc|pcs|piece|pieces)?(?=\s|$)/g;
-
-/** One word in the singular: "eggs" is "egg", "berries" "berry", "tomatoes" "tomato"; "glass" stays. */
-function singular(word: string): string {
-  if (word.length > 4 && word.endsWith('ies')) return `${word.slice(0, -3)}y`;
-  if (word.length > 4 && word.endsWith('oes')) return word.slice(0, -2);
-  if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) return word.slice(0, -1);
-  return word;
-}
-
-/** A name with case, spacing, punctuation, pack sizes and plurals set aside: what two names of one item share. */
-export function nameKey(name: string): string {
-  return squash(name).replace(PACK_SIZE, ' ').split(/\s+/).filter(Boolean).map(singular).join(' ');
-}
+export { nameKey };
 
 /** Which kitchen-table thing a name is, when the name is exactly one of that thing's names. */
 const SYNONYM_OF = (() => {

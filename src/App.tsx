@@ -99,6 +99,7 @@ import { describeAuthError } from './utils/authErrors';
 import { buildDemoData } from './utils/demoData';
 import { newPriceLogEntry } from './utils/priceLog';
 import { AddMaterialModal } from './components/AddMaterialModal';
+import { useMergeMaterials } from './hooks/useMergeMaterials';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { DiscardModal } from './components/DiscardModal';
 import { PriceReviewModal } from './components/PriceReviewModal';
@@ -866,6 +867,9 @@ function BakeryApp() {
     discardReason, setDiscardReason, handleDiscard,
   } = useWastageActions(materials, menu, showAlert);
 
+  // Merging two inventory items that are one thing: src/hooks/useMergeMaterials.ts.
+  const { mergeMaterials } = useMergeMaterials({ materials, menu, experiments, orders, wastageLogs, priceLog, showAlert });
+
   const filteredProductionRuns = useMemo(() => {
     return productionRuns.filter(r => r.date >= summaryDateStart && r.date <= summaryDateEnd);
   }, [productionRuns, summaryDateStart, summaryDateEnd]);
@@ -1378,7 +1382,7 @@ function BakeryApp() {
     user, isAlertDismissed, setIsAlertDismissed, isExpiredAlertDismissed, setIsExpiredAlertDismissed,
     inventoryUsage, summaryInventoryUsage, remainingInventory, sortedRemainingInventory, lowStockItems,
     summaryFinancials, activeOrdersCount, averageOrderValue, financials, chartData, handleRangeChange,
-    refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial,
+    refreshData, addMaterial, addCategory, deleteCategory, updateMaterial, deleteMaterial, mergeMaterials,
     addMenuItem, updateMenuItem, updateMenuItemField, deleteMenuItem, clearFinishedGoodsStock, setItemParts, setBatchSize, setMadeToOrder, setCountedIn,
     addExperiment, updateExperiment, deleteExperiment, addMaterialToExperiment, updateExperimentMaterial,
     removeMaterialFromExperiment, addPartToExperiment, updateExperimentPart, restartExperimentPart, removePartFromExperiment, copyMenuItem, addIngredientToRecipe,

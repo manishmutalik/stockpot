@@ -171,7 +171,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     id: 'materials', section: 'stock', apps: ['web'],
     title: 'Adding your materials',
     summary: 'Ingredients and packaging, with what you paid, so recipes can be costed.',
-    keywords: ['material', 'ingredient', 'inventory', 'stock', 'add item', 'packaging', 'csv', 'import', 'unit', 'kacha maal', 'duplicate', 'same item'],
+    keywords: ['material', 'ingredient', 'inventory', 'stock', 'add item', 'packaging', 'csv', 'import', 'unit', 'kacha maal', 'duplicate', 'same item', 'merge', 'combine'],
     body: [
       steps(
         'Open **Stock / Inventory** and click **Add Item**.',
@@ -182,6 +182,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       points(
         'Many at once? Click **Template** to download a spreadsheet, fill it in, then **Import CSV**. An item you already have is updated (its cost and threshold), not added again; its stock stays as it is, so use **Restock** to add to it.',
         'Typing a name you already have (Chini when you have Sugar) says so, with a button to restock that one instead. Items that look like the same thing under two names are marked in the list; the **Possible duplicates** filter shows them together.',
+        'Two items for one thing? Click **Merge** beside the duplicate (or the merge button on any item), choose which name to keep, read what will happen, and press **Merge**. The stock is added together, the cost is averaged, and its recipes, test bakes, orders, wastage and price history move to the one you keep; the other is deleted. Only items counted the same way (by weight, by volume, or in pieces) can be merged.',
         'A recipe can use a different unit from the one you buy in (grams of flour you buy by the kg): Stockpot converts.',
         'Packaging (boxes, bags, labels) is a material too, so its cost counts.',
       ),
