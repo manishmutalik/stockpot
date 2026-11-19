@@ -68,11 +68,15 @@ const dayOffset = (today: string, daysAgo: number) => {
  * Whether stored settings are a demo kitchen's set up before `today`. The sample's orders, bakes and stock are dated from
  * the day it was set up, so a demo opened on a later day has an empty yesterday and nothing due: it is set up afresh
  * instead. Only a kitchen that is recognisably the demo's (it carries `demoSeededOn`, or, from before that field, the
- * demo's own settings email) is ever stale, so a real kitchen is never touched.
+ * demo's own settings email or name) is ever stale, and the callers ask only for demo accounts, so a real kitchen is never
+ * touched. The refresh is the server's (lib/demoSeedRoutes): the price history is append-only to the apps, so only the
+ * server can write it afresh.
  */
-export function demoKitchenIsStale(stored: { demoSeededOn?: string; email?: string } | null | undefined, userId: string, today: string): boolean {
+export const DEMO_KITCHEN_NAME = 'Stockpot Demo Kitchen';
+
+export function demoKitchenIsStale(stored: { demoSeededOn?: string; email?: string; name?: string } | null | undefined, userId: string, today: string): boolean {
   if (!stored) return false;
-  const isDemoKitchen = typeof stored.demoSeededOn === 'string' || stored.email === `${userId}@demo.stockpot.app`;
+  const isDemoKitchen = typeof stored.demoSeededOn === 'string' || stored.email === `${userId}@demo.stockpot.app` || stored.name === DEMO_KITCHEN_NAME;
   return isDemoKitchen && (stored.demoSeededOn ?? '') < today;
 }
 
@@ -315,7 +319,7 @@ export function buildDemoData(userId: string, today: string) {
 
 
   const settings = {
-    name: 'Stockpot Demo Kitchen',
+    name: DEMO_KITCHEN_NAME,
     // The day this sample was set up: its dates are counted from it, so on a later day it is set up afresh (demoKitchenIsStale).
     demoSeededOn: today,
     logo: '',

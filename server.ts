@@ -215,7 +215,10 @@ async function startServer() {
     hasActiveAccess: async uid => hasActiveAccess((await getBillingInfo(uid)).status),
   });
   // The demo kitchen is not behind the plan check (demo accounts are never charged); it has its own guard.
-  api.post("/mobile/demo/seed", createDemoSeedHandler({ seed: seedDemoKitchen, now: quickDeps.now }));
+  const demoSeed = createDemoSeedHandler({ seed: seedDemoKitchen, now: quickDeps.now });
+  api.post("/mobile/demo/seed", demoSeed);
+  // The website asks the same to set a stale demo kitchen up afresh (only the server may rewrite the append-only price history).
+  api.post("/demo/seed", demoSeed);
   api.post("/mobile/parse", quickGate, createQuickParseHandler({
     ...aiGuardDeps, db: quickDeps.db, now: quickDeps.now,
     orderModel: createOrderParseModel(), productionModel: createProductionParseModel(),

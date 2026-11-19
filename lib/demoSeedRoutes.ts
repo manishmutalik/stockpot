@@ -1,7 +1,8 @@
 /**
  * demoSeedRoutes.ts
  *
- * POST /api/mobile/demo/seed: fills a demo account with the sample kitchen, for the phone app's "Try the demo kitchen".
+ * POST /api/mobile/demo/seed (the phone) and /api/demo/seed (the website): fills a demo account with the sample kitchen, for
+ * the phone app's "Try the demo kitchen", and sets a stale one up afresh for both.
  * The web app does this from the browser with the client SDK; the phone app asks the server instead, so the sample data
  * (src/utils/demoData.ts) is not duplicated in the app. Only demo accounts (the ones the sign-in screen makes, recognised
  * by their email) may call it. It does nothing for an account that already has a kitchen, except a demo kitchen set up on an
@@ -41,7 +42,7 @@ export async function seedDemoKitchen(uid: string, today: string): Promise<boole
   const demo = buildDemoData(uid, today);
   return db.runTransaction(async t => {
     const stored = await t.get(user.collection('settings').doc('bakery'));
-    if (stored.exists && !demoKitchenIsStale(stored.data() as { demoSeededOn?: string; email?: string }, uid, today)) return false;
+    if (stored.exists && !demoKitchenIsStale(stored.data() as { demoSeededOn?: string; email?: string; name?: string }, uid, today)) return false;
     t.set(user.collection('settings').doc('bakery'), demo.settings as Record<string, unknown>);
     const sets: [string, { id: string }[]][] = [
       ['materials', demo.materials], ['menu', demo.menu], ['orders', demo.orders],

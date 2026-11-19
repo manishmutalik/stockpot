@@ -275,8 +275,9 @@ describe('demoKitchenIsStale', () => {
     expect(demoKitchenIsStale({ demoSeededOn: '2026-11-19', email: 'u1@demo.stockpot.app' }, 'u1', '2026-11-19')).toBe(false);
   });
 
-  it('knows a demo kitchen from before the date was kept by its own settings email', () => {
+  it('knows a demo kitchen from before the date was kept by its own settings email, or its name', () => {
     expect(demoKitchenIsStale({ email: 'u1@demo.stockpot.app' }, 'u1', '2026-11-19')).toBe(true);
+    expect(demoKitchenIsStale({ name: 'Stockpot Demo Kitchen', email: '' }, 'u1', '2026-11-19')).toBe(true);
   });
 
   it('never calls a real kitchen stale', () => {

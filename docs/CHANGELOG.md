@@ -1,5 +1,13 @@
 # Changelog
 
+## Demo kitchen refresh: done by the server
+
+- The daily refresh of a stale demo kitchen (#135) did nothing on the website: it rewrote the demo's records from the
+  browser in one batch, and the price history is append-only to the apps (`firestore.rules`), so Firestore refused the
+  whole batch. The website now asks the server (`POST /api/demo/seed`, the same handler as the phone's
+  `/api/mobile/demo/seed`, demo accounts only), which rewrites it in one transaction (`src/hooks/useDemoRefresh.ts`).
+- A demo kitchen from before the set-up date was kept is also known by its name, as well as its settings email.
+
 ## Demo kitchen: set up afresh each day
 
 - The demo's orders, bakes and stock are dated from the day the demo account was set up, and never moved on. Opened again
