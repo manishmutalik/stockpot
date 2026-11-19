@@ -76,7 +76,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     keywords: ['trial', 'free', 'plan', 'subscription', 'price', 'pay', 'cancel', 'demo', 'sandbox'],
     body: [
       text('A new account starts with a 45-day free trial. Your plan is managed on the Stockpot website, in **Settings › User Account**: see when it renews, or cancel it.'),
-      text('The **demo kitchen** (on the website: **Explore Demo Sandbox**; on the phone: **Try the demo kitchen**) is a sample bakery with made-up orders and stock. Try anything there; nothing you do touches a real account. The AI features (reading messages, recipes, voice) are not available in the demo.'),
+      text('The **demo kitchen** (on the website: **Explore Demo Sandbox**; on the phone: **Try the demo kitchen**) is a sample bakery with made-up orders and stock. Try anything there; nothing you do touches a real account. On the website, the demo runs each AI feature on a ready example: open **Try the AI features** on the Dashboard. On the phone, the AI features are not in the demo.'),
     ],
   },
 
@@ -566,7 +566,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         '**Ask your business** (the button at the bottom right) answers questions like "Which cake makes me the most money?" or "What if butter goes up 10%?".',
         'Every figure comes from your own data, worked out by Stockpot; the AI only writes the words.',
       ),
-      text('These are available on accounts where AI is switched on, and not in the demo.'),
+      text('These are available on accounts where AI is switched on. In the demo kitchen on the website, each runs on a ready example instead: see **Try the AI features** on the Dashboard.'),
     ],
   },
 
@@ -677,7 +677,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     keywords: ['ai', 'not available', 'missing', 'limit', 'voice', 'read recipe', 'briefing', 'verify', 'verification', 'email'],
     body: [
       points(
-        'They are not available in the demo kitchen.',
+        'In the demo kitchen they run only on ready examples (on the website: **Try the AI features** on the Dashboard), not on your own messages or photos.',
         'They need an active plan or trial.',
         'If you signed up with an email and password, verify your email first: on the website, go to **Settings › User Account**, press **Send verification email**, open the link in it (check spam too), then press **I\'ve verified it**.',
         'Each has a daily limit (recipes: 15 a day and 75 a month). The limit resets the next day.',

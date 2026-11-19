@@ -1,5 +1,23 @@
 # Changelog
 
+## Demo kitchen: the AI features on ready examples
+
+The demo never calls the AI (anyone can open it), so its AI features used to say "not available" and point to sign-up,
+which is closed before launch. Each now runs on a ready example instead (`src/utils/demoAi.ts`, `src/hooks/useDemoAi.ts`):
+
+- **Try the AI features** card on the demo Dashboard (`DemoAiCard`), opening each one with its example ready.
+- **Fill from a message**: a Hinglish WhatsApp order from a demo customer (a 1 kg pineapple cake, eggless, with a message,
+  6 muffins, ₹500 advance by GPay) fills a pre-order. **Fill from a note**: "24 croissants, 12 choc muffins, 3 atta
+  loaves, 2 croissants burnt". **Read a recipe**: a notebook page for choco chip cookies made only from the demo kitchen's
+  ingredients, costed at about ₹8 a cookie, with one line to check. **Promote**: a demo croissant photo made into a post
+  with caption and hashtags in English or Hinglish (no styled photos in the demo). **Ask**: four questions (money made,
+  best item, customers to contact, what's running low), answered from the demo kitchen's own figures.
+- The saved readings are in the server's own format and pass its own checks; they go through the same form builders as a
+  real reading. Ask's answers are built on the device from the same figures, so the numbers are always the demo's.
+- A yellow **Demo example** note on each screen says what the example is, links to the waitlist, and offers **Put the
+  example back**. A visitor's own message, photo or question is answered with a pointer to the waitlist; nothing is sent.
+- Example images: `public/demo/recipe-cookies.webp`, `public/demo/croissants.webp`.
+
 ## Merging asks before it merges
 
 - Pressing **Merge** on the merge screen now asks once more, in the same popup every delete uses: "Merge Chini into

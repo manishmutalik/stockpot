@@ -9,6 +9,15 @@ import { buildBusinessSnapshot, buildScenarioSection, withScenario } from '../ut
 import { pricingScenario } from '../utils/pricing';
 import { buildCustomerProfiles } from '../utils/customers';
 import { todayInZone } from '../utils/localDate';
+import { DEMO_ASK_NOTE, DEMO_QUESTIONS, demoAnswer } from '../utils/demoAi';
+import { DEMO_READ_MS } from '../hooks/useDemoAi';
+import { DemoExampleNote } from './DemoExampleNote';
+
+/** Opens "Ask your business" from elsewhere in the app (the demo's Try the AI features card). */
+export const OPEN_ASK_EVENT = 'stockpot:open-ask';
+
+/** What the demo says to a question of the visitor's own. */
+export const DEMO_ASK_OWN = 'In the demo, pick one of the questions above to see it answered. In your own account you can ask anything.';
 
 type Data = {
   orders: Order[];
@@ -50,11 +59,11 @@ interface Message {
  * app's own numbers; its answer is words and tokens, validated on the server and
  * rendered here from the same figures, so no number in an answer comes from the
  * model (see utils/aiFigures). The question is prepared on this device: customer
- * names become labels before anything is sent. Shown only to accounts AI is
- * offered to; never in the demo.
+ * names become labels before anything is sent. Shown to accounts AI is offered to, and in the demo kitchen, where it
+ * offers a few questions answered on this device from the same figures (utils/demoAi) and sends nothing.
  */
-export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolean; now?: Date }> = ({
-  orders, menu, materials, experiments, wastageLogs, productionRuns, priceLog, settings, currency, dataReady, signedIn, now,
+export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolean; now?: Date; demo?: boolean }> = ({
+  orders, menu, materials, experiments, wastageLogs, productionRuns, priceLog, settings, currency, dataReady, signedIn, now, demo = false,
 }) => {
   const [available, setAvailable] = useState(false);
   const [remaining, setRemaining] = useState<number | null>(null);
@@ -101,6 +110,12 @@ export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolea
   }, [open]);
 
   useEffect(() => {
+    const openAsk = () => setOpen(true);
+    window.addEventListener(OPEN_ASK_EVENT, openAsk);
+    return () => window.removeEventListener(OPEN_ASK_EVENT, openAsk);
+  }, []);
+
+  useEffect(() => {
     bottom.current?.scrollIntoView?.({ block: 'end' });
   }, [messages, open]);
 
@@ -112,7 +127,7 @@ export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolea
     [open, orders, menu, materials, settings, today]
   );
 
-  if (!available) return null;
+  if (!available && !demo) return null;
 
   const busy = messages.some(m => m.state === 'waiting');
   const outOfQuestions = remaining !== null && remaining <= 0;
@@ -137,6 +152,14 @@ export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolea
     const finish = (patch: Partial<Message>) => {
       if (alive.current) setMessages(prev => prev.map(m => (m.id === id ? { ...m, ...patch } : m)));
     };
+    if (demo) {
+      // The demo answers its own questions here, from the same figures, and sends nothing.
+      const answer = demoAnswer(typed, built);
+      await new Promise(resolve => setTimeout(resolve, DEMO_READ_MS));
+      if (answer) finish({ state: 'answered', answer, registry: built.registry, customerNames: built.customerNames });
+      else finish({ state: 'failed', error: DEMO_ASK_OWN });
+      return;
+    }
     const post = (snapshot: typeof built.promptSnapshot) => apiFetch('/api/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -212,7 +235,7 @@ export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolea
                 <div className="min-w-0">
                   <h2 className="text-base font-bold text-ink">Ask your business</h2>
                   <p className="font-mono text-[11px] text-muted">
-                    {remaining === null ? 'AI answers from your own numbers' : `${remaining} ${remaining === 1 ? 'question' : 'questions'} left today`}
+                    {demo ? 'Demo: example questions' : remaining === null ? 'AI answers from your own numbers' : `${remaining} ${remaining === 1 ? 'question' : 'questions'} left today`}
                   </p>
                 </div>
               </div>
@@ -234,11 +257,12 @@ export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolea
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-3 space-y-4 border-t border-stone-100" aria-live="polite">
+              {demo && <DemoExampleNote note={DEMO_ASK_NOTE} />}
               {messages.length === 0 && (
                 <div className="space-y-3">
                   <p className="text-sm text-muted">Ask about your profit, products, customers or stock. Answers use your own numbers, for the period above.</p>
                   <div className="flex flex-wrap gap-2">
-                    {STARTER_QUESTIONS.map(q => (
+                    {(demo ? DEMO_QUESTIONS : STARTER_QUESTIONS).map(q => (
                       <button key={q} type="button" disabled={outOfQuestions} onClick={() => send(q)}
                         className="text-left text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-full px-3 py-1.5 transition-colors disabled:opacity-40">
                         {q}
@@ -267,6 +291,16 @@ export const AskBusiness: React.FC<Data & { dataReady: boolean; signedIn: boolea
                   </div>
                 </div>
               ))}
+              {demo && messages.length > 0 && !busy && (
+                <div className="flex flex-wrap gap-2">
+                  {DEMO_QUESTIONS.map(q => (
+                    <button key={q} type="button" onClick={() => send(q)}
+                      className="text-left text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-full px-3 py-1.5 transition-colors">
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div ref={bottom} />
             </div>
 

@@ -7,6 +7,8 @@ import { effectiveRecipe, partsNeeded } from '../utils/itemParts';
 import { expectedUnits, MAX_YIELD_OVER, runYieldLoss } from '../utils/batches';
 import { formatItemQuantity, itemUnit, type ItemUnit } from '../utils/itemUnits';
 import type { ProductionParser } from '../hooks/useProductionParser';
+import type { DemoExample } from '../utils/demoAi';
+import { DemoExampleNote } from './DemoExampleNote';
 import type { NotFoundItem } from '../utils/orderParse';
 import type { ProductionFillRow, ProductionFormFill, UnplacedWaste } from '../utils/productionParse';
 
@@ -58,6 +60,8 @@ interface ProductionRunModalProps {
   currency: { symbol: string };
   /** Reads a typed or pasted note into the form. Present only when AI is available to the account. */
   productionParser?: ProductionParser | null;
+  /** The demo kitchen's ready example for "Fill from a note" (utils/demoAi): the box starts with it. */
+  example?: DemoExample | null;
   /** When AI is not available but the owner can act on it, why: shown in place of the AI box. */
   aiBlocked?: string | null;
 }
@@ -111,7 +115,7 @@ const rowFromFill = (menu: MenuItem[], r: ProductionFillRow): ProductionRow => {
  * @param onSave    - Async callback that persists all rows; see ProductionRunModalProps.
  * @param currency  - Locale currency config; only `symbol` is used for display.
  */
-export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, currency, productionParser, aiBlocked }: ProductionRunModalProps) {
+export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, currency, productionParser, example, aiBlocked }: ProductionRunModalProps) {
   // ─── Local State ────────────────────────────────────────────────────────────
   const today = new Date().toISOString().split('T')[0]; // default date = today (YYYY-MM-DD)
   const [rows,       setRows]       = useState<ProductionRow[]>([EMPTY_ROW(menu)]);
@@ -122,7 +126,9 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   const [invalidRowIndex, setInvalidRowIndex] = useState<number | null>(null);
 
   // Filling the form from a note (only when AI is available): nothing is saved, the owner checks the form.
-  const [message,    setMessage]    = useState('');
+  // What is typed in "Fill from a note"; null until the owner types, when the demo's example (if any) is shown.
+  const [typed,      setMessage]    = useState<string | null>(null);
+  const message = typed ?? example?.text ?? '';
   const [isReading,  setIsReading]  = useState(false);
   const [readError,  setReadError]  = useState('');
   const [filled,     setFilled]     = useState(false);
@@ -275,7 +281,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
   };
 
   const resetForm = () => {
-    setMessage('');
+    setMessage(null);
     setIsReading(false);
     setReadError('');
     setFilled(false);
@@ -408,6 +414,7 @@ export function ProductionRunModal({ isOpen, onClose, menu, materials, onSave, c
           <label htmlFor="production-message" className={`${MODAL_LABEL} flex items-center gap-1.5 !mb-0 text-primary`}>
             <Sparkles size={12} /> Fill from a note
           </label>
+          {example && <DemoExampleNote note={example.note} onPutBack={message !== example.text ? () => { setMessage(null); setReadError(''); } : null} />}
           <textarea
             id="production-message"
             value={message}

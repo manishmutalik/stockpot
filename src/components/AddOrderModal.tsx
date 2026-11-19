@@ -4,6 +4,8 @@ import { AiBlockedNote } from './AiBlockedNote';
 import { ModalShell, MODAL_LABEL, modalField, QuantityStepper } from './ModalShell';
 import { PAYMENT_METHODS, type PaymentMethod } from '../types';
 import type { OrderParser } from '../hooks/useOrderParser';
+import type { DemoExample } from '../utils/demoAi';
+import { DemoExampleNote } from './DemoExampleNote';
 import { CustomerCombobox } from './CustomerCombobox';
 import type { CustomerSuggestion } from '../utils/customers';
 import type { NotFoundItem } from '../utils/orderParse';
@@ -71,6 +73,8 @@ interface AddOrderModalProps {
   presetMenuItemId?: string | null;
   /** When set, the form offers to fill itself from a pasted message (only for accounts AI is available to). */
   orderParser?: OrderParser | null;
+  /** The demo kitchen's ready example for "Fill from a message" (utils/demoAi): the box starts with it. */
+  example?: DemoExample | null;
   /** When AI is not available but the owner can act on it, why: shown in place of the AI box. */
   aiBlocked?: string | null;
   /** Past customers, suggested while the name or phone number is typed. Empty or absent: the fields are plain inputs. */
@@ -97,7 +101,7 @@ const EMPTY_LINE_ITEM = (menu: MenuItem[]): OrderRow => ({ menuItemId: menu[0]?.
  * @param currency - Locale currency config; only `symbol` is used for display.
  * @param presetMenuItemId - See AddOrderModalProps.
  */
-export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser, aiBlocked, customers = [], today: todayProp, gst, stock }: AddOrderModalProps) {
+export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetMenuItemId, orderParser, example, aiBlocked, customers = [], today: todayProp, gst, stock }: AddOrderModalProps) {
   const today = todayProp ?? new Date().toISOString().split('T')[0];
   const [date,          setDate]          = useState(today);
   const [customerName,  setCustomerName]  = useState('');
@@ -123,7 +127,9 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
   // After a pre-order is booked for a customer with a phone number: offer the confirmation on WhatsApp.
   const [booked, setBooked] = useState<{ message: string; url: string } | null>(null);
   // Filling the form from a pasted message.
-  const [message,       setMessage]       = useState('');
+  // What is typed in "Fill from a message"; null until the owner types, when the demo's example (if any) is shown.
+  const [typed,         setMessage]       = useState<string | null>(null);
+  const message = typed ?? example?.text ?? '';
   const [isReading,     setIsReading]     = useState(false);
   const [readError,     setReadError]     = useState('');
   const [filled,        setFilled]        = useState(false);
@@ -213,7 +219,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
     setDiscountText('');
     setLineItems([EMPTY_LINE_ITEM(menu)]);
     setInvalidRowIndex(null);
-    setMessage('');
+    setMessage(null);
     setReadError('');
     setFilled(false);
     setReadNotes([]);
@@ -500,6 +506,7 @@ export function AddOrderModal({ isOpen, onClose, menu, onSave, currency, presetM
           <label htmlFor="order-message" className={`${MODAL_LABEL} flex items-center gap-1.5 !mb-0 text-primary`}>
             <Sparkles size={12} /> Fill from a message
           </label>
+          {example && <DemoExampleNote note={example.note} onPutBack={message !== example.text ? () => { setMessage(null); setReadError(''); } : null} />}
           <textarea
             id="order-message"
             value={message}

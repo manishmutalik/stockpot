@@ -664,6 +664,8 @@ export interface AppViewProps {
   completePriceReview?: () => Promise<boolean>;
   /** Opens the recipe reader (a menu item's id fills that item); absent where AI is not available. */
   openRecipeReader?: (menuItemId?: string) => void;
+  /** In the demo kitchen only: what the Dashboard's "Try the AI features" card opens (components/DemoAiCard). */
+  demoAiActions?: DemoAiActions | null;
   /** Hands an order over. A pre-order claims its stock now (all items, or none); resolves to whether it was handed over. */
   fulfillOrder: (order: Order) => Promise<boolean>;
   /** Cancels a pre-order not yet handed over; `advanceOutcome` is required when an advance was paid. Resolves to whether it was cancelled. */
@@ -746,3 +748,13 @@ export interface AppViewProps {
  * button, whose word is `confirmLabel` (Delete unless given). Shown by App's ConfirmDialog.
  */
 export type ShowConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>, confirmLabel?: string) => void;
+
+/** What each row of the demo kitchen's "Try the AI features" card opens (components/DemoAiCard). */
+export interface DemoAiActions {
+  order: () => void;
+  bake: () => void;
+  recipe: () => void;
+  promote: () => void;
+  ask: () => void;
+  briefing: () => void;
+}

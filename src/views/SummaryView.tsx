@@ -9,6 +9,7 @@ import {
 import { AppViewProps } from '../types';
 import { MetricCard } from '../components/MetricCard';
 import { DailyBriefing } from '../components/DailyBriefing';
+import { DemoAiCard } from '../components/DemoAiCard';
 import { RepricingCard } from '../components/RepricingCard';
 import { DueTomorrowCard } from '../components/DueTomorrowCard';
 import { ProfitBreakdown } from '../components/ProfitBreakdown';
@@ -26,7 +27,7 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
     materials, menu, orders, productionRuns, wastageLogs,
     summaryRange, summaryDateStart, summaryDateEnd, setSummaryDateStart, setSummaryDateEnd, summaryRefDate,
     handleRangeChange, financials, chartData, currency, settings, lowStockItems, lastSynced,
-    setActiveTab, setActiveSettingsTab, openPriceReview, completePriceReview, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders, openRepricing, priceLog,
+    setActiveTab, setActiveSettingsTab, openPriceReview, completePriceReview, setIsProductionRunModalOpen, setRestockMaterial, remainingInventory, experiments, dataReady, openUpcomingOrders, openRepricing, priceLog, demoAiActions,
   } = props;
 
   const fmt = (n: number) =>
@@ -215,6 +216,9 @@ export const SummaryView: React.FC<AppViewProps> = (props) => {
           </div>
         </div>
       )}
+
+      {/* The demo kitchen's way into its AI features, each on a ready example */}
+      {demoAiActions && <DemoAiCard actions={demoAiActions} />}
 
       {/* Pre-orders due today and tomorrow, as what to make (no AI) */}
       <DueTomorrowCard orders={orders ?? []} menu={menu} today={todayInZone(settings.timezone)} onOpen={() => openUpcomingOrders?.()} />
