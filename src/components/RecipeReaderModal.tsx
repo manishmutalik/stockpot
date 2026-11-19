@@ -3,6 +3,9 @@ import { AlertTriangle, BookOpen, Camera, CheckCircle2, ImagePlus, Loader2, Type
 import { ModalShell, MODAL_LABEL, modalField } from './ModalShell';
 import type { MenuItem, RawMaterial } from '../types';
 import type { RecipeReader } from '../hooks/useRecipeReader';
+import { loadDemoFile } from '../hooks/useDemoAi';
+import type { DemoExample } from '../utils/demoAi';
+import { DemoExampleNote } from './DemoExampleNote';
 import { perItem } from '../utils/kitchenMeasures';
 import { squash } from '../utils/orderParse';
 import { nameKey } from '../utils/nameKey';
@@ -29,6 +32,8 @@ export interface RecipeReaderModalProps {
   forMenuItemId?: string;
   onClose: () => void;
   onSave: (data: DraftImport) => Promise<{ ok: true; count: number } | { ok: false; message: string }>;
+  /** The demo kitchen's ready example (utils/demoAi): a notebook page to read, and the same recipe typed out. */
+  example?: (DemoExample & { photo: { url: string; fileName: string; type: string } }) | null;
 }
 
 type Step = 'input' | 'reading' | 'check' | 'saved';
@@ -50,15 +55,32 @@ const NumberInput: React.FC<{ id?: string; label?: string; value: number | null;
   );
 };
 
-export const RecipeReaderModal: React.FC<RecipeReaderModalProps> = ({ reader, materials, menu, currency, forMenuItemId, onClose, onSave }) => {
+export const RecipeReaderModal: React.FC<RecipeReaderModalProps> = ({ reader, materials, menu, currency, forMenuItemId, onClose, onSave, example }) => {
   const [step, setStep] = useState<Step>('input');
   const [mode, setMode] = useState<'photo' | 'text'>('photo');
-  const [text, setText] = useState('');
+  const [text, setText] = useState(example?.text ?? '');
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<RecipeDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
+
+  // In the demo, the example page is ready when the screen opens, and can be put back if it is taken away.
+  const putBackPage = example ? () => {
+    setError(null);
+    setMode('photo');
+    setText(example.text);
+    void loadDemoFile(example.photo).then(f => setFiles([f])).catch(() => {});
+  } : null;
+  useEffect(() => {
+    if (!example) return;
+    let live = true;
+    loadDemoFile(example.photo).then(f => { if (live) setFiles(prev => (prev.length > 0 ? prev : [f])); }).catch(() => {});
+    return () => { live = false; };
+  }, [example]);
+  const showingExample = !!example && (mode === 'photo'
+    ? files.length === 1 && files[0].name === example.photo.fileName
+    : text === example.text);
 
   const previews = useMemo(() => files.map(f => URL.createObjectURL(f)), [files]);
   useEffect(() => () => previews.forEach(u => URL.revokeObjectURL(u)), [previews]);
@@ -132,6 +154,7 @@ export const RecipeReaderModal: React.FC<RecipeReaderModalProps> = ({ reader, ma
     <ModalShell title="Read a recipe" subtitle={step === 'check' ? 'Check what was read' : 'From a photo or text'} icon={BookOpen} onClose={onClose} footer={footer} widthClass="sm:max-w-4xl">
       {step === 'input' && (
         <div className="space-y-4">
+          {example && <DemoExampleNote note={example.note} onPutBack={showingExample ? null : putBackPage} />}
           <div className="inline-flex rounded-xl bg-stone-100 p-1" role="tablist">
             {([['photo', 'Photo', Camera], ['text', 'Type or paste', Type]] as const).map(([m, label, Icon]) => (
               <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => { setMode(m); setError(null); }}

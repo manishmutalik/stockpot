@@ -99,6 +99,9 @@ import { describeAuthError } from './utils/authErrors';
 import { buildDemoData } from './utils/demoData';
 import { newPriceLogEntry } from './utils/priceLog';
 import { AddMaterialModal } from './components/AddMaterialModal';
+import { useDemoAi } from './hooks/useDemoAi';
+import type { DemoAiActions } from './components/DemoAiCard';
+import { DEMO_BAKE, DEMO_ORDER, DEMO_PROMOTE_NOTE, DEMO_PROMOTE_PHOTO, DEMO_RECIPE, DEMO_RECIPE_PHOTO } from './utils/demoAi';
 import { useMergeMaterials } from './hooks/useMergeMaterials';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { DiscardModal } from './components/DiscardModal';
@@ -332,14 +335,14 @@ import { UNIT_CONVERSIONS, convertAmount, CURRENCIES } from './utils/conversions
 import { financialsForRange, trendFigures } from './utils/profit';
 import { getBatchesNeedingAttention } from './utils/stockAging';
 import { withShelfStock } from './utils/batchStock';
-import { AskBusiness } from './components/AskBusiness';
+import { AskBusiness, OPEN_ASK_EVENT } from './components/AskBusiness';
 import { useOrderParser } from './hooks/useOrderParser';
 import { useProductionParser } from './hooks/useProductionParser';
 import { useRecipeReader } from './hooks/useRecipeReader';
 import { useAiBlocked } from './hooks/useAiBlocked';
 import { usePromote } from './hooks/usePromote';
 import { PROMOTE_LABEL } from './utils/promote';
-import { needsEmailVerification } from './utils/aiAccess';
+import { isDemoEmail, needsEmailVerification } from './utils/aiAccess';
 import type { VerificationSent } from './components/EmailVerificationNotice';
 import { RecipeReaderModal } from './components/RecipeReaderModal';
 import { planImportRecipes } from './utils/plans/planRecipes';
@@ -383,6 +386,10 @@ export type TabId = 'inventory' | 'menu' | 'orders' | 'experiments' | 'productio
  * unnecessary remount/state-loss on every re-render of BakeryApp). All state
  * it needs is now passed in as props instead of captured via closure.
  */
+/** The demo's recipe and Promote examples: the note, and the example file to load. */
+const DEMO_RECIPE_EXAMPLE = { ...DEMO_RECIPE, photo: DEMO_RECIPE_PHOTO };
+const DEMO_PROMOTE_EXAMPLE = { note: DEMO_PROMOTE_NOTE, photo: DEMO_PROMOTE_PHOTO };
+
 function SidebarTabButton({ id, label, icon: Icon, activeTab, setActiveTab, hasLowStockAlert }: {
   id: TabId;
   label: string;
@@ -931,19 +938,31 @@ function BakeryApp() {
   const saleMenu = useMemo(() => forSale(menu), [menu]);
   // Everything a made-to-order sale takes from: every item (bases too) and the materials (utils/madeToOrder).
   const orderStock = useMemo(() => ({ materials, menu }), [materials, menu]);
-  const orderParser = useOrderParser({ orders, menu: saleMenu, materials: remainingInventory, settings, signedIn: !!user, dataReady });
-  const productionParser = useProductionParser({ menu, settings, signedIn: !!user, dataReady });
-  // Reading recipes from photos or text into menu items (offered only where AI is available).
-  const recipeReader = useRecipeReader({ signedIn: !!user, dataReady });
+  // The demo kitchen runs each AI feature on a ready example instead of the AI (hooks/useDemoAi, utils/demoAi).
+  const isDemo = isDemoEmail(user?.email);
+  const demoAi = useDemoAi({ enabled: isDemo && dataReady, orders, saleMenu, menu, materials: remainingInventory, settings });
+  const orderParser = useOrderParser({ orders, menu: saleMenu, materials: remainingInventory, settings, signedIn: !!user, dataReady }) ?? demoAi?.orderParser ?? null;
+  const productionParser = useProductionParser({ menu, settings, signedIn: !!user, dataReady }) ?? demoAi?.productionParser ?? null;
+  // Reading recipes from photos or text into menu items (offered where AI is available, and on the example in the demo).
+  const recipeReader = useRecipeReader({ signedIn: !!user, dataReady }) ?? demoAi?.recipeReader ?? null;
   const [recipeReaderFor, setRecipeReaderFor] = useState<{ menuItemId?: string } | null>(null);
   // Where AI is not available but the owner can do something about it, the AI features stay in view and say why.
   const aiBlocked = useAiBlocked({ signedIn: !!user, dataReady, unverified: needsEmailVerification(user) });
   // Promote is shown where AI is available, or where the owner can do something to make it so (as the other AI features).
-  const promoter = usePromote({ signedIn: !!user, dataReady });
+  const promoter = usePromote({ signedIn: !!user, dataReady }) ?? demoAi?.promoter ?? null;
   const showPromote = !!promoter || !!aiBlocked;
   const openRecipeReader = recipeReader
     ? (menuItemId?: string) => setRecipeReaderFor({ menuItemId })
     : aiBlocked ? () => showAlert('Read a recipe', aiBlocked) : undefined;
+  // What the demo's "Try the AI features" card opens: each feature with its example ready.
+  const demoAiActions: DemoAiActions | null = demoAi ? {
+    order: () => { setActiveTab('orders'); setIsAddOrderModalOpen(true); },
+    bake: () => { setActiveTab('production'); setIsProductionRunModalOpen(true); },
+    recipe: () => { setActiveTab('menu'); setRecipeReaderFor({}); },
+    promote: () => setActiveTab('promote'),
+    ask: () => window.dispatchEvent(new Event(OPEN_ASK_EVENT)),
+    briefing: () => document.querySelector('[aria-label="Yesterday\'s briefing"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+  } : null;
   /** Saves what the recipe check screen settled: new materials and menu items in one batch, all or nothing. */
   const saveImportedRecipes = async (data: DraftImport): Promise<{ ok: true; count: number } | { ok: false; message: string }> => {
     if (!auth.currentUser) return { ok: false, message: 'You are signed out. Sign in again and retry.' };
@@ -1375,7 +1394,7 @@ function BakeryApp() {
     setSummaryDateStart, summaryDateEnd, setSummaryDateEnd, orderDate, setOrderDate, orderFilterStart,
     setOrderFilterStart, orderFilterEnd, setOrderFilterEnd, isAddOrderModalOpen, setIsAddOrderModalOpen,
     sendVerificationEmail, checkEmailVerified,
-    openAddOrderModalFor, openUpcomingOrders, ordersFilterOnOpen, openRepricing, openPriceReview, completePriceReview, menuFilterOnOpen, openRecipeReader,
+    openAddOrderModalFor, openUpcomingOrders, ordersFilterOnOpen, openRepricing, openPriceReview, completePriceReview, menuFilterOnOpen, openRecipeReader, demoAiActions,
     summaryRefDate, setSummaryRefDate, expandedRecipeId, setExpandedRecipeId, inventorySortBy,
     setInventorySortBy, inventorySortOrder, setInventorySortOrder, isIngredientSelectorOpen,
     setIsIngredientSelectorOpen, activeRecipeItemId, setActiveRecipeItemId, settings, setSettings,
@@ -1687,7 +1706,7 @@ function BakeryApp() {
               {activeTab === 'wastage' && <WastageView key="wastage" {...appProps} />}
               {activeTab === 'settings' && <SettingsView key="settings" {...appProps} />}
               {activeTab === 'help' && <HelpView key="help" businessName={settings.name} />}
-              {activeTab === 'promote' && <PromoteView key="promote" promoter={promoter} aiBlocked={aiBlocked} businessName={settings.name} />}
+              {activeTab === 'promote' && <PromoteView key="promote" promoter={promoter} aiBlocked={aiBlocked} businessName={settings.name} example={demoAi ? DEMO_PROMOTE_EXAMPLE : null} />}
           </AnimatePresence>
         </React.Suspense>
       
@@ -1731,6 +1750,7 @@ function BakeryApp() {
           onSave={logProductionRunSession}
           currency={currency}
           productionParser={productionParser}
+          example={demoAi ? DEMO_BAKE : null}
           aiBlocked={aiBlocked}
         />
         <AddOrderModal
@@ -1741,6 +1761,7 @@ function BakeryApp() {
           currency={currency}
           presetMenuItemId={addOrderPresetItemId}
           orderParser={orderParser}
+          example={demoAi ? DEMO_ORDER : null}
           aiBlocked={aiBlocked}
           customers={customerDirectory}
           today={todayInZone(settings.timezone)}
@@ -1756,6 +1777,7 @@ function BakeryApp() {
             forMenuItemId={recipeReaderFor.menuItemId}
             onClose={() => setRecipeReaderFor(null)}
             onSave={saveImportedRecipes}
+            example={demoAi ? DEMO_RECIPE_EXAMPLE : null}
           />
         )}
         <IngredientSelectorModal
@@ -1885,6 +1907,7 @@ function BakeryApp() {
       <AskBusiness
         orders={orders} menu={menu} materials={remainingInventory} experiments={experiments}
         wastageLogs={wastageLogs} productionRuns={productionRuns} priceLog={priceLog} settings={settings} currency={currency} dataReady={dataReady} signedIn={!!user}
+        demo={!!demoAi}
       />
 
       {/* Mobile Bottom Navigation & Floating Action */}

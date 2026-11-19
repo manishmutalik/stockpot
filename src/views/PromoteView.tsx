@@ -3,6 +3,8 @@ import { motion } from 'motion/react';
 import { AlertTriangle, Camera, Check, Copy, Download, ImagePlus, Loader2, Megaphone, RefreshCw, Share2, Sparkles, Wand2 } from 'lucide-react';
 import { AiBlockedNote } from '../components/AiBlockedNote';
 import { cropToShape, type Promoter } from '../hooks/usePromote';
+import { loadDemoFile } from '../hooks/useDemoAi';
+import { DemoExampleNote } from '../components/DemoExampleNote';
 import { postText, PROMOTE_LABEL, PROMOTE_LANGUAGES, PROMOTE_SHAPES, shapeOf, type PromoteLanguage, type PromoteResult, type PromoteShapeId } from '../utils/promote';
 import { PROMOTE_STYLES } from '../utils/promoteStyles';
 import { saveFile, shareFileViaSystem } from '../utils/shareFile';
@@ -12,6 +14,8 @@ interface PromoteViewProps {
   /** Why AI is not available, when the owner can do something about it. */
   aiBlocked: string | null;
   businessName: string;
+  /** The demo kitchen's ready example (utils/demoAi): a photo to make into a post. */
+  example?: { note: string; photo: { url: string; fileName: string; type: string } } | null;
 }
 
 type Stage = { kind: 'pick' } | { kind: 'working' } | { kind: 'failed'; message: string } | { kind: 'done'; result: PromoteResult };
@@ -21,7 +25,7 @@ const chip = (on: boolean) =>
 const actionCls = 'inline-flex items-center justify-center gap-2 h-11 px-4 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50';
 
 /** Promote: a photo of a dish, made ready to post, with a caption and hashtags to go with it. */
-export const PromoteView: React.FC<PromoteViewProps> = ({ promoter, aiBlocked, businessName }) => {
+export const PromoteView: React.FC<PromoteViewProps> = ({ promoter, aiBlocked, businessName, example }) => {
   const [stage, setStage] = useState<Stage>({ kind: 'pick' });
   const [language, setLanguage] = useState<PromoteLanguage>('en');
   const [file, setFile] = useState<File | null>(null);
@@ -81,6 +85,18 @@ export const PromoteView: React.FC<PromoteViewProps> = ({ promoter, aiBlocked, b
     if (!picked) return;
     setFile(picked);
     void run(picked);
+  };
+
+  // The demo's photo, made into a post as a chosen photo is.
+  const pickDemoPhoto = async () => {
+    if (!example) return;
+    try {
+      const photo = await loadDemoFile(example.photo);
+      setFile(photo);
+      void run(photo);
+    } catch {
+      setStage({ kind: 'failed', message: 'The demo photo could not be opened. Please try again.' });
+    }
   };
 
   const startAgain = () => {
@@ -153,6 +169,14 @@ export const PromoteView: React.FC<PromoteViewProps> = ({ promoter, aiBlocked, b
             <div role="alert" className="flex items-start gap-2 rounded-xl bg-coral/10 text-coral p-3 text-sm">
               <AlertTriangle size={18} className="shrink-0 mt-0.5" />
               <span>{stage.message}</span>
+            </div>
+          )}
+          {example && (
+            <div className="space-y-3">
+              <DemoExampleNote note={example.note} />
+              <button onClick={() => void pickDemoPhoto()} className={`${actionCls} w-full bg-primary text-white hover:bg-primary/90 h-14`}>
+                <Sparkles size={20} /> Use the demo photo
+              </button>
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

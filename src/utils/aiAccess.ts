@@ -22,7 +22,7 @@ export function needsEmailVerification(user: { email?: string | null; emailVerif
 export function aiBlockedMessage(reason: string | null | undefined, who: { unverified: boolean }): string | null {
   switch (reason) {
     case 'demo_account':
-      return 'AI features are not available in the demo kitchen. Create your own account to use them.';
+      return 'In the demo kitchen, the AI features run on ready examples. Join the waitlist to use them with your own messages and photos.';
     case 'not_allowed':
       // An unverified email does not count towards access; verifying is the step the owner can take.
       return who.unverified ? 'Verify your email to use AI features. Go to Settings › User Account to send the verification email.' : null;
