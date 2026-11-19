@@ -10,7 +10,7 @@ vi.mock('firebase-admin/firestore', () => ({
     runTransaction: async (fn: (t: any) => Promise<any>) => {
       const pending: Array<() => void> = [];
       const out = await fn({
-        get: async (r: any) => ({ exists: store.has(r.path) }),
+        get: async (r: any) => ({ exists: store.has(r.path), data: () => store.get(r.path) }),
         set: (r: any, data: any) => { pending.push(() => store.set(r.path, data)); },
       });
       pending.forEach(f => f());
@@ -67,8 +67,24 @@ describe('seedDemoKitchen', () => {
     expect(paths.length).toBeLessThanOrEqual(500);
 
     const before = JSON.stringify([...store]);
-    expect(await seedDemoKitchen('demo1', '2026-10-07')).toBe(false);
+    expect(await seedDemoKitchen('demo1', '2026-10-06')).toBe(false);
     expect(JSON.stringify([...store])).toBe(before);
+  });
+
+  it('sets a demo kitchen up afresh on a later day, so yesterday has its orders', async () => {
+    store.clear();
+    expect(await seedDemoKitchen('demo1', '2026-10-06')).toBe(true);
+    expect(store.get('users/demo1/settings/bakery').demoSeededOn).toBe('2026-10-06');
+    expect(await seedDemoKitchen('demo1', '2026-10-09')).toBe(true);
+    expect(store.get('users/demo1/settings/bakery').demoSeededOn).toBe('2026-10-09');
+    const orderDates = [...store].filter(([k]) => k.startsWith('users/demo1/orders/')).map(([, v]) => v.date);
+    expect(orderDates).toContain('2026-10-08');
+  });
+
+  it('sets up afresh a demo kitchen from before the set-up date was kept, known by its own settings email', async () => {
+    store.clear();
+    store.set('users/demo1/settings/bakery', { name: 'Stockpot Demo Kitchen', email: 'demo1@demo.stockpot.app' });
+    expect(await seedDemoKitchen('demo1', '2026-10-09')).toBe(true);
   });
 
   it('leaves a kitchen that already has settings alone', async () => {

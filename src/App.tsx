@@ -96,7 +96,7 @@ import { IngredientSelectorModal } from './components/IngredientSelectorModal';
 import { ProductionRunModal, ProductionRun } from './components/ProductionRunModal';
 import { AuthScreen, DemoOnlyScreen, LoadingScreen, PaywallScreen } from './components/AuthScreens';
 import { describeAuthError } from './utils/authErrors';
-import { buildDemoData } from './utils/demoData';
+import { buildDemoData, demoKitchenIsStale } from './utils/demoData';
 import { newPriceLogEntry } from './utils/priceLog';
 import { AddMaterialModal } from './components/AddMaterialModal';
 import { useDemoAi } from './hooks/useDemoAi';
@@ -674,7 +674,8 @@ function BakeryApp() {
    * (batch costs, ingredient and shelf stock) is derived so the demo adds up.
    */
   const seedDemoData = async (userId: string) => {
-    const today = new Date().toISOString().split('T')[0];
+    // The business's own day (as the rest of the app counts it), so "yesterday" in the briefing has the sample's orders.
+    const today = todayInZone(undefined);
     const demo = buildDemoData(userId, today);
     const batch = writeBatch(db);
 
@@ -940,6 +941,16 @@ function BakeryApp() {
   const orderStock = useMemo(() => ({ materials, menu }), [materials, menu]);
   // The demo kitchen runs each AI feature on a ready example instead of the AI (hooks/useDemoAi, utils/demoAi).
   const isDemo = isDemoEmail(user?.email);
+  // A demo kitchen opened on a later day than it was set up is set up afresh, so its dates (yesterday's sales, what is due)
+  // are current (utils/demoData demoKitchenIsStale). Once a day at most.
+  const demoRefreshedOn = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isDemo || !settingsLoaded || !user) return;
+    const today = todayInZone(undefined);
+    if (demoRefreshedOn.current === today || !demoKitchenIsStale(settings, user.uid, today)) return;
+    demoRefreshedOn.current = today;
+    seedDemoData(user.uid).catch(err => console.error('Demo kitchen refresh failed', err));
+  }, [isDemo, settingsLoaded, user, settings]);
   const demoAi = useDemoAi({ enabled: isDemo && dataReady, orders, saleMenu, menu, materials: remainingInventory, settings });
   const orderParser = useOrderParser({ orders, menu: saleMenu, materials: remainingInventory, settings, signedIn: !!user, dataReady }) ?? demoAi?.orderParser ?? null;
   const productionParser = useProductionParser({ menu, settings, signedIn: !!user, dataReady }) ?? demoAi?.productionParser ?? null;

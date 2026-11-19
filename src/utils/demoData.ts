@@ -64,6 +64,18 @@ const dayOffset = (today: string, daysAgo: number) => {
   return d.toISOString().split('T')[0];
 };
 
+/**
+ * Whether stored settings are a demo kitchen's set up before `today`. The sample's orders, bakes and stock are dated from
+ * the day it was set up, so a demo opened on a later day has an empty yesterday and nothing due: it is set up afresh
+ * instead. Only a kitchen that is recognisably the demo's (it carries `demoSeededOn`, or, from before that field, the
+ * demo's own settings email) is ever stale, so a real kitchen is never touched.
+ */
+export function demoKitchenIsStale(stored: { demoSeededOn?: string; email?: string } | null | undefined, userId: string, today: string): boolean {
+  if (!stored) return false;
+  const isDemoKitchen = typeof stored.demoSeededOn === 'string' || stored.email === `${userId}@demo.stockpot.app`;
+  return isDemoKitchen && (stored.demoSeededOn ?? '') < today;
+}
+
 export function buildDemoData(userId: string, today: string) {
   const at = (daysAgo: number) => dayOffset(today, daysAgo);
 
@@ -304,6 +316,8 @@ export function buildDemoData(userId: string, today: string) {
 
   const settings = {
     name: 'Stockpot Demo Kitchen',
+    // The day this sample was set up: its dates are counted from it, so on a later day it is set up afresh (demoKitchenIsStale).
+    demoSeededOn: today,
     logo: '',
     primaryColor: '#00797B',
     address: '14, 80 Feet Road, Indiranagar, Bengaluru 560038',

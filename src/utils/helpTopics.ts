@@ -76,7 +76,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     keywords: ['trial', 'free', 'plan', 'subscription', 'price', 'pay', 'cancel', 'demo', 'sandbox'],
     body: [
       text('A new account starts with a 45-day free trial. Your plan is managed on the Stockpot website, in **Settings › User Account**: see when it renews, or cancel it.'),
-      text('The **demo kitchen** (on the website: **Explore Demo Sandbox**; on the phone: **Try the demo kitchen**) is a sample bakery with made-up orders and stock. Try anything there; nothing you do touches a real account. On the website, the demo runs each AI feature on a ready example: open **Try the AI features** on the Dashboard. On the phone, the AI features are not in the demo.'),
+      text('The **demo kitchen** (on the website: **Explore Demo Sandbox**; on the phone: **Try the demo kitchen**) is a sample bakery with made-up orders and stock. Try anything there; nothing you do touches a real account. It is set up afresh each day you open it, so yesterday\'s sales and what is due stay current (what you changed in it is reset). On the website, the demo runs each AI feature on a ready example: open **Try the AI features** on the Dashboard. On the phone, the AI features are not in the demo.'),
     ],
   },
 

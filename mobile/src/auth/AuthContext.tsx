@@ -4,7 +4,7 @@
  * Who is signed in, the API client that speaks as them, and the sign-in actions. `user` is `undefined` until Firebase has
  * said whether anyone is signed in (so the app shows nothing rather than flashing the sign-in screen), then the user or null.
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut as fbSignOut,
   updateProfile, type User,
@@ -66,6 +66,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw err;
     }
   }, [api]);
+
+  // A demo kitchen opened on a later day than it was set up is set up afresh by the server, so its dates are current.
+  // Asked once per demo account per launch; the server does nothing when it is already today's.
+  const refreshedDemo = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user || !isDemoEmail(user.email) || refreshedDemo.current === user.uid) return;
+    refreshedDemo.current = user.uid;
+    api.post('/api/mobile/demo/seed').catch(() => {});
+  }, [user, api]);
 
   const value = useMemo<AuthState>(() => ({ user, isDemo: isDemoEmail(user?.email), api, signIn, googleAvailable: googleSignInAvailable, signInWithGoogle, resetPassword, openDemo, signOut }), [user, api, signIn, signInWithGoogle, resetPassword, openDemo, signOut]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
