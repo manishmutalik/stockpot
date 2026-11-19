@@ -1,5 +1,15 @@
 # Changelog
 
+## Demo kitchen: set up afresh each day
+
+- The demo's orders, bakes and stock are dated from the day the demo account was set up, and never moved on. Opened again
+  on a later day (the browser stays signed in to it), the Dashboard's briefing showed yesterday as ₹0 sales, no orders and
+  a loss of the day's fixed costs. A demo kitchen opened on a later day is now set up afresh, once a day: on the website
+  when it loads, on the phone through the seed route on each launch (`demoKitchenIsStale` in `src/utils/demoData.ts`;
+  the sample records `demoSeededOn`). Only a kitchen that is recognisably the demo's is ever refreshed, and only for demo
+  accounts, so a real kitchen can never be touched.
+- The web demo is now dated in the business's own time zone (it used the UTC date), as the rest of the app counts days.
+
 ## Demo kitchen: the AI features on ready examples
 
 The demo never calls the AI (anyone can open it), so its AI features used to say "not available" and point to sign-up,

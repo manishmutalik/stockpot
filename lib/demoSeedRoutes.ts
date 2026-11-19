@@ -4,18 +4,19 @@
  * POST /api/mobile/demo/seed: fills a demo account with the sample kitchen, for the phone app's "Try the demo kitchen".
  * The web app does this from the browser with the client SDK; the phone app asks the server instead, so the sample data
  * (src/utils/demoData.ts) is not duplicated in the app. Only demo accounts (the ones the sign-in screen makes, recognised
- * by their email) may call it, and it does nothing for an account that already has its settings document, so it can be
- * retried safely and can never overwrite a real kitchen.
+ * by their email) may call it. It does nothing for an account that already has a kitchen, except a demo kitchen set up on an
+ * earlier day, which it sets up afresh so its dates are current (demoKitchenIsStale); so it can be called on every launch,
+ * retried safely, and can never overwrite a real kitchen.
  */
 import type { Response } from 'express';
 import { getFirestore } from 'firebase-admin/firestore';
 import type { AuthedRequest } from './auth';
 import { isDemoAccountEmail } from './aiConfig';
-import { buildDemoData } from '../src/utils/demoData';
+import { buildDemoData, demoKitchenIsStale } from '../src/utils/demoData';
 import { todayInZone } from '../src/utils/localDate';
 
 export interface DemoSeedDeps {
-  /** Writes the sample kitchen unless the account already has one. Resolves to whether it wrote anything. */
+  /** Writes the sample kitchen unless the account already has one (other than a stale demo one). Resolves to whether it wrote anything. */
   seed: (uid: string, today: string) => Promise<boolean>;
   now: () => number;
 }
@@ -33,13 +34,14 @@ export function createDemoSeedHandler(deps: DemoSeedDeps) {
   };
 }
 
-/** The real thing: one Firestore transaction, so a second call finds the kitchen already there. */
+/** The real thing: one Firestore transaction, so a second call the same day finds the kitchen already there. */
 export async function seedDemoKitchen(uid: string, today: string): Promise<boolean> {
   const db = getFirestore();
   const user = db.collection('users').doc(uid);
   const demo = buildDemoData(uid, today);
   return db.runTransaction(async t => {
-    if ((await t.get(user.collection('settings').doc('bakery'))).exists) return false;
+    const stored = await t.get(user.collection('settings').doc('bakery'));
+    if (stored.exists && !demoKitchenIsStale(stored.data() as { demoSeededOn?: string; email?: string }, uid, today)) return false;
     t.set(user.collection('settings').doc('bakery'), demo.settings as Record<string, unknown>);
     const sets: [string, { id: string }[]][] = [
       ['materials', demo.materials], ['menu', demo.menu], ['orders', demo.orders],

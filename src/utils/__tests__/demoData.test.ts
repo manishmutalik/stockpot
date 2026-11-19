@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDemoData } from '../demoData';
+import { buildDemoData, demoKitchenIsStale } from '../demoData';
 import { convertAmount } from '../conversions';
 import { financialsForRange, fixedCostsForRange } from '../profit';
 import { productionLossForRange, runYieldLoss } from '../batches';
@@ -266,5 +266,29 @@ describe('demo data adds up', () => {
     const lost = runYieldLoss(byId(demo.productionRuns, 'run_10')) + runYieldLoss(muffin);
     expect(runYieldLoss(byId(demo.productionRuns, 'run_10'))).toBe(72);
     expect(productionLossForRange(demo.productionRuns, '2000-01-01', '2999-12-31')).toBe(round2(lost));
+  });
+});
+
+describe('demoKitchenIsStale', () => {
+  it('is stale on a later day than the sample was set up, and fresh on that day', () => {
+    expect(demoKitchenIsStale({ demoSeededOn: '2026-11-15', email: 'u1@demo.stockpot.app' }, 'u1', '2026-11-19')).toBe(true);
+    expect(demoKitchenIsStale({ demoSeededOn: '2026-11-19', email: 'u1@demo.stockpot.app' }, 'u1', '2026-11-19')).toBe(false);
+  });
+
+  it('knows a demo kitchen from before the date was kept by its own settings email', () => {
+    expect(demoKitchenIsStale({ email: 'u1@demo.stockpot.app' }, 'u1', '2026-11-19')).toBe(true);
+  });
+
+  it('never calls a real kitchen stale', () => {
+    expect(demoKitchenIsStale({ email: 'asha@example.com' }, 'u1', '2026-11-19')).toBe(false);
+    expect(demoKitchenIsStale({ email: 'u2@demo.stockpot.app' }, 'u1', '2026-11-19')).toBe(false);
+    expect(demoKitchenIsStale(undefined, 'u1', '2026-11-19')).toBe(false);
+  });
+
+  it('is what the sample records: a fresh one is today’s', () => {
+    const settings = buildDemoData('u1', '2026-11-19').settings;
+    expect(settings.demoSeededOn).toBe('2026-11-19');
+    expect(demoKitchenIsStale(settings, 'u1', '2026-11-19')).toBe(false);
+    expect(demoKitchenIsStale(settings, 'u1', '2026-11-20')).toBe(true);
   });
 });

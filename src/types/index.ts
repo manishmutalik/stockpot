@@ -460,6 +460,8 @@ export interface RecipeExperiment {
  */
 export interface BakerySettings {
   name: string;
+  /** The demo kitchen only: the day its sample was set up (utils/demoData demoKitchenIsStale). */
+  demoSeededOn?: string;
   logo: string;
   primaryColor: string;
   address: string;
